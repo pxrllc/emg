@@ -1,0 +1,36 @@
+body {
+    background-color: #222;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    font-family: Arial, sans-serif;
+}
+
+.upload-section {
+    margin-bottom: 20px;
+}
+
+.container {
+    position: relative;
+    background-color: rgba(255, 255, 255, 0.2);
+    overflow: hidden;
+    width: 800px; /* JSONデータから変更 */
+    height: 600px; /* JSONデータから変更 */
+}
+
+.layer {
+    position: absolute;
+    background-repeat: no-repeat;
+    background-size: cover;
+    opacity: 1; /* 初期状態で表示する */
+    /*transition: opacity 0.5s ease-in-out;*/
+}
+
+.layer.visible {
+    opacity: 1;
+}

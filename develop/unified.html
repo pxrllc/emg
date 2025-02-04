@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZIPファイルからJSONとテクスチャをロード</title>
+    <link rel="stylesheet" href="unified.css">
+</head>
+<body>
+    <div class="upload-section">
+        <input type="file" id="zipInput" accept=".zip">
+        <button id="loadZipButton">ZIPをロード</button>
+        <button id="toggleAnimationButton">アニメーション一時停止</button>
+        <button id="resetAnimationButton">リセット</button>
+    </div>
+
+    <!-- レイヤーを表示するコンテナ -->
+    <div class="container" id="layerContainer"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+    <script src="unified.js"></script>
+</body>
+</html>
