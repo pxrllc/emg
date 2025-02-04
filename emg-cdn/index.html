@@ -3,13 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <title>EMG Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="unified.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+    <!-- TODO: アップデート -->
+    <!-- <script src="https://cdn.jsdelivr.net/gh/pxrllc/emg@main/emg-cdn/emg-player.0.1.0.js"></script> -->
+    <!-- ローカルのライブラリを使用中 -->
+    <script src="./emg-player.0.1.0.js"></script>
 </head>
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/pxrllc/emg@main/emg-cdn/emg-player.0.1.0.js"></script>
+    <div id="layerContainer"></div>
+    <div class="upload-section">
+        <button id="loadZipButton">ZIPをロード</button>
+    </div>
+
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const cdnUrl = "https://github.com/pxrllc/emg-cdn/assets/emg/zunda.emg";
-            window.EMGPlayer.load(cdnUrl);
+        document.addEventListener('DOMContentLoaded', () => {
+            const cdnUrl = "./assets/zunda.emg";
+            
+            document.getElementById('loadZipButton').addEventListener('click', () => {
+                if (window.EMGPlayer && window.EMGPlayer.loadEmgFromCDN) {
+                    window.EMGPlayer.loadEmgFromCDN(cdnUrl);
+                } else {
+                    console.error('EMGPlayer not loaded');
+                }
+            });
         });
     </script>
 </body>
