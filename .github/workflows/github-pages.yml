@@ -23,7 +23,7 @@ jobs:
       - uses: actions/configure-pages@v4
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: develop
+          path: emg-cdn
       - if: github.ref == 'refs/heads/main'
         uses: actions/deploy-pages@v4
         id: deployment
