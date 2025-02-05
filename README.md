@@ -18,10 +18,10 @@
 
 ### 2. EMGデータの読み込み
 ```javascript
-window.EMGPlayer.load('https://example.com/animation_data.zip', 'layerContainer');
+window.EMGPlayer.loadEmgFromCDN('https://example.com/animation_data.zip', 'layerContainer');
 ```
 
-`load` 関数の引数:
+`loadEmgFromCDN` 関数の引数:
 - `url` (必須): ZIPファイルのURL
 - `containerId` (オプション): アニメーションを描画するHTML要素のID (デフォルト: `layerContainer`)
 

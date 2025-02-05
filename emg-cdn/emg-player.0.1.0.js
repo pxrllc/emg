@@ -1,4 +1,11 @@
-(async function() {
+(function() {
+    // グローバル変数の定義
+    window.jsonData = null;
+    window.layersData = [];
+    window.isAnimationRunning = true;
+    window.animationInterval = null;
+    window.groupSettings = {};
+
     // JSZip をCDNからロード
     const jsZipScript = document.createElement('script');
     jsZipScript.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js";
@@ -6,8 +13,12 @@
 
     jsZipScript.onload = function() {
         console.log("JSZip loaded");
+        
+        // 公開関数
         window.EMGPlayer = {
-            load: loadEmgFromCDN
+            loadEmgFromCDN: loadEmgFromCDN,
+            toggleAnimation: toggleAnimation,
+            resetAnimation: resetAnimation
         };
     };
 
@@ -29,230 +40,215 @@
             }
 
             const jsonText = await zipContent.files[jsonFile].async("text");
-            const jsonData = JSON.parse(jsonText);
+            window.jsonData = JSON.parse(jsonText);
+            window.layersData = window.jsonData.layers || [];
+            window.groupSettings = extractGroupSettings(window.jsonData.templateGroups);
+
             const textureBlob = await zipContent.files[textureFile].async("blob");
             const texturePath = URL.createObjectURL(textureBlob);
 
-            renderLayers(jsonData, texturePath, containerId);
-            startAnimation(jsonData);
+            renderLayers(window.jsonData, texturePath, containerId);
+            startAnimation();
         } catch (error) {
             console.error("Failed to load EMG from CDN:", error);
         }
     }
 
+    function extractGroupSettings(templateGroups) {
+        let groups = {};
+        if (!templateGroups || !Array.isArray(templateGroups)) return groups;
 
-
-function extractGroupSettings(templateGroups) {
-    let groups = {};
-
-    if (!templateGroups || !Array.isArray(templateGroups)) return groups;
-
-    const groupData = templateGroups[0];
-    for (let key in groupData) {
-        let groupValue = groupData[key];
-        if (Array.isArray(groupValue) && groupValue.length > 1) {
-            groups[groupValue[0]] = groupValue[1] !== "false";
-        } else if (typeof groupValue === "string") {
-            groups[groupValue] = true;
-        }
-    }
-
-    return groups;
-}
-
-function applyLayerStyles(element) {
-    element.style.position = "absolute";
-    element.style.backgroundRepeat = "no-repeat";
-    element.style.backgroundSize = "cover";
-    element.style.opacity = "1";
-}
-
-function renderLayers(texturePath) {
-    const container = document.getElementById('layerContainer');
-    container.innerHTML = '';
-
-    let containerWidth = jsonData.baseCanvasWidth || 1920;
-    let containerHeight = jsonData.baseCanvasHeight || 1080;
-    container.style.width = `${containerWidth}px`;
-    container.style.height = `${containerHeight}px`;
-
-    // テクスチャ全体のサイズを取得
-    const textureImage = new Image();
-    textureImage.src = texturePath;
-    textureImage.onload = () => {
-        const textureWidth = textureImage.width;
-        const textureHeight = textureImage.height;
-
-        // レイヤーを生成
-        layersData.forEach(layer => {
-            const div = document.createElement('div');
-            div.classList.add('layer');
-            applyLayerStyles(div);
-    
-            // imgType に基づいて設定
-            if (layer.imgType === 'Texture') {
-                div.id = layer.textureID;
-            } else if (layer.imgType === 'Sprite') {
-                div.id = layer.assignID;
+        const groupData = templateGroups[0];
+        for (let key in groupData) {
+            let groupValue = groupData[key];
+            if (Array.isArray(groupValue) && groupValue.length > 1) {
+                groups[groupValue[0]] = groupValue[1] !== "false";
+            } else if (typeof groupValue === "string") {
+                groups[groupValue] = true;
             }
-    
-            div.style.width = `${layer.width}px`;
-            div.style.height = `${layer.height}px`;
-            div.style.left = `${layer.basePosition_x}px`;
-            div.style.top = `${layer.basePosition_y}px`;
-            div.style.backgroundImage = `url('${texturePath}')`;
-            div.style.backgroundPosition = `-${layer.x}px -${layer.y}px`;
-            div.style.backgroundSize = `${jsonData.TextureNum[0].canvasWidth}px ${jsonData.TextureNum[0].canvasHeight}px`;
-            div.style.zIndex = layer.textureZIndex || 0;
-    
-            container.appendChild(div);
-        });
-    };
-}
-
-
-function startAnimation() {
-    if (!isAnimationRunning) return;
-
-    layersData.forEach(layer => {
-        if (layer.imgType === 'Sprite' && layer.animID) {
-            // スプライトアニメーション開始
-            animateSprite(layer);
         }
-    });
+        return groups;
+    }
 
-    // グループ切り替え（Textureの場合）
-    if (!animationInterval) {
-        animationInterval = setInterval(() => {
-            Object.keys(groupSettings).forEach(group => {
-                if (groupSettings[group]) {
-                    toggleGroupLayer(group);
+    function applyLayerStyles(element) {
+        element.style.position = "absolute";
+        element.style.backgroundRepeat = "no-repeat";
+        element.style.backgroundSize = "cover";
+        element.style.opacity = "1";
+    }
+
+    function renderLayers(jsonData, texturePath) {
+        const container = document.getElementById('layerContainer');
+        if (!container) {
+            console.error('Container element not found');
+            return;
+        }
+        container.innerHTML = '';
+
+        let containerWidth = jsonData.baseCanvasWidth || 1920;
+        let containerHeight = jsonData.baseCanvasHeight || 1080;
+        container.style.width = `${containerWidth}px`;
+        container.style.height = `${containerHeight}px`;
+
+        const textureImage = new Image();
+        textureImage.src = texturePath;
+        textureImage.onload = () => {
+            window.layersData.forEach(layer => {
+                const div = document.createElement('div');
+                div.classList.add('layer');
+                applyLayerStyles(div);
+                
+                if (layer.imgType === 'Texture') {
+                    div.id = layer.textureID;
+                } else if (layer.imgType === 'Sprite') {
+                    div.id = layer.assignID;
                 }
+                
+                div.style.width = `${layer.width}px`;
+                div.style.height = `${layer.height}px`;
+                div.style.left = `${layer.basePosition_x}px`;
+                div.style.top = `${layer.basePosition_y}px`;
+                div.style.backgroundImage = `url('${texturePath}')`;
+                div.style.backgroundPosition = `-${layer.x}px -${layer.y}px`;
+                div.style.backgroundSize = `${jsonData.TextureNum[0].canvasWidth}px ${jsonData.TextureNum[0].canvasHeight}px`;
+                div.style.zIndex = layer.textureZIndex || 0;
+                
+                container.appendChild(div);
             });
-        }, 500);
-    }
-}
-
-// 🔹 Spriteアニメーション: FPSに基づいてフレームを切り替え
-function animateSprite(layer) {
-    const spriteConfig = jsonData.sprites[0][layer.animID]?.[0];
-    if (!spriteConfig) {
-        console.warn(`Sprite configuration not found for animID: ${layer.animID}`);
-        return;
+        };
     }
 
-    let frameIndex = 0;
-    let isAnimationRunning = true;
+    function startAnimation() {
+        if (!window.isAnimationRunning) return;
 
-    function updateFrame() {
-        if (!isAnimationRunning) return;
+        window.layersData.forEach(layer => {
+            if (layer.imgType === 'Sprite' && layer.animID) {
+                animateSprite(layer);
+            }
+        });
 
-        const frameAssignID = spriteConfig.useTex[frameIndex];
-        const frameLayer = layersData.find(l => l.assignID === frameAssignID);
+        if (!window.animationInterval) {
+            window.animationInterval = setInterval(() => {
+                Object.keys(window.groupSettings).forEach(group => {
+                    if (window.groupSettings[group]) {
+                        toggleGroupLayer(group);
+                    }
+                });
+            }, 500);
+        }
+    }
 
-        if (frameLayer) {
-            const element = document.getElementById(frameLayer.assignID);
-            if (element) {
-                // 現在のフレームを表示
-                element.style.opacity = "1";
+    function animateSprite(layer) {
+        const spriteConfig = window.jsonData.sprites?.[0]?.[layer.animID]?.[0];
+        if (!spriteConfig) {
+            console.warn(`Sprite configuration not found for animID: ${layer.animID}`);
+            return;
+        }
 
-                // 他のフレームを非表示
-                spriteConfig.useTex.forEach(assignID => {
-                    if (assignID !== frameAssignID) {
-                        const otherLayer = layersData.find(l => l.assignID === assignID);
-                        if (otherLayer) {
-                            const otherElement = document.getElementById(otherLayer.assignID);
+        let frameIndex = 0;
+        let localAnimationRunning = true;
+
+        function updateFrame() {
+            if (!localAnimationRunning) return;
+
+            const frameAssignID = spriteConfig.useTex[frameIndex];
+            const frameLayer = window.layersData.find(l => l.assignID === frameAssignID);
+
+            if (frameLayer) {
+                const element = document.getElementById(frameLayer.assignID);
+                if (element) {
+                    element.style.opacity = "1";
+
+                    spriteConfig.useTex.forEach(assignID => {
+                        if (assignID !== frameAssignID) {
+                            const otherElement = document.getElementById(assignID);
                             if (otherElement) {
                                 otherElement.style.opacity = "0";
                             }
                         }
-                    }
-                });
+                    });
+                }
             }
-        } else {
-            console.warn(`Frame layer not found for assignID: ${frameAssignID}`);
-        }
 
-        // フレームの進行制御
-        switch (spriteConfig.loop) {
-            case 0: // ループなし
-                frameIndex++;
-                if (frameIndex >= spriteConfig.useTex.length) {
-                    isAnimationRunning = false; // アニメーション終了
-                    return;
-                }
-                break;
-
-            case 1: // ループする
-                frameIndex = (frameIndex + 1) % spriteConfig.useTex.length;
-                break;
-
-            case 2: // ランダム
-                frameIndex = Math.floor(Math.random() * spriteConfig.useTex.length);
-                break;
-
-            case 3: // タイムラインを定義
-                const timelineConfig = spriteConfig.timeline;
-                if (timelineConfig && Array.isArray(timelineConfig)) {
-                    frameIndex = timelineConfig[frameIndex] || 0; // 次のフレーム
-                } else {
-                    console.warn(`Timeline not defined for animID: ${layer.animID}`);
+            switch (spriteConfig.loop) {
+                case 0: // ループなし
+                    frameIndex++;
+                    if (frameIndex >= spriteConfig.useTex.length) {
+                        localAnimationRunning = false;
+                        return;
+                    }
+                    break;
+                case 1: // ループする
                     frameIndex = (frameIndex + 1) % spriteConfig.useTex.length;
-                }
-                break;
+                    break;
+                case 2: // ランダム
+                    frameIndex = Math.floor(Math.random() * spriteConfig.useTex.length);
+                    break;
+                case 3: // タイムラインを定義
+                    const timelineConfig = spriteConfig.timeline;
+                    if (timelineConfig && Array.isArray(timelineConfig)) {
+                        frameIndex = timelineConfig[frameIndex] || 0;
+                    } else {
+                        frameIndex = (frameIndex + 1) % spriteConfig.useTex.length;
+                    }
+                    break;
+                default:
+                    frameIndex = (frameIndex + 1) % spriteConfig.useTex.length;
+                    break;
+            }
 
-            default:
-                console.warn(`Unknown loop type: ${spriteConfig.loop}`);
-                frameIndex = (frameIndex + 1) % spriteConfig.useTex.length;
-                break;
+            setTimeout(updateFrame, 1000 / spriteConfig.fps);
         }
 
-        // 次のフレームを設定
-        setTimeout(updateFrame, 1000 / spriteConfig.fps);
+        updateFrame();
     }
 
-    updateFrame();
-}
+    function toggleGroupLayer(group) {
+        const groupLayers = window.layersData.filter(layer => 
+            layer.group === group && layer.imgType === 'Texture'
+        );
+        
+        if (groupLayers.length < 2) {
+            console.warn(`Not enough layers found for group: ${group}`);
+            return;
+        }
 
+        groupLayers.forEach(layer => {
+            const element = document.getElementById(layer.textureID);
+            if (element) element.style.opacity = "0";
+        });
 
-
-
-
-function toggleGroupLayer(group) {
-    const groupLayers = layersData.filter(layer => layer.group === group && layer.imgType === 'Texture');
-    if (groupLayers.length < 2) {
-        console.warn(`Not enough layers found for group: ${group}`);
-        return;
+        const randomLayer = groupLayers[Math.floor(Math.random() * groupLayers.length)];
+        const randomElement = document.getElementById(randomLayer.textureID);
+        if (randomElement) randomElement.style.opacity = "1";
     }
 
-    groupLayers.forEach(layer => {
-        const element = document.getElementById(layer.textureID);
-        if (element) element.style.opacity = "0";
-    });
+    function toggleAnimation() {
+        window.isAnimationRunning = !window.isAnimationRunning;
+        const button = document.getElementById('toggleAnimationButton');
+        if (button) {
+            button.textContent = window.isAnimationRunning ? "アニメーション一時停止" : "アニメーション再開";
+        }
 
-    const randomLayer = groupLayers[Math.floor(Math.random() * groupLayers.length)];
-    const randomElement = document.getElementById(randomLayer.textureID);
-    if (randomElement) randomElement.style.opacity = "1";
-}
-
-function toggleAnimation() {
-    isAnimationRunning = !isAnimationRunning;
-    document.getElementById('toggleAnimationButton').textContent = isAnimationRunning ? "アニメーション一時停止" : "アニメーション再開";
-
-    if (isAnimationRunning) {
-        startAnimation();
-    } else {
-        clearInterval(animationInterval);
-        animationInterval = null;
+        if (window.isAnimationRunning) {
+            startAnimation();
+        } else {
+            clearInterval(window.animationInterval);
+            window.animationInterval = null;
+        }
     }
-}
 
-function resetAnimation() {
-    clearInterval(animationInterval);
-    animationInterval = null;
-    isAnimationRunning = false;
-    document.getElementById('toggleAnimationButton').textContent = "アニメーション再開";
-    const container = document.getElementById('layerContainer');
-    container.innerHTML = '';
-}
+    function resetAnimation() {
+        clearInterval(window.animationInterval);
+        window.animationInterval = null;
+        window.isAnimationRunning = false;
+        const button = document.getElementById('toggleAnimationButton');
+        if (button) {
+            button.textContent = "アニメーション再開";
+        }
+        const container = document.getElementById('layerContainer');
+        if (container) {
+            container.innerHTML = '';
+        }
+    }
 })();
