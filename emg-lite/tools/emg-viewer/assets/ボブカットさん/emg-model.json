@@ -1,0 +1,11 @@
+{
+  "assetsRoot": "/assets",
+  "mapping": {
+    "idle.neutral": {
+      "base": "base.png",
+      "mouthOpen": "mouse_open.png",
+      "eyesClosed": "eye_close.png",
+      "eyesOpen": "目閉じ、口開き.png"
+    }
+  }
+}

@@ -1,0 +1,440 @@
+:root {
+  --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-border: rgba(255, 255, 255, 0.2);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  --text-color: #ffffff;
+  --accent-color: #4facfe;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg-gradient);
+  color: var(--text-color);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#app {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+/* Glassmorphism Utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: 16px;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
+/* Sidebar Left (Controls) */
+.sidebar-left {
+  width: 250px;
+  margin: 20px 10px 20px 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.sidebar-left h1 {
+  font-size: 1.5rem;
+  margin: 0 0 8px 0;
+}
+
+.sidebar-left p {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin: 0;
+}
+
+/* Config Panel (Middle) */
+.config-panel {
+  width: 550px;
+  /* Wider for cards */
+  margin: 20px 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+.controls {
+  flex: 1;
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-group label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+select,
+input[type="range"] {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  color: white;
+  padding: 8px;
+  border-radius: 8px;
+  outline: none;
+}
+
+select:focus {
+  border-color: var(--accent-color);
+}
+
+.checkbox-group {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* Viewer Panel */
+.viewer-panel {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.avatar-stage {
+  width: 500px;
+  height: 500px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  /* Bottom align for typical avatar */
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+#avatar-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: all 0.2s ease;
+}
+
+#no-asset-msg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.hidden {
+  display: none;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Visual Asset Grid Styles */
+.asset-grid.container {
+  display: grid;
+  grid-template-columns: 350px 1fr 300px;
+  /* 3-Column Layout */
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar,
+.asset-inspector {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.asset-inspector {
+  border-right: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.asset-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asset-item-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 0.85em;
+}
+
+.asset-item-header {
+  font-weight: bold;
+  color: #ffd700;
+  /* Gold accent */
+  margin-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 2px;
+}
+
+.asset-item-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.asset-item-label {
+  color: #aaa;
+}
+
+.asset-item-value {
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.asset-grid {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.asset-slot-visual {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.asset-slot-visual:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.slot-label {
+  font-size: 0.75em;
+  color: #aaa;
+  margin-bottom: 4px;
+}
+
+.slot-placeholder {
+  font-size: 1.5em;
+  color: #666;
+  margin: auto;
+}
+
+.slot-preview {
+  max-width: 100%;
+  max-height: 60px;
+  /* Constrain preview height */
+  object-fit: contain;
+  margin: 4px auto;
+  display: block;
+  border-radius: 4px;
+}
+
+.slot-filename {
+  margin-top: 4px;
+  width: 100%;
+  font-size: 0.7em;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary-btn.small,
+.primary-btn.small {
+  padding: 4px 8px;
+  font-size: 0.8em;
+}
+
+/* Ensure Viewer Image never overflows */
+#avatar-img {
+  max-height: 100% !important;
+  object-fit: contain;
+}
+
+/* Dynamic Mapping List */
+.scrolling-list {
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mapping-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.mapping-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card-title {
+  font-weight: bold;
+  color: #ffd700;
+  /* Highlight color */
+  font-size: 0.9em;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: #ff6b6b;
+  cursor: pointer;
+  font-size: 1.2em;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.delete-btn:hover {
+  color: #ff4c4c;
+  background: rgba(255, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+/* Editable Card Title */
+.card-title-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 0.9em;
+  width: 200px;
+  padding: 2px 4px;
+}
+
+.card-title-input:focus {
+  border-bottom-style: solid;
+  border-color: #ffd700;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* 5-Slot Grid Refinement */
+.asset-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.asset-slot-visual.small {
+  /* Smaller version for 5-column layout */
+  height: auto;
+  /* aspect-ratio can cause overflow if width is too small, use explicit min-height */
+  min-height: 80px;
+}
+
+.asset-slot-visual.small .slot-label {
+  font-size: 0.6em;
+  margin-bottom: 2px;
+}
+
+.asset-slot-visual.small input.slot-filename {
+  font-size: 0.6em;
+  padding: 1px;
+  height: 14px;
+}
+
+.asset-slot-visual.small .slot-placeholder {
+  font-size: 1.2em;
+  display: block;
+  margin-top: 10px;
+}
+
+.asset-slot-visual.small .slot-preview {
+  max-height: 40px;
+}
+
+/* Scrollbar Styling */
+.scrolling-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrolling-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.scrolling-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}

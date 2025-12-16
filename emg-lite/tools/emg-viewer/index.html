@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EMG Viewer & Editor</title>
+</head>
+
+<body>
+  <div id="app">
+    <!-- Sidebar (Left): Controls -->
+    <aside class="sidebar-left glass">
+      <header>
+        <h1>EMG Lite</h1>
+        <p>Internal Representation Editor</p>
+      </header>
+
+      <div class="controls">
+        <div class="control-group">
+          <label for="emotion">Emotion</label>
+          <input type="text" id="emotion" list="emotion-list" placeholder="Select or Type...">
+          <datalist id="emotion-list"></datalist>
+        </div>
+
+        <div class="control-group">
+          <label for="activity">Activity</label>
+          <input type="text" id="activity" list="activity-list" placeholder="Select or Type...">
+          <datalist id="activity-list"></datalist>
+        </div>
+
+        <div class="control-group checkbox-group">
+          <label for="speaking">Speaking</label>
+          <input type="checkbox" id="speaking" />
+          <span class="status-indicator"></span>
+        </div>
+
+        <div class="control-group">
+          <label for="intensity">Intensity</label>
+          <input type="range" id="intensity" min="0" max="1" step="0.1" value="0" />
+          <span id="intensity-val">0.0</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Audio Lip Sync</label>
+        <select id="audio-device"
+          style="width: 100%; padding: 4px; margin-bottom: 8px; background: rgba(0,0,0,0.3); border: 1px solid #555; color: white; border-radius: 4px;">
+          <option value="">Default Microphone</option>
+        </select>
+        <div class="checkbox-group">
+          <label for="mic-enable">Enable Mic</label>
+          <input type="checkbox" id="mic-enable" />
+          <span class="status-indicator"></span>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <label for="mic-threshold" style="font-size:0.8em; margin:0;">Threshold</label>
+          <span id="mic-threshold-val" style="font-size:0.8em;">0.1</span>
+        </div>
+        <input type="range" id="mic-threshold" min="0" max="1" step="0.01" value="0.1" />
+
+        <div style="width: 100%; height: 6px; background: #333; margin-top: 5px; border-radius: 3px; overflow: hidden;">
+          <div id="mic-level" style="height: 100%; width: 0%; background: #0f0; transition: width 0.1s;"></div>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Status Selection</label>
+        <select id="status-selector"
+          style="width: 100%; padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.2); color: white; border: 1px solid rgba(255,255,255,0.2);">
+          <option value="">(Select Status)</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <button id="load-model-sidebar-btn" class="secondary-btn" style="margin-bottom: 8px;">Load Model</button>
+        <button id="set-model-btn" class="primary-btn">Set Model</button>
+        <button id="demo-mode-btn" class="secondary-btn" style="margin-top: 8px;">Demo Mode</button>
+        <!-- Hidden input for loading model -->
+        <input type="file" id="load-model-input" accept=".json" style="display: none;" />
+      </div>
+    </aside>
+
+    <!-- Config Panel (Middle): Asset Management -->
+    <section class="config-panel glass">
+      <div class="control-group">
+        <label>Data Management</label>
+        <div class="button-group">
+          <button id="save-json" class="secondary-btn">Save JSON</button>
+          <button id="load-json-btn" class="secondary-btn">Load JSON</button>
+          <button id="load-sample-btn" class="secondary-btn">Load Sample (Bob)</button>
+          <input type="file" id="load-json-input" accept=".json" style="display: none;" />
+        </div>
+      </div>
+      <div class="control-group" style="margin-top: 8px;">
+        <label for="assets-root">Assets Root Path</label>
+        <input type="text" id="assets-root" placeholder="./ (Relative to JSON) or /assets/..."
+          style="width: 100%; padding: 4px; background: rgba(0,0,0,0.3); border: 1px solid #555; color: white; border-radius: 4px;" />
+      </div>
+
+      <div class="control-group" style="flex: 1; display: flex; flex-direction: column;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label style="margin-bottom: 0;">Asset Configuration</label>
+          <button id="add-mapping-btn" class="primary-btn small" style="width: auto; padding: 4px 8px;">+ Add
+            Status</button>
+        </div>
+
+        <div id="mapping-list-container" class="scrolling-list" style="flex: 1;">
+          <!-- Dynamic Asset Cards will be rendered here -->
+          <p style="color: #666; font-size: 0.8em; text-align: center; padding: 20px;">
+            No statuses defined.<br>Select Activity/Emotion above and click "+ Add Status".
+          </p>
+        </div>
+
+        <div class="button-group"
+          style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+          <button id="save-model-btn" class="secondary-btn small">Save Model</button>
+          <!-- Load Model removed from here -->
+        </div>
+        <div style="margin-top: 5px;">
+          <label style="font-size: 0.8em;">Current Model JSON:</label>
+          <textarea id="model-json-preview"
+            style="width: 100%; height: 60px; font-size: 0.7em; background: rgba(0,0,0,0.3); color: #aaa; border: 1px solid #555; border-radius: 4px;"
+            readonly></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+        <label style="font-size: 0.9em; font-weight: bold;">Active Status JSON (Live Change)</label>
+        <textarea id="active-status-json"
+          style="width: 100%; height: 120px; font-family: monospace; font-size: 0.8em; background: rgba(0,0,0,0.4); color: #8f8; border: 1px solid #555; border-radius: 4px; padding: 8px;"
+          readonly></textarea>
+      </div>
+
+      <div class="asset-inspector" id="asset-inspector-panel"
+        style="max-height: 200px; overflow-y: auto; margin-top: 20px;">
+        <h2>Asset Inspector</h2>
+        <div id="asset-list" class="asset-list-container">
+          <!-- Assets will be populated here -->
+          <p style="color: #888; text-align: center; margin-top: 20px;">No model loaded.</p>
+        </div>
+      </div>
+
+      <footer>
+        <button id="export-btn" class="secondary-btn">Save Situation (JSON)</button>
+      </footer>
+    </section>
+
+    <!-- Viewer Panel (Right) -->
+    <main class="viewer-panel">
+      <div class="avatar-stage glass">
+        <img id="avatar-img" src="" alt="Avatar Display" />
+        <div id="no-asset-msg" class="hidden">
+          <p>No Image Found</p>
+          <small>Check /public/assets/</small>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

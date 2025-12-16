@@ -1,0 +1,10 @@
+{
+  "assetsRoot": "/assets",
+  "mapping": {
+    "idle.neutral": {
+      "base": "base.png",
+      "mouthOpen": "mouse_open.png",
+      "eyesClosed": "eye_close.png"
+    }
+  }
+}
