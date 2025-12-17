@@ -1,21 +1,25 @@
+import { saveAs } from 'file-saver';
+import JSZip from 'jszip';
 import type { EMGLiteState, EMGModelDefinition } from './emg-lite/types';
-import { INITIAL_EMG_LITE_STATE, INITIAL_MODEL_DEFINITION, EMG_ACTIVITY_PRESETS, EMG_EMOTION_PRESETS } from './emg-lite/types';
+import { INITIAL_EMG_LITE_STATE, INITIAL_MODEL_DEFINITION } from './emg-lite/types';
 import { AudioHandler } from './audio-handler';
 
 type StateChangeListener = (state: EMGLiteState) => void;
+
 
 export class Editor {
     private state: EMGLiteState;
     public modelDef: EMGModelDefinition; // Added for external access
     private listeners: StateChangeListener[] = [];
 
-    // Public Hooks for Main (Must be properties to be assignable)
-    public onImageLoad?: (url: string) => void;
-    public onBlink?: (closed: boolean) => void;
-    public onBlobUpdate?: (map: Record<string, string>) => void;
-    public onModelUpdate?: (def: EMGModelDefinition) => void;
+    // Public Hooks for Main
+    public onImageLoad: (url: string) => void = () => { };
+    public onBlink: (closed: boolean) => void = () => { };
+    public onBlobUpdate: (map: Record<string, string>) => void = () => { };
+    public onModelUpdate: (def: EMGModelDefinition) => void = () => { };
 
     // Internal State
+    private currentModelName: string = 'avatar';
     private blobAssets: Record<string, string> = {};
     private audioHandler: AudioHandler;
     private micEnabled: boolean = false;
@@ -41,10 +45,6 @@ export class Editor {
     private micLevelBar: HTMLElement;
 
     // Model Config UI
-    private currentTargetLabel?: HTMLElement;
-    private assetBaseInput?: HTMLInputElement;
-    private assetMouthInput?: HTMLInputElement;
-    private assetEyesInput?: HTMLInputElement;
     private previewBtn?: HTMLButtonElement;
     private modelJsonPreview?: HTMLTextAreaElement;
     private assetsRootInput?: HTMLInputElement; // New input
@@ -172,29 +172,100 @@ export class Editor {
             loadModelInput?.click();
         });
 
-        loadModelInput?.addEventListener('change', (e) => {
+        loadModelInput?.addEventListener('change', async (e) => {
             const target = e.target as HTMLInputElement;
             const file = target.files?.[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = (ev) => {
+                // Check extension
+                const isZip = file.name.endsWith('.zip') || file.name.endsWith('.emgl');
+
+                if (isZip) {
+                    // ZIP Loading
                     try {
-                        const json = JSON.parse(ev.target?.result as string);
+                        const JSZip = (await import('jszip')).default;
+                        const zip = new JSZip();
+                        const loadedZip = await zip.loadAsync(file);
+
+                        // Find JSON in root
+                        let jsonFile: any = null;
+                        for (const [path, entry] of Object.entries(loadedZip.files)) {
+                            // Check for root JSON (no directory separators or simple structure)
+                            if (path.endsWith('.json') && !path.includes('/') && !entry.dir) {
+                                jsonFile = entry;
+                                break;
+                            }
+                        }
+
+                        if (!jsonFile) throw new Error('No root JSON file found in .emgl archive');
+
+                        // Parse JSON
+                        const jsonStr = await jsonFile.async('string');
+                        const json = JSON.parse(jsonStr);
+
                         if (!json.mapping || typeof json.mapping !== 'object') {
                             throw new Error('Missing "mapping" object in JSON');
                         }
+
+                        // Load all images as Blobs
+                        const newBlobs: Record<string, string> = {};
+                        for (const [path, entry] of Object.entries(loadedZip.files)) {
+                            if (!entry.dir && (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg'))) {
+                                const blob = await entry.async('blob');
+                                const url = URL.createObjectURL(blob);
+                                const filename = path.split('/').pop() || path;
+                                newBlobs[filename] = url;
+                            }
+                        }
+
+                        this.blobAssets = newBlobs;
+                        this.onBlobUpdate?.(this.blobAssets); // Pass to Viewer
+
                         this.modelDef = json;
+                        // Adjust assetsRoot if strictly specified to specific logic?
+                        // Readme says: "JSON specified directory or same hierarchy"
+                        // If JSON assetsRoot is "./", images in ZIP "something.png" (root) will be resolved as "./something.png".
+                        // PngAdapter resolves "./something.png" as "something.png" in blob map? 
+                        // Check PngAdapter: 
+                        // "const filename = path.split('/').pop() || path;" -> Key for blobMap.
+                        // This ignores directory structure in Blob Map lookup!
+                        // WARNING: This implementation assumes flat filename uniqueness!
+                        // If ZIP has "a/img.png" and "b/img.png", Blob Map key "img.png" will collide.
+                        // But PngAdapter (Step 282) logic: "const filename = path.split('/').pop() || path;" 
+                        // confirms it uses only filename. This is a limitation of current Viewer/Adapter.
+                        // However, for .emgl (ZIP), let's stick to this as it covers most cases.
+
                         if (!this.modelDef.assetsRoot) this.modelDef.assetsRoot = '/assets';
                         this.onModelUpdate(this.modelDef);
                         this.updateUI();
-                        alert(`Model loaded successfully from ${file.name}`);
+                        alert(`Model loaded successfully from ${file.name} (ZIP/EMGL)`);
+
                     } catch (err) {
                         console.error(err);
-                        alert('Invalid Model File: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                        alert('Failed to load EMGL/ZIP: ' + (err instanceof Error ? err.message : String(err)));
                     }
                     target.value = '';
-                };
-                reader.readAsText(file);
+                } else {
+                    // Legacy JSON Loading
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        try {
+                            const json = JSON.parse(ev.target?.result as string);
+                            if (!json.mapping || typeof json.mapping !== 'object') {
+                                throw new Error('Missing "mapping" object in JSON');
+                            }
+                            this.modelDef = json;
+                            if (!this.modelDef.assetsRoot) this.modelDef.assetsRoot = '/assets';
+                            this.onModelUpdate(this.modelDef);
+                            this.updateUI();
+                            alert(`Model loaded successfully from ${file.name}`);
+                        } catch (err) {
+                            console.error(err);
+                            alert('Invalid Model File: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                        }
+                        target.value = '';
+                    };
+                    reader.readAsText(file);
+                }
             }
         });
 
@@ -249,6 +320,112 @@ export class Editor {
 
         // Initial Render
         this.renderMappingList();
+
+        // Bind Export EMGL
+        const exportEmglBtn = document.getElementById('export-emgl-btn');
+        exportEmglBtn?.addEventListener('click', async () => {
+            try {
+                console.log('[Export] Starting .emgl export...');
+                // 1. Gather Assets
+                // Static import handling or dynamic import fallback
+                const JSZipModule = await import('jszip');
+                // Handle different import structures (ESM vs CommonJS)
+                const JSZip = JSZipModule.default || JSZipModule;
+                const zip = new JSZip();
+
+                // Clone Definition to modify paths
+                const exportDef = JSON.parse(JSON.stringify(this.modelDef)) as EMGModelDefinition;
+                exportDef.assetsRoot = './'; // Set root to relative for ZIP portability
+
+                const assetsFolder = zip.folder("assets");
+                const processedFiles = new Set<string>();
+
+                // Helper to process a path
+                const processAsset = async (path: string): Promise<string> => {
+                    const filename = path.split('/').pop() || path;
+
+                    // If we haven't processed this filename yet
+                    if (!processedFiles.has(filename)) {
+                        let blob: Blob | null = null;
+
+                        // Check Blob Map (Local File)
+                        if (this.blobAssets[filename]) {
+                            const resp = await fetch(this.blobAssets[filename]);
+                            blob = await resp.blob();
+                        }
+                        // Check Remote/Path
+                        else {
+                            try {
+                                // Resolve path against current assetsRoot if valid
+                                let fetchPath = path;
+                                if (this.modelDef.assetsRoot && !path.startsWith('http') && !path.startsWith('/')) {
+                                    // Simple join, assuming assetsRoot doesn't end with / usually, but handle it
+                                    const root = this.modelDef.assetsRoot.endsWith('/')
+                                        ? this.modelDef.assetsRoot
+                                        : this.modelDef.assetsRoot + '/';
+                                    fetchPath = root + path;
+                                } else if (path.startsWith('/')) {
+                                    // Absolute path from server root (e.g. /assets/foo.png)
+                                    fetchPath = path;
+                                }
+
+                                const resp = await fetch(fetchPath);
+                                if (!resp.ok) throw new Error(`Failed to fetch ${fetchPath}`);
+                                blob = await resp.blob();
+                            } catch (e) {
+                                console.warn(`Could not include asset ${path} in ZIP`, e);
+                            }
+                        }
+
+                        if (blob && assetsFolder) {
+                            assetsFolder.file(filename, blob);
+                            processedFiles.add(filename);
+                        }
+                    }
+                    return `assets/${filename}`;
+                };
+
+                // 2. Iterate and Update Paths
+                for (const key in exportDef.mapping) {
+                    const map = exportDef.mapping[key];
+                    if (map.base) map.base = await processAsset(map.base);
+                    if (map.mouthOpen) map.mouthOpen = await processAsset(map.mouthOpen);
+                    if (map.mouthClosed) map.mouthClosed = await processAsset(map.mouthClosed);
+                    if (map.eyesClosed) map.eyesClosed = await processAsset(map.eyesClosed);
+                    if (map.mouthOpenEyesClosed) map.mouthOpenEyesClosed = await processAsset(map.mouthOpenEyesClosed);
+                }
+
+                // 3. Add model.json
+                zip.file("model.json", JSON.stringify(exportDef, null, 2));
+
+                // 4. Generate and Download
+                console.log('[Export] Generating ZIP...');
+                const content = await zip.generateAsync({ type: "blob" });
+
+                // Use FileSaver if available, or robust fallback
+                const filename = `${this.currentModelName}.emgl`;
+                console.log(`[Export] Saving as ${filename} (${content.size} bytes)`);
+
+                // Strict FileSaver usage
+                console.log(`[Export] Saving as ${filename} (${content.size} bytes)`);
+                alert(`Exporting: ${filename} / Size: ${content.size}`);
+
+                // @ts-ignore
+                if (typeof saveAs === 'undefined') {
+                    alert('CRITICAL: saveAs is undefined!');
+                    console.error('saveAs is undefined');
+                } else {
+                    saveAs(content, filename);
+                    console.log('[Export] Save initiated.');
+                }
+
+                // alert('Exported .emgl successfully!');
+
+            } catch (err) {
+                console.error('Export Failed:', err);
+                alert('Export Failed: ' + err);
+            }
+        });
 
         // Attach all other events (Load, Save, etc.)
         this.attachEvents();
@@ -627,10 +804,6 @@ export class Editor {
                 // Debug log (throttled?)
                 if (Math.random() < 0.01) console.warn('[Model] No mapping for:', currentKey);
             }
-            // else {
-            //    if (Math.random() < 0.005) console.log('[Model] Running behavior for:', currentKey, 'Blink:', map.autoBlink, 'Speak:', this.speakingCheckbox.checked);
-            // }
-
             // 1. Auto Blink Logic
             if (map && map.autoBlink) {
                 if (now - this.lastBlinkToggle > this.nextBlinkDuration) {
@@ -694,17 +867,6 @@ export class Editor {
         this.audioMonitor?.suspend();
     }
 
-    private populateDatalist(id: string, items: string[]) {
-        const list = document.getElementById(id);
-        if (!list) return;
-        list.innerHTML = '';
-        items.forEach(item => {
-            const option = document.createElement('option');
-            option.value = item;
-            list.appendChild(option);
-        });
-    }
-
     private triggerBlink(isClosed: boolean) {
         this.state.eyesClosed = isClosed;
         this.onBlink?.(isClosed); // Call public hook
@@ -714,6 +876,9 @@ export class Editor {
     private attachEvents() {
         // ... (JSON handling remains same) ...
         const handleGenericJSONLoad = (json: any, fileName: string) => {
+            // Track filename for export
+            this.currentModelName = fileName.replace(/\.(json|emgl|zip)$/i, '');
+
             // Smart Load Logic
             if (json.mapping && typeof json.mapping === 'object') {
                 this.modelDef = json;
@@ -773,24 +938,18 @@ export class Editor {
                 loadInput.click();
             });
 
-            loadInput.addEventListener('change', (e) => {
+            loadInput.addEventListener('change', async (e) => {
                 console.log('[UI] Load JSON file selected');
-                // ... rest of handler
                 const target = e.target as HTMLInputElement;
                 const file = target.files?.[0];
                 if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        try {
-                            const json = JSON.parse(ev.target?.result as string);
-                            handleGenericJSONLoad(json, file.name);
-                        } catch (err) {
-                            console.error('Failed to parse JSON', err);
-                            alert('Invalid JSON file');
-                        }
-                        target.value = ''; // Reset for re-selection
-                    };
-                    reader.readAsText(file);
+                    const isZip = file.name.endsWith('.zip') || file.name.endsWith('.emgl');
+                    if (isZip) {
+                        await this.loadFromZip(file);
+                    } else {
+                        await this.loadFromJson(file);
+                    }
+                    target.value = '';
                 }
             });
         } else {
@@ -919,8 +1078,8 @@ export class Editor {
                 const jsonStr = JSON.stringify(this.modelDef, null, 2);
                 console.log('[UI] JSON prepared. Length:', jsonStr.length);
 
-                const message = "Saving model (mappings & settings).\n\n" +
-                    "IMPORTANT: Save this file in the SAME directory as your assets.";
+                // const message = "Saving model (mappings & settings).\n\n" +
+                //    "IMPORTANT: Save this file in the SAME directory as your assets.";
 
 
 
@@ -1051,28 +1210,9 @@ export class Editor {
         });
     }
 
-    // New capability
-    public onImageLoad: (url: string) => void = () => { };
-    public onModelUpdate: (def: EMGModelDefinition) => void = () => { };
-    public onBlink: (closed: boolean) => void = () => { };
-    public onBlobUpdate: (map: Record<string, string>) => void = () => { };
+    // Duplicates removed (onImageLoad, onModelUpdate, blink, etc)
+    // Legacy fix logic merged into main class body
 
-    private blobAssets: Record<string, string> = {};
-
-    public subscribe(listener: StateChangeListener) {
-        this.listeners.push(listener);
-        // Initial call
-        listener(this.state);
-    }
-
-    // Fix for main.ts error
-    public getState(): EMGLiteState {
-        return this.state;
-    }
-
-    public getModelDefinition(): EMGModelDefinition {
-        return this.modelDef;
-    }
 
     private notify() {
         this.updateUI(); // Keep UI in sync for internal changes (like preview)
@@ -1104,6 +1244,97 @@ export class Editor {
 
         // Render Editable Mapping List (Left Config)
         this.renderMappingList();
+    }
+
+
+    public async loadFromJson(file: File) {
+        return new Promise<void>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    // Update filename tracking
+                    this.currentModelName = file.name.replace(/\.[^/.]+$/, "");
+
+                    const json = JSON.parse(ev.target?.result as string);
+                    if (!json.mapping || typeof json.mapping !== 'object') {
+                        throw new Error('Missing "mapping" object in JSON');
+                    }
+                    this.modelDef = json;
+                    if (!this.modelDef.assetsRoot) this.modelDef.assetsRoot = '/assets';
+                    this.onModelUpdate(this.modelDef);
+                    this.updateUI();
+                    alert(`Model loaded successfully from ${file.name}`);
+                    resolve();
+                } catch (err) {
+                    console.error(err);
+                    alert('Invalid Model File: ' + (err instanceof Error ? err.message : 'Unknown error'));
+                    reject(err);
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
+
+    public async loadFromZip(file: File | Blob) {
+        try {
+            // Update filename tracking if File
+            if (file instanceof File) {
+                this.currentModelName = file.name.replace(/\.[^/.]+$/, "");
+            }
+
+            // ZIP Loading
+            const JSZip = (await import('jszip')).default;
+            const zip = new JSZip();
+            const loadedZip = await zip.loadAsync(file);
+
+            // Find JSON in root
+            let jsonFile: any = null;
+            for (const [path, entry] of Object.entries(loadedZip.files)) {
+                // Check for root JSON (no directory separators or simple structure)
+                if (path.endsWith('.json') && !path.includes('/') && !entry.dir) {
+                    jsonFile = entry;
+                    break;
+                }
+            }
+
+            if (!jsonFile) throw new Error('No root JSON file found in .emgl archive');
+
+            // Parse JSON
+            const jsonStr = await jsonFile.async('string');
+            const json = JSON.parse(jsonStr);
+
+            if (!json.mapping || typeof json.mapping !== 'object') {
+                throw new Error('Missing "mapping" object in JSON');
+            }
+
+            // Load all images as Blobs
+            const newBlobs: Record<string, string> = {};
+            for (const [path, entry] of Object.entries(loadedZip.files)) {
+                if (!entry.dir && (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg'))) {
+                    const blob = await entry.async('blob');
+                    const url = URL.createObjectURL(blob);
+                    const filename = path.split('/').pop() || path;
+                    newBlobs[filename] = url;
+                }
+            }
+
+            this.blobAssets = newBlobs;
+            this.onBlobUpdate?.(this.blobAssets); // Pass to Viewer
+
+            this.modelDef = json;
+            if (!this.modelDef.assetsRoot) this.modelDef.assetsRoot = '/assets';
+
+            this.onModelUpdate(this.modelDef);
+            this.updateUI();
+
+            const name = (file instanceof File) ? file.name : "Blob";
+            alert(`Model loaded successfully from ${name} (ZIP/EMGL)`);
+
+        } catch (err) {
+            console.error(err);
+            alert('Failed to load EMGL/ZIP: ' + (err instanceof Error ? err.message : String(err)));
+            throw err;
+        }
     }
 
     private updateJSONPreviews() {
@@ -1208,11 +1439,6 @@ export class Editor {
     }
 }
 
-/**
- * Valid Emotions for Random Preview
- */
-const VALID_EMOTIONS = ['neutral', 'joy', 'angry', 'sorrow', 'fun'];
-
 class AudioMonitor {
     private ctx: AudioContext | undefined;
     private analyser: AnalyserNode | undefined;
@@ -1261,6 +1487,7 @@ class AudioMonitor {
 
     getVolume(): number {
         if (!this.isActive || !this.analyser || !this.dataArray) return 0;
+        // @ts-ignore
         this.analyser.getByteFrequencyData(this.dataArray);
 
         let sum = 0;

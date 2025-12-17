@@ -73,11 +73,12 @@
       </div>
 
       <div class="control-group">
-        <button id="load-model-sidebar-btn" class="secondary-btn" style="margin-bottom: 8px;">Load Model</button>
+        <button id="load-model-sidebar-btn" class="secondary-btn" style="margin-bottom: 8px;">Load Model /
+          .emgl</button>
         <button id="set-model-btn" class="primary-btn">Set Model</button>
         <button id="demo-mode-btn" class="secondary-btn" style="margin-top: 8px;">Demo Mode</button>
         <!-- Hidden input for loading model -->
-        <input type="file" id="load-model-input" accept=".json" style="display: none;" />
+        <input type="file" id="load-model-input" accept=".json, .emgl, .zip" style="display: none;" />
       </div>
     </aside>
 
@@ -87,9 +88,9 @@
         <label>Data Management</label>
         <div class="button-group">
           <button id="save-json" class="secondary-btn">Save JSON</button>
-          <button id="load-json-btn" class="secondary-btn">Load JSON</button>
+          <button id="load-json-btn" class="secondary-btn">Load JSON / .emgl</button>
           <button id="load-sample-btn" class="secondary-btn">Load Sample (Bob)</button>
-          <input type="file" id="load-json-input" accept=".json" style="display: none;" />
+          <input type="file" id="load-json-input" accept=".json, .emgl, .zip" style="display: none;" />
         </div>
       </div>
       <div class="control-group" style="margin-top: 8px;">
@@ -114,8 +115,8 @@
 
         <div class="button-group"
           style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
-          <button id="save-model-btn" class="secondary-btn small">Save Model</button>
-          <!-- Load Model removed from here -->
+          <button id="save-model-btn" class="secondary-btn small">Save Model (JSON)</button>
+          <button id="export-emgl-btn" class="primary-btn small">Export .emgl (ZIP)</button>
         </div>
         <div style="margin-top: 5px;">
           <label style="font-size: 0.8em;">Current Model JSON:</label>

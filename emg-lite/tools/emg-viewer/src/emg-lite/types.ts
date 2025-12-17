@@ -26,6 +26,11 @@ export interface EMGLiteState {
      * 表現の深さを制御するために予約
      */
     intensity: number;
+
+    /**
+     * まばたき状態 (Runtime only)
+     */
+    eyesClosed?: boolean;
 }
 
 /**

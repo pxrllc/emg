@@ -7,6 +7,8 @@ console.log('Main starting');
 document.addEventListener('DOMContentLoaded', () => {
   const viewer = new Viewer();
   const editor = new Editor();
+  // @ts-ignore
+  window.editor = editor;
 
   editor.subscribe((state) => {
     viewer.update(state);
