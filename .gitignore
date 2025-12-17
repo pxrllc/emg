@@ -1,3 +1,4 @@
 aviutl-for-egml/
-emg\emg-lite\tools\emg-viewer\assets/
-emg\emg-lite\tools\emg-viewer\.agent/
+emg-lite/tools/emg-viewer/assets/
+emg-lite/tools/emg-viewer/.agent/
+emg-lite/tools/emg-viewer/public/assets/

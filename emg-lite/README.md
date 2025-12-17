@@ -35,4 +35,14 @@ filename.emgl (ZIP)
 1. **JSON定義**: アーカイブ直下（ルート）にある `.json` ファイルをエントリポイントとして扱います。
     - 複数ある場合の動作は定義しません（最初の1つ、または `model.json` 優先などが推奨されます）。
 2. **パス解決**: JSON内の画像パスなどは、ZIPアーカイブ内のパスとして解決します。
-    - JSONと同じ階層、またはJSON内で指定された相対パス (`assetsRoot` 等) に従ってリソースを配置します。
+
+## 詳細ドキュメント (Specifications)
+より詳細な仕様については、以下のドキュメントを参照してください。
+
+-   **[.emgl ファイル仕様 / .emgl Specification](./tools/emg-viewer/docs/emgl_spec.md)**
+    -   コンテナフォーマットの詳細仕様、ファイル構成、パス解決ルールなど。
+-   **[モデル仕様 / Model Specification](./tools/emg-viewer/docs/model_spec.md)**
+    -   `model.json` の構造、マッピングロジック（5スロットシステム）、画像設定など。
+-   **[プレイヤー仕様 / Player Specification](./tools/emg-viewer/docs/player_spec.md)**
+    -   EMGステート定義、デモモード、リップシンク挙動などのViewer仕様。
+

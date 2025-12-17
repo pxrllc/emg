@@ -55,5 +55,17 @@ window.EMGPlayer.loadEmgFromCDN('https://example.com/animation_data.zip', 'layer
 - JSONのカスタマイズオプション追加
 - ユーザーインターフェースの拡張
 
+
 ## ライセンス
 このスクリプトはオープンソースとして提供されています。
+
+---
+
+# EMG Lite (次世代版)
+
+EMG Lite は、よりモダンな設計に基づいた新しいアバター表現システムです。
+詳細な仕様やドキュメントについては、以下のリンクを参照してください。
+
+-   **[EMG Lite ドキュメント (README)](./emg-lite/README.md)**
+-   **[EMG Viewer ツール](./emg-lite/tools/emg-viewer/)**
+
