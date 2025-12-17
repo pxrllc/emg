@@ -1,5 +1,5 @@
 import { saveAs } from 'file-saver';
-import JSZip from 'jszip';
+
 import type { EMGLiteState, EMGModelDefinition } from './emg-lite/types';
 import { INITIAL_EMG_LITE_STATE, INITIAL_MODEL_DEFINITION } from './emg-lite/types';
 import { AudioHandler } from './audio-handler';
@@ -754,7 +754,7 @@ export class Editor {
         if (!select) return;
 
         // Keep current selection if possible
-        const currentVal = select.value;
+
         select.innerHTML = '<option value="">(Select Status)</option>';
 
         const keys = Object.keys(this.modelDef.mapping).sort();

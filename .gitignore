@@ -2,3 +2,5 @@ aviutl-for-egml/
 emg-lite/tools/emg-viewer/assets/
 emg-lite/tools/emg-viewer/.agent/
 emg-lite/tools/emg-viewer/public/assets/
+node_modules/
+dist*/

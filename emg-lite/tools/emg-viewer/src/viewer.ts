@@ -6,6 +6,9 @@ export class Viewer {
     private imgElement: HTMLImageElement;
     private noAssetMsg: HTMLElement;
 
+    public onError: ((path: string) => void) | null = null;
+    public onSuccess: (() => void) | null = null;
+
     constructor(basePath: string = '/assets') {
         console.log('Viewer init started');
         this.adapter = new PngAvatarAdapter({
@@ -21,12 +24,18 @@ export class Viewer {
             // this.imgElement.style.display = 'none';
             this.noAssetMsg.classList.remove('hidden');
             this.noAssetMsg.textContent = 'Err: ' + this.imgElement.src;
+            this.onError?.(this.imgElement.src);
         };
 
         this.imgElement.onload = () => {
             this.imgElement.style.display = 'block';
             this.noAssetMsg.classList.add('hidden');
+            this.onSuccess?.();
         };
+    }
+
+    public setOverrideImage(url: string) {
+        this.imgElement.src = url;
     }
 
     // State

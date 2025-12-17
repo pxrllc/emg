@@ -1,4 +1,5 @@
 import './style.css';
+import type { EMGModelDefinition } from './emg-lite/types';
 import { Editor } from './editor';
 import { Viewer } from './viewer';
 
@@ -17,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Editor -> Viewer: Image Override
   editor.onImageLoad = (url) => viewer.setOverrideImage(url);
   editor.onBlink = (closed) => viewer.setBlinking(closed);
-  editor.onBlobUpdate = (map) => viewer.setBlobMap(map);
+  editor.onBlobUpdate = (map: Record<string, string>) => viewer.setBlobMap(map);
 
   // Editor -> Viewer: Model Update & Reference Grid
   editor.onModelUpdate = (def) => {

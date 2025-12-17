@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "target": "es2022",
+        "outDir": "../dist-electron",
+        "rootDir": ".",
+        "sourceMap": false,
+        "strict": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true
+    },
+    "include": [
+        "**/*"
+    ]
+}

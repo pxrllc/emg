@@ -2,19 +2,47 @@
   "name": "emg-viewer",
   "private": true,
   "version": "0.0.0",
+  "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:build": "tsc -p electron/tsconfig.json",
+    "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5175 && cross-env ELECTRON_DISABLE_SECURITY_WARNINGS=true electron .\"",
+    "dist:exe": "npm run build && npm run electron:build && electron-builder --win"
   },
   "devDependencies": {
-    "typescript": "~5.9.3",
-    "vite": "^5.4.11"
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-packager": "^17.1.2",
+    "typescript": "~5.6.3",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
   },
   "dependencies": {
     "@types/file-saver": "^2.0.7",
     "file-saver": "^2.0.5",
     "jszip": "^3.10.1"
+  },
+  "build": {
+    "appId": "com.emglite.viewer",
+    "productName": "EMG Viewer",
+    "directories": {
+      "output": "dist-package"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
