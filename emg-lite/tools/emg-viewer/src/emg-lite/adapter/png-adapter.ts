@@ -44,6 +44,10 @@ export class PngAvatarAdapter {
         this.modelDef = def;
     }
 
+    public getModelDefinition(): EMGModelDefinition | undefined {
+        return this.modelDef;
+    }
+
     public setBlobMap(map: Record<string, string>) {
         this.blobMap = map;
     }
@@ -58,35 +62,45 @@ export class PngAvatarAdapter {
         // 1. Try to use Model Definition if available
         if (this.modelDef) {
             const key = `${state.activity}.${state.emotion}`;
-            const assets = this.modelDef.mapping[key];
+            let assets = this.modelDef.mapping[key]; // Changed to 'let' because it might be reassigned
 
             if (assets) {
                 let path: string | undefined;
 
-                // Helper to check config (Task 39)
-                // If config is missing, default to true (allow behavior)
+                // Check Sleep Mode Override
+                if (state.sleep) {
+                    // Try to find a mapping with isSleep=true
+                    // If multiple exist, order is undefined (using first found)
+                    for (const mapKey in this.modelDef.mapping) {
+                        if (this.modelDef.mapping[mapKey].isSleep) {
+                            // Switch effective assets to this sleep state
+                            assets = this.modelDef.mapping[mapKey];
+                            // Also disable blinking/speaking for sleep? Usually yes.
+                            blinking = false; // Sleep implies eyes closed usually
+                            state.speaking = false; // Sleep implies quiet
+                            break;
+                        }
+                    }
+                }
+
+                // Helper to check config for current candidate
                 const canBlink = (slot: string) => {
                     const cfg = assets.imageConfig?.[slot];
                     return cfg?.useForBlink !== false;
                 };
+
                 const canLipSync = (slot: string) => {
                     const cfg = assets.imageConfig?.[slot];
                     return cfg?.useForLipSync !== false;
                 };
 
-                // Priority Logic for 5-Slots (Simple Switcher)
-                // 1. Composite (if available and needed)
-                if (state.speaking && blinking && assets.mouthOpenEyesClosed &&
-                    canLipSync('mouthOpenEyesClosed') && canBlink('mouthOpenEyesClosed')) {
-                    path = assets.mouthOpenEyesClosed;
-                }
-                // 2. High Priority Overrides (Blinking usually overrides everything else to act as a blink)
+                // Priority Logic for 6-Slots (Updated for Sleep)
+                // 1. High Priority Overrides (Blinking usually overrides everything else to act as a blink)
                 // Check if blinking requested AND slot exists AND config allows it
-                else if (blinking && assets.eyesClosed && canBlink('eyesClosed')) {
+                if (blinking && assets.eyesClosed && canBlink('eyesClosed')) {
                     path = assets.eyesClosed;
                 }
-                // 3. Speaking
-                // Check if speaking requested AND slot exists AND config allows it
+                // 2. Speaking
                 else if (state.speaking && assets.mouthOpen && canLipSync('mouthOpen')) {
                     path = assets.mouthOpen;
                 }

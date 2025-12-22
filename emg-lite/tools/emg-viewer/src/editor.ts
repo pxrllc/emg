@@ -35,6 +35,7 @@ export class Editor {
     private emotionInput: HTMLInputElement;
     private activityInput: HTMLInputElement;
     private speakingCheckbox: HTMLInputElement;
+    private sleepCheckbox: HTMLInputElement; // New
     private intensityRange: HTMLInputElement;
     private intensityValDisplay: HTMLElement;
 
@@ -49,7 +50,14 @@ export class Editor {
     private modelJsonPreview?: HTMLTextAreaElement;
     private assetsRootInput?: HTMLInputElement; // New input
 
+    // Metadata UI
+    private metaLicense: HTMLInputElement;
+    private metaDims: HTMLInputElement;
+    private metaAnchorX: HTMLInputElement;
+    private metaAnchorY: HTMLInputElement;
+
     constructor() {
+        console.log('Editor init');
         this.state = { ...INITIAL_EMG_LITE_STATE };
         // Deep clone to ensure independent instance
         this.modelDef = JSON.parse(JSON.stringify(INITIAL_MODEL_DEFINITION));
@@ -59,8 +67,15 @@ export class Editor {
         this.emotionInput = document.getElementById('emotion') as HTMLInputElement;
         this.activityInput = document.getElementById('activity') as HTMLInputElement;
         this.speakingCheckbox = document.getElementById('speaking') as HTMLInputElement;
+        this.sleepCheckbox = document.getElementById('sleep') as HTMLInputElement; // NEW
         this.intensityRange = document.getElementById('intensity') as HTMLInputElement;
         this.intensityValDisplay = document.getElementById('intensity-val') as HTMLElement;
+
+        // Meta UI Bind
+        this.metaLicense = document.getElementById('meta-license') as HTMLInputElement;
+        this.metaDims = document.getElementById('meta-dims') as HTMLInputElement;
+        this.metaAnchorX = document.getElementById('meta-anchor-x') as HTMLInputElement;
+        this.metaAnchorY = document.getElementById('meta-anchor-y') as HTMLInputElement;
 
         // Bind Audio UI
         this.audioDeviceSelect = document.getElementById('audio-device') as HTMLSelectElement;
@@ -544,6 +559,7 @@ export class Editor {
 
             flagsDiv.appendChild(createFlag('Blink', 'autoBlink'));
             flagsDiv.appendChild(createFlag('LipSync', 'lipSync'));
+            flagsDiv.appendChild(createFlag('Is Sleep State', 'isSleep')); // NEW
 
             header.appendChild(flagsDiv);
             header.appendChild(delBtn);
@@ -570,13 +586,14 @@ export class Editor {
             const grid = document.createElement('div');
             grid.className = 'asset-grid-5';
 
-            // Defs for loop (Task 41: Updated 5-Slot Set)
+            // Defs for loop (Task 41: Updated 5-Slot Set -> Task 48: 6-Slot Reverted to 5 + Flag)
             const slots = [
                 { id: 'base', label: 'Base', val: map.base },
+                // Sleep slot removed
                 { id: 'mouthOpen', label: 'Mouth Open', val: map.mouthOpen },
                 { id: 'mouthClosed', label: 'Mouth Closed', val: map.mouthClosed },
-                { id: 'eyesClosed', label: 'Eyes Closed (Mouth Closed)', val: map.eyesClosed }, // Originally eyesClosed usually implies mouth closed
-                { id: 'mouthOpenEyesClosed', label: 'Eyes Closed (Mouth Open)', val: map.mouthOpenEyesClosed },
+                { id: 'eyesOpen', label: 'Eyes Open', val: map.eyesOpen },
+                { id: 'eyesClosed', label: 'Eyes Closed', val: map.eyesClosed },
             ];
 
             slots.forEach(slotInfo => {
@@ -671,6 +688,18 @@ export class Editor {
                         preview.src = url;
                         preview.classList.remove('hidden');
                         placeholder.classList.add('hidden');
+
+                        // Auto-Sense Dimensions if BASE slot
+                        if (slotInfo.id === 'base') {
+                            const img = new Image();
+                            img.onload = () => {
+                                this.modelDef.width = img.naturalWidth;
+                                this.modelDef.height = img.naturalHeight;
+                                console.log('[Editor] Auto-detected base dimensions:', img.naturalWidth, img.naturalHeight);
+                                this.onModelUpdate(this.modelDef); // Will trigger updateUI -> proper display
+                            };
+                            img.src = url;
+                        }
 
                         this.onModelUpdate(this.modelDef);
                         this.updateJSONPreviews();
@@ -841,10 +870,7 @@ export class Editor {
                 // If unchecked, disable mic processing? 
                 // Or user meant "Manually checked speaking = detection ON"
                 // If unchecked, maybe we pause detection.
-                // Assuming Unchecked = No Speaking (Manual control ignored for now if we strictly follow "used as on/off for detecting")
-                // But typically checkbox IS the state.
-                // Request says: "speaking checkbox ... used as on/off for detecting input audio"
-                // So Checked = Audio Detection ON. Unchecked = Audio Detection OFF.
+                // Assuming Unchecked = Audio Detection ON. Unchecked = Audio Detection OFF.
                 this.audioMonitor?.suspend();
                 if (this.state.speaking) {
                     this.state.speaking = false;
@@ -914,6 +940,11 @@ export class Editor {
 
         this.speakingCheckbox.addEventListener('change', () => {
             this.state.speaking = this.speakingCheckbox.checked;
+            this.notify();
+        });
+
+        this.sleepCheckbox.addEventListener('change', () => {
+            this.state.sleep = this.sleepCheckbox.checked;
             this.notify();
         });
 
@@ -1208,6 +1239,23 @@ export class Editor {
                 runBlink();
             }
         });
+        // Bind Metadata UI Events
+        this.metaLicense.addEventListener('change', () => {
+            this.modelDef.license = this.metaLicense.value;
+            this.onModelUpdate(this.modelDef);
+        });
+
+        this.metaAnchorX.addEventListener('input', () => {
+            this.modelDef.anchorX = parseFloat(this.metaAnchorX.value);
+            this.onModelUpdate(this.modelDef);
+        });
+
+        this.metaAnchorY.addEventListener('input', () => {
+            this.modelDef.anchorY = parseFloat(this.metaAnchorY.value);
+            this.onModelUpdate(this.modelDef);
+        });
+
+        // Other UI Binds...
     }
 
     // Duplicates removed (onImageLoad, onModelUpdate, blink, etc)
@@ -1220,11 +1268,45 @@ export class Editor {
     }
 
     private updateUI() {
+        if (!this.emotionInput) return;
+
+        // Top Controls
         this.emotionInput.value = this.state.emotion;
         this.activityInput.value = this.state.activity;
         this.speakingCheckbox.checked = this.state.speaking;
-        this.intensityRange.value = this.state.intensity.toString();
+        this.sleepCheckbox.checked = !!this.state.sleep;
+        this.intensityRange.value = String(this.state.intensity);
         this.intensityValDisplay.textContent = this.state.intensity.toFixed(1);
+
+        // Metadata Controls
+        if (this.metaLicense) {
+            this.metaLicense.value = this.modelDef.license || '';
+            const w = this.modelDef.width;
+            const h = this.modelDef.height;
+            this.metaDims.value = (w && h) ? `${w} x ${h}` : '';
+            this.metaAnchorX.value = String(this.modelDef.anchorX ?? 0.5);
+            this.metaAnchorY.value = String(this.modelDef.anchorY ?? 0.5);
+        }
+
+        // Active Status Highlight
+        const currentKey = `${this.state.activity}.${this.state.emotion}`;
+        const mappingCards = document.querySelectorAll('.mapping-card');
+        mappingCards.forEach(card => {
+            // Simple visual unchecked: logic inside renderMappingList handles data
+            // We could add a class 'active' if we can match the key easily
+            const titleInput = card.querySelector('.card-title-input') as HTMLInputElement;
+            if (titleInput && titleInput.value === currentKey) {
+                (card as HTMLElement).style.borderColor = '#4facfe';
+                (card as HTMLElement).style.background = 'rgba(79, 172, 254, 0.1)';
+            } else {
+                // card.style.borderColor = ''; // reset needed if relying on style attribute
+                (card as HTMLElement).style.removeProperty('border-color');
+                (card as HTMLElement).style.removeProperty('background');
+            }
+        });
+
+        // Previews
+        this.updateJSONPreviews();
 
         // Task 45: Sync Assets Root Input
         if (this.assetsRootInput) {

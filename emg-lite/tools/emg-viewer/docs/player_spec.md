@@ -42,6 +42,15 @@ The player resolves the final image path by combining:
 
 Example: `assetsRoot: "/assets/char/"` + `mouthOpen: "talk.png"` -> Result: `/assets/char/talk.png`.
 
+### 4. Rendering & Layout
+The viewer respects the Global Properties defined in `model.json`:
+-   **Anchor Point (`anchorX`, `anchorY`)**:
+    -   The image is positioned such that the point `(anchorX, anchorY)` of the image aligns with the center of the viewer stage.
+    -   Default is `(0.5, 0.5)` (Center-Center).
+-   **Dimensions (`width`, `height`)**:
+    -   If specified, these define the logical canvas size.
+    -   If not specified, the dimensions of the `base` image are used.
+
 ---
 
 # 日本語訳 (Japanese Translation)
@@ -58,6 +67,7 @@ interface EMGLiteState {
     emotion: string;    // 感情 (例: 'neutral', 'joy')
     activity: string;   // 行動 (例: 'idle', 'wave')
     speaking: boolean;  // 発話状態 (true = 開口, false = 閉口)
+    sleep: boolean;     // 睡眠状態 (true = 睡眠中)
     intensity: number;  // 強度 0.0 ～ 1.0 (将来的な補間用に予約)
 }
 ```
@@ -90,3 +100,12 @@ interface EMGLiteState {
 2.  **Resolved Slot**: 5スロット優先順位ロジック（[モデル仕様書](./model_spec.md)参照）によって選択されたファイル名。
 
 例: `assetsRoot: "/assets/char/"` + `mouthOpen: "talk.png"` -> 結果: `/assets/char/talk.png`
+
+### 4. レンダリングとレイアウト
+Viewer は `model.json` で定義されたグローバルプロパティに従います。
+-   **アンカーポイント (`anchorX`, `anchorY`)**:
+    -   画像の `(anchorX, anchorY)` の位置が、Viewer ステージの中心に来るように配置されます。
+    -   デフォルトは `(0.5, 0.5)` (中心) です。
+-   **寸法 (`width`, `height`)**:
+    -   指定されている場合、これらが論理的なキャンバスサイズを定義します。
+    -   指定がない場合、`base` 画像のサイズが使用されます。

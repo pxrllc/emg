@@ -8,12 +8,27 @@ The model is defined by a single JSON object with the following top-level proper
 
 ```json
 {
+  "width": 1000,                // [Optional] Base Width (Canvas Size)
+  "height": 1000,               // [Optional] Base Height (Canvas Size)
+  "license": "CC0",             // [Optional] License Information
+  "anchorX": 0.5,               // [Optional] Pivot X (0.0 - 1.0) Default: 0.5
+  "anchorY": 0.5,               // [Optional] Pivot Y (0.0 - 1.0) Default: 0.5
   "assetsRoot": "./",           // Path to assets directory (relative to JSON or absolute)
   "mapping": { ... }           // Dictionary of State-to-Assets mappings
 }
 ```
 
-### 1. Assets Root (`assetsRoot`)
+### 1. Global Properties
+-   **width / height** (`number`):
+    -   Optional. Represents the dimensions of the base image or intended canvas size.
+    -   The `base` image size usually defines these values automatically if not set.
+-   **license** (`string`):
+    -   Optional. Text summarizing the license (e.g. "CC0", "MIT", "URL...").
+-   **anchorX / anchorY** (`number`):
+    -   Optional. Defaults to `0.5` (Center).
+    -   Determines the pivot point for rendering and scaling. `(0,0)` is top-left, `(1,1)` is bottom-right.
+
+### 2. Assets Root (`assetsRoot`)
 -   **Type**: `string`
 -   **Default**: `./`
 -   **Description**: The base path where image files are located.
@@ -36,14 +51,20 @@ Each mapping key points to an object defining up to 5 image slots for granular c
   "mouthOpen": "mouth_open.png",        // [Optional] Used when speaking=true
   "mouthClosed": "mouth_closed.png",    // [Optional] Used when speaking=false (Explicit override)
   "eyesOpen": "eyes_open.png",          // [Optional] Used when blinking=false (Explicit override)
+```json
+{
+  "base": "base.png",                   // [Required] Fallback / Default Body
+  "mouthOpen": "mouth_open.png",        // [Optional] Used when speaking=true
+  "mouthClosed": "mouth_closed.png",    // [Optional] Used when speaking=false (Explicit override)
+  "eyesOpen": "eyes_open.png",          // [Optional] Used when blinking=false (Explicit override)
   "eyesClosed": "eyes_closed.png",      // [Optional] Used when blinking=true
-  "mouthOpenEyesClosed": "combo.png",   // [Optional] Composite for Speaking + Blinking simultaneously
+  "isSleep": true,                      // [Optional] Mark this status as the "Sleep State"
   "imageConfig": { ... }                // [Optional] Behavior flags
 }
 ```
 
 -   **Priority Logic**:
-    1.  **Composite**: If `speaking` AND `blinking` AND `mouthOpenEyesClosed` is defined -> Use Composite.
+    1.  **Sleep Mode**: If Viewer is in Sleep Mode (`state.sleep=true`), it looks for a mapping with `"isSleep": true` and uses that status.
     2.  **Blinking**: If `blinking` AND `eyesClosed` defined -> Use `eyesClosed`.
     3.  **Speaking**: If `speaking` AND `mouthOpen` defined -> Use `mouthOpen`.
     4.  **Defined Idle**: If `!speaking` AND `mouthClosed` defined -> Use `mouthClosed`.
@@ -80,7 +101,20 @@ Allows disabling specific automatic behaviors for certain slots.
 }
 ```
 
-### 1. アセットルート (`assetsRoot`)
+> **Note**: EMG-LiteのStatusは、主に表情差分を扱うことを想定しています。
+> 衣装変更（着替え）を行いたい場合は、このJSON内で分岐させるのではなく、**別のEMGモデル（.emglファイル）を作成して切り替えること**を推奨します。
+
+### 1. グローバルプロパティ (Global Properties)
+-   **width / height** (`number`):
+    -   任意。ベース画像の寸法、または意図するキャンバスサイズを表します。
+    -   未設定の場合、通常は `base` 画像のサイズから自動的に決定されます。
+-   **license** (`string`):
+    -   任意。ライセンス情報のテキスト (例: "CC0", "MIT", "URL...")。
+-   **anchorX / anchorY** (`number`):
+    -   任意。デフォルトは `0.5` (中心) です。
+    -   描画やスケーリングの基準点（ピボット）を決定します。`(0,0)` は左上、`(1,1)` は右下です。
+
+### 2. アセットルート (`assetsRoot`)
 -   **型**: `string`
 -   **デフォルト**: `./`
 -   **説明**: 画像ファイルが配置されているベースパスです。
@@ -103,14 +137,20 @@ Allows disabling specific automatic behaviors for certain slots.
   "mouthOpen": "mouth_open.png",        // [任意] speaking=true の時に使用 (開口)
   "mouthClosed": "mouth_closed.png",    // [任意] speaking=false の時に使用 (閉口・明示的指定)
   "eyesOpen": "eyes_open.png",          // [任意] blinking=false の時に使用 (開眼・明示的指定)
+```json
+{
+  "base": "base.png",                   // [必須] フォールバック用 / 基本ボディ
+  "mouthOpen": "mouth_open.png",        // [任意] speaking=true の時に使用 (開口)
+  "mouthClosed": "mouth_closed.png",    // [任意] speaking=false の時に使用 (閉口・明示的指定)
+  "eyesOpen": "eyes_open.png",          // [任意] blinking=false の時に使用 (開眼・明示的指定)
   "eyesClosed": "eyes_closed.png",      // [任意] blinking=true の時に使用 (閉眼)
-  "mouthOpenEyesClosed": "combo.png",   // [任意] 話しながら瞬きした時の複合画像
+  "isSleep": true,                      // [任意] このステートを「睡眠状態」としてマーク
   "imageConfig": { ... }                // [任意] 挙動制御フラグ
 }
 ```
 
 -   **優先順位ロジック (Priority Logic)**:
-    1.  **複合 (Composite)**: `speaking` かつ `blinking` で、`mouthOpenEyesClosed` が定義されている場合 -> これを使用。
+    1.  **睡眠 (Sleep Mode)**: ViewerがSleep Mode (`state.sleep=true`) の時、`"isSleep": true` となっているステートを検索して使用します。
     2.  **瞬き (Blinking)**: `blinking` で、`eyesClosed` が定義されている場合 -> これを使用。
     3.  **発話 (Speaking)**: `speaking` で、`mouthOpen` が定義されている場合 -> これを使用。
     4.  **待機指定 (Defined Idle)**: `!speaking` で、`mouthClosed` が定義されている場合 -> これを使用。

@@ -22,6 +22,12 @@ export interface EMGLiteState {
     speaking: boolean;
 
     /**
+     * 睡眠状態
+     * trueの場合、優先的に睡眠表現（または閉眼）を使用
+     */
+    sleep?: boolean;
+
+    /**
      * 感情や動作の強度 (0.0 - 1.0)
      * 表現の深さを制御するために予約
      */
@@ -40,6 +46,7 @@ export const INITIAL_EMG_LITE_STATE: EMGLiteState = {
     emotion: 'neutral',
     activity: 'idle',
     speaking: false,
+    sleep: false,
     intensity: 0.0,
 };
 
@@ -75,8 +82,11 @@ export interface EMGVariantAssets {
     /** 目開け画像 (Blinking=false) - Explicit */
     eyesOpen?: string;
 
-    /** 両方 (Speaking + Blinking) - オプション */
-    mouthOpenEyesClosed?: string;
+    /** 目開け画像 (Blinking=false) - Explicit */
+    eyesOpen?: string;
+
+    /** 睡眠状態として使用するフラグ */
+    isSleep?: boolean;
 
     /** 自動まばたき有効フラグ */
     autoBlink?: boolean;
@@ -99,6 +109,17 @@ export interface EMGVariantAssets {
 export interface EMGModelDefinition {
     /** アセットのルートパス (相対または絶対) */
     assetsRoot: string;
+
+    /** Canvas Width / Base Image Width */
+    width?: number;
+    /** Canvas Height / Base Image Height */
+    height?: number;
+    /** License Information */
+    license?: string;
+    /** Pivot X (0.0 - 1.0) Default: 0.5 */
+    anchorX?: number;
+    /** Pivot Y (0.0 - 1.0) Default: 0.5 */
+    anchorY?: number;
     /**
      * マッピング定義
      * key: `${activity}.${emotion}` (例: "idle.joy", "working.neutral")

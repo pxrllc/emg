@@ -79,6 +79,13 @@ export class Viewer {
         // Ensure visible if valid path found
         this.imgElement.style.display = 'block';
 
+        // Anchor Logic (Default 0.5)
+        const def = this.adapter.getModelDefinition(); // Access directly or via stored prop
+        const ax = def?.anchorX ?? 0.5;
+        const ay = def?.anchorY ?? 0.5;
+        this.imgElement.style.objectPosition = `${ax * 100}% ${ay * 100}%`;
+
+
         // Only update if changed to avoid flickering if caching isn't perfect
         try {
             const url = new URL(imagePath, window.location.origin).href;

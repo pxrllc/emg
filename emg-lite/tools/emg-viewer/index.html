@@ -36,6 +36,12 @@
           <span class="status-indicator"></span>
         </div>
 
+        <div class="control-group checkbox-group">
+          <label for="sleep">Sleep Mode</label>
+          <input type="checkbox" id="sleep" />
+          <span class="status-indicator"></span>
+        </div>
+
         <div class="control-group">
           <label for="intensity">Intensity</label>
           <input type="range" id="intensity" min="0" max="1" step="0.1" value="0" />
@@ -97,6 +103,30 @@
         <label for="assets-root">Assets Root Path</label>
         <input type="text" id="assets-root" placeholder="./ (Relative to JSON) or /assets/..."
           style="width: 100%; padding: 4px; background: rgba(0,0,0,0.3); border: 1px solid #555; color: white; border-radius: 4px;" />
+      </div>
+
+      <div class="control-group"
+        style="margin-top: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <label>Model Metadata</label>
+        <div style="display: flex; gap: 8px;">
+          <div style="flex: 1;">
+            <label style="font-size: 0.75em; color: #aaa;">License</label>
+            <input type="text" id="meta-license" placeholder="CC0, MIT, etc." style="width: 100%; font-size: 0.8em;" />
+          </div>
+          <div style="width: 80px;">
+            <label style="font-size: 0.75em; color: #aaa;">W x H</label>
+            <input type="text" id="meta-dims" placeholder="Auto" readonly
+              style="width: 100%; font-size: 0.8em; background: rgba(0,0,0,0.5); color: #888;"
+              title="Base Image Dimensions" />
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 4px; align-items: center;">
+          <label style="font-size: 0.75em; color: #aaa; width: 50px;">Anchor</label>
+          <input type="number" id="meta-anchor-x" step="0.1" min="0" max="1" value="0.5"
+            style="flex: 1; font-size: 0.8em;" title="Anchor X" />
+          <input type="number" id="meta-anchor-y" step="0.1" min="0" max="1" value="0.5"
+            style="flex: 1; font-size: 0.8em;" title="Anchor Y" />
+        </div>
       </div>
 
       <div class="control-group" style="flex: 1; display: flex; flex-direction: column;">

@@ -22,6 +22,10 @@ my_model.emgl
 │   └── mouth_open.png
 └── license.txt           // [Optional] Metadata
 ```
+> **Note**: The `base` image (defined in `model.json`) is used as the **thumbnail** for the model.
+
+### License
+While a `license.txt` file is optional, it is recommended to also specify the license in the `model.json` `license` field for better visibility in tools.
 
 ### Path Resolution
 -   **Assets Root**: The viewer overrides `assetsRoot` to `./` internally when loading from an `.emgl` file.
