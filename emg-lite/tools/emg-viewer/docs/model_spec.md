@@ -12,7 +12,8 @@ The model is defined by a single JSON object with the following top-level proper
   "width": 1000,                // [Optional] Base Width (Canvas Size)
   "height": 1000,               // [Optional] Base Height (Canvas Size)
   "license": "CC0",             // [Optional] License Information
-  "anchorX": 0.5,               // [Optional] Pivot X (0.0 - 1.0) Default: 0.5
+  "defaultStatus": "idle.neutral", // [Optional] Fallback status ID
+  "anchorX": 0.5,               // [Optional] 0.0 - 1.0 (Default: 0.5)
   "anchorY": 0.5,               // [Optional] Pivot Y (0.0 - 1.0) Default: 0.5
   "assetsRoot": "./",           // Path to assets directory (relative to JSON or absolute)
   "mapping": { ... }           // Dictionary of State-to-Assets mappings
@@ -25,6 +26,9 @@ The model is defined by a single JSON object with the following top-level proper
     -   The `base` image size usually defines these values automatically if not set.
 -   **license** (`string`):
     -   Optional. Text summarizing the license (e.g. "CC0", "MIT", "URL...").
+-   **defaultStatus** (`string`):
+    -   Optional. Defaults to `idle.neutral`.
+    -   The status ID (e.g., `idle.neutral`) to fall back to if a requested status is not found in `mapping`.
 -   **anchorX / anchorY** (`number`):
     -   Optional. Defaults to `0.5` (Center).
     -   Determines the pivot point for rendering and scaling. `(0,0)` is top-left, `(1,1)` is bottom-right.
@@ -43,16 +47,11 @@ The model is defined by a single JSON object with the following top-level proper
     -   **Activity**: Top-level state (e.g., `idle`, `pointing`).
     -   **Emotion**: Facial expression (e.g., `neutral`, `happy`, `sad`).
     -   Implementations MAY ignore unknown activities/emotions; prefer a fallback entry like `idle.neutral`.
+-   **tags** (`string[]`): [Optional] Used for grouping or filtering statuses in the UI.
 
 #### AssetGroup Structure (5-Slot System)
 Each mapping key points to an object defining up to 5 image slots for granular control:
 
-```json
-{
-  "base": "base.png",                   // [Required] Fallback / Default Body
-  "mouthOpen": "mouth_open.png",        // [Optional] Used when speaking=true
-  "mouthClosed": "mouth_closed.png",    // [Optional] Used when speaking=false (Explicit override)
-  "eyesOpen": "eyes_open.png",          // [Optional] Used when blinking=false (Explicit override)
 ```json
 {
   "base": "base.png",                   // [Required] Fallback / Default Body
@@ -71,6 +70,15 @@ Each mapping key points to an object defining up to 5 image slots for granular c
     3.  **Speaking**: If `speaking` AND `mouthOpen` defined -> Use `mouthOpen`.
     4.  **Defined Idle**: If `!speaking` AND `mouthClosed` defined -> Use `mouthClosed`.
     5.  **Fallback**: Use `base`.
+
+#### Standard Rendering Order (Z-Order)
+Players SHOULD stack images in the following order (bottom to top):
+1.  **base**
+2.  **Extended Slots** (e.g., `background`, `body_alt`)
+3.  **mouthOpen / mouthClosed / mouthShape_***
+4.  **eyesOpen / eyesClosed**
+5.  **Extended Slots** (e.g., `accessory`, `foreground`)
+6.  **overlays** (In defined order)
 
 #### Extended Slots (Optional, Backward-Compatible)
 -   AssetGroup MAY contain additional slots beyond the 5 standard ones (e.g., `handPose`, `accessory`, `background`).
@@ -108,6 +116,7 @@ Allows disabling specific automatic behaviors for certain slots.
 ```json
 {
   "schemaVersion": 1,          // [任意] 互換性判定のためのスキーマバージョン
+  "defaultStatus": "idle.neutral", // [任意] 未定義ステート要求時のフォールバック先
   "assetsRoot": "./",           // アセットディレクトリのパス (JSONからの相対パス、または絶対パス)
   "mapping": { ... }           // 状態(State)とアセット(Assets)のマッピング辞書
 }
@@ -122,6 +131,9 @@ Allows disabling specific automatic behaviors for certain slots.
     -   未設定の場合、通常は `base` 画像のサイズから自動的に決定されます。
 -   **license** (`string`):
     -   任意。ライセンス情報のテキスト (例: "CC0", "MIT", "URL...")。
+-   **defaultStatus** (`string`):
+    -   任意。デフォルトは `idle.neutral` です。
+    -   要求されたステータスが `mapping` に見つからない場合にフォールバックするステータスID (例: `idle.neutral`)。
 -   **anchorX / anchorY** (`number`):
     -   任意。デフォルトは `0.5` (中心) です。
     -   描画やスケーリングの基準点（ピボット）を決定します。`(0,0)` は左上、`(1,1)` は右下です。
@@ -140,6 +152,7 @@ Allows disabling specific automatic behaviors for certain slots.
     -   **Activity**: 行動・動作 (例: `idle`=待機, `pointing`=指差し)。
     -   **Emotion**: 表情・感情 (例: `neutral`=通常, `happy`=笑顔, `sad`=悲しみ)。
     -   未知の activity/emotion は無視される可能性があるため、`idle.neutral` などのフォールバックを推奨。
+-   **tags** (`string[]`): [任意] UI上でステートを分類するためのタグ。
 
 #### アセットグループ構造 (5スロットシステム)
 各マッピングキーは、きめ細かな制御のために最大5つの画像スロットを定義するオブジェクトを指します。
@@ -168,6 +181,15 @@ Allows disabling specific automatic behaviors for certain slots.
     3.  **発話 (Speaking)**: `speaking` で、`mouthOpen` が定義されている場合 -> これを使用。
     4.  **待機指定 (Defined Idle)**: `!speaking` で、`mouthClosed` が定義されている場合 -> これを使用。
     5.  **基本 (Fallback)**: 上記以外は `base` を使用。
+
+#### 標準的な重なり順序 (Z-Order)
+プレイヤーは以下の順序で画像を重ねて描画することを推奨します（下から上の順）:
+1.  **base**
+2.  **拡張スロット** (背景、体パーツなど)
+3.  **mouthOpen / mouthClosed / mouthShape_***
+4.  **eyesOpen / eyesClosed**
+5.  **拡張スロット** (アクセサリ、手パーツなど)
+6.  **overlays** (定義順にスタック)
 
 #### 拡張スロット（後方互換のオプション）
 -   5スロット以外の任意キー（例: `handPose`, `accessory`, `background`）を追加可能。未対応プレイヤーは無視する。

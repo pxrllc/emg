@@ -15,12 +15,14 @@ interface EMGLiteState {
     blinking?: boolean;    // prefer eyesClosed when true
     mouthShape?: string;   // e.g., 'a' | 'i' | 'u' | 'e' | 'o' | 'rest'
     overlays?: string[];   // overlay IDs in draw order (later = top)
+    tags?: string[];       // classification tags
     context?: Record<string, unknown>; // optional metadata for adapters
 }
 ```
 
 > Fallback rule: if `mouthShape` is undefined, lip sync uses `speaking` boolean;
-> if `sleep` or `blinking` are undefined, they are treated as `false`.
+> if `sleep` or `blinking` are undefined, they are treated as `false`;
+> if the requested `activity.emotion` is not found, the player MUST use `defaultStatus` from the model definition.
 
 ## Features
 
@@ -46,8 +48,9 @@ interface EMGLiteState {
 ### 3. Asset Resolution
 The player resolves the final image path by combining:
 1.  **Assets Root**: Defined in the loaded JSON Model.
-2.  **Resolved Slot**: The filename chosen by the 5-Slot Priority Logic (see [Model Spec](./model_spec.md)).
-3.  **Optional Overlays**: Additional overlay filenames resolved after base slots.
+2.  **Resolved Slots**: Multiple filenames chosen by the Z-Order Priority Logic.
+    - Base slot -> Face parts -> Overlays.
+3.  **Rendering**: Layers are drawn on top of each other according to the Z-Order.
 
 Example: `assetsRoot: "/assets/char/"` + `mouthOpen: "talk.png"` -> Result: `/assets/char/talk.png`.
 
@@ -81,11 +84,13 @@ interface EMGLiteState {
     blinking?: boolean; // 瞬き状態 (true = 閉眼)
     mouthShape?: string;// 口形状/音素（例: 'a' | 'i' | 'u' | 'e' | 'o' | 'rest'）
     overlays?: string[];// オーバーレイID（後方ほど手前に重ねる）
+    tags?: string[];    // 分類タグ
     context?: Record<string, unknown>; // 任意メタデータ（アダプタで解決）
 }
 ```
 
 > フォールバック: `mouthShape` 未指定時は `speaking` 真偽で口差分を決める。`sleep` / `blinking` 未指定時は `false` とみなす。
+> 指定された `activity.emotion` が見つからない場合、モデル定義の `defaultStatus` を使用する。
 
 ## 機能
 
