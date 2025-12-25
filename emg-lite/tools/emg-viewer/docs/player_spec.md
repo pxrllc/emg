@@ -7,12 +7,20 @@ The viewer is driven by the `EMGLiteState` object:
 
 ```typescript
 interface EMGLiteState {
-    emotion: string;    // e.g., 'neutral', 'joy'
-    activity: string;   // e.g., 'idle', 'wave'
-    speaking: boolean;  // true = mouth open, false = mouth closed
-    intensity: number;  // 0.0 to 1.0 (Reserved for future interpolation)
+    emotion: string;       // e.g., 'neutral', 'joy'
+    activity: string;      // e.g., 'idle', 'wave'
+    speaking: boolean;     // true = mouth open, false = mouth closed
+    intensity: number;     // 0.0 to 1.0 (strength hint)
+    sleep?: boolean;       // prefer sleep mapping when true
+    blinking?: boolean;    // prefer eyesClosed when true
+    mouthShape?: string;   // e.g., 'a' | 'i' | 'u' | 'e' | 'o' | 'rest'
+    overlays?: string[];   // overlay IDs in draw order (later = top)
+    context?: Record<string, unknown>; // optional metadata for adapters
 }
 ```
+
+> Fallback rule: if `mouthShape` is undefined, lip sync uses `speaking` boolean;
+> if `sleep` or `blinking` are undefined, they are treated as `false`.
 
 ## Features
 
@@ -39,6 +47,7 @@ interface EMGLiteState {
 The player resolves the final image path by combining:
 1.  **Assets Root**: Defined in the loaded JSON Model.
 2.  **Resolved Slot**: The filename chosen by the 5-Slot Priority Logic (see [Model Spec](./model_spec.md)).
+3.  **Optional Overlays**: Additional overlay filenames resolved after base slots.
 
 Example: `assetsRoot: "/assets/char/"` + `mouthOpen: "talk.png"` -> Result: `/assets/char/talk.png`.
 
@@ -67,10 +76,16 @@ interface EMGLiteState {
     emotion: string;    // 感情 (例: 'neutral', 'joy')
     activity: string;   // 行動 (例: 'idle', 'wave')
     speaking: boolean;  // 発話状態 (true = 開口, false = 閉口)
-    sleep: boolean;     // 睡眠状態 (true = 睡眠中)
-    intensity: number;  // 強度 0.0 ～ 1.0 (将来的な補間用に予約)
+    intensity: number;  // 強度 0.0 ～ 1.0 (表現の強さヒント)
+    sleep?: boolean;    // 睡眠状態 (true = 睡眠中)
+    blinking?: boolean; // 瞬き状態 (true = 閉眼)
+    mouthShape?: string;// 口形状/音素（例: 'a' | 'i' | 'u' | 'e' | 'o' | 'rest'）
+    overlays?: string[];// オーバーレイID（後方ほど手前に重ねる）
+    context?: Record<string, unknown>; // 任意メタデータ（アダプタで解決）
 }
 ```
+
+> フォールバック: `mouthShape` 未指定時は `speaking` 真偽で口差分を決める。`sleep` / `blinking` 未指定時は `false` とみなす。
 
 ## 機能
 

@@ -14,7 +14,18 @@ EMG-lite (Expression / Motion / Gesture - lite) は、アバターの状態を�
 詳細は `types.ts` を参照してください。
 
 ## 拡張
-将来的にユーザー定義のステートや、より詳細な強度パラメータを追加可能です。
+将来的にユーザー定義のステートや、より詳細な強度パラメータを追加可能です。  
+コアステートとして以下を定義します（必須以外はオプショナル扱い）。
+
+- `emotion` (必須): 表情
+- `activity` (必須): 行動・ポーズ
+- `speaking` (必須): 発話真偽
+- `intensity` (必須): 表現の強度ヒント
+- `sleep` (任意): 睡眠/休止状態。`isSleep` スロットを優先利用
+- `blinking` (任意): 瞬き状態。`eyesClosed` スロットを優先利用
+- `mouthShape` (任意): 口形状/音素（`a/i/u/e/o/rest` など）。未指定時は `speaking` にフォールバック
+- `overlays` (任意): 汗・傷・エフェクト等の一時オーバーレイ ID 配列（後方ほど手前に重ねる）
+- `context` (任意): 実装依存メタデータ（例: 伺かサーフィス番号）を格納し、アダプタ層で解決
 
 ## スコープと推奨される使用法
 EMG-Liteにおける「Status（ステート）」は、主に**表情差分や軽微なジェスチャーの変化**を表現することを想定しています。
@@ -46,10 +57,9 @@ filename.emgl (ZIP)
 ## 詳細ドキュメント (Specifications)
 より詳細な仕様については、以下のドキュメントを参照してください。
 
--   **[.emgl ファイル仕様 / .emgl Specification](./tools/emg-viewer/docs/emgl_spec.md)**
+-   **[.emgl ファイル仕様 / .emgl Specification](./tools/emg-viewer/docs/emgl_spec.md)**（`schemaVersion` による互換方針を含む）
     -   コンテナフォーマットの詳細仕様、ファイル構成、パス解決ルールなど。
 -   **[モデル仕様 / Model Specification](./tools/emg-viewer/docs/model_spec.md)**
-    -   `model.json` の構造、マッピングロジック（5スロットシステム）、画像設定など。
+    -   `model.json` の構造、マッピングロジック（5スロットシステム）、可変スロット/オーバーレイ拡張など。
 -   **[プレイヤー仕様 / Player Specification](./tools/emg-viewer/docs/player_spec.md)**
-    -   EMGステート定義、デモモード、リップシンク挙動などのViewer仕様。
-
+    -   EMGステート定義、デモモード、リップシンク挙動、拡張ステートのフォールバックルールなど。
