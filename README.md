@@ -1,60 +1,54 @@
 # EMG Player JavaScript ドキュメント
 
 ## 概要
-`emg-player.0.1.0.js` は、ZIP形式のアセットをロードし、JSONデータと画像を解析してレイヤーを描画し、スプライトアニメーションを制御する JavaScript モジュールです。本スクリプトは、CDN経由での動的ロードを前提としています。
+`emg-player.0.2.2.js` は、EMG (easy Movable Graphic) フォーマットのアセットをロードし、Webブラウザ上で再生するためのライブラリです。
+最新の **EMG v0.2.2** 仕様（Parts構造、Textureメタデータ、Sprite Trigger等）に対応しています。
 
 ## 主要機能
-- ZIPファイルのダウンロード・展開
-- JSON設定ファイルの解析
-- スプライトレイヤーのレンダリング
-- スプライトアニメーションの制御
-- テクスチャの適用
+- ZIP形式（.emg）の展開とパース
+- JSON定義（v0.2.2）に基づくレイヤー構築
+- `static` / `switch` パーツ種別の制御
+- `sequence` および `trigger` による自律アニメーション再生
 
 ## 使用方法
+
 ### 1. スクリプトのロード
 ```html
-<script src="https://cdn.example.com/emg-player.0.1.0.js"></script>
+<!-- JSZip (必須依存) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+<!-- EMG Player -->
+<script src="https://cdn.example.com/emg-player.0.2.2.js"></script>
 ```
 
 ### 2. EMGデータの読み込み
 ```javascript
-window.EMGPlayer.loadEmgFromCDN('https://example.com/animation_data.zip', 'layerContainer');
+// URLからロードして指定のコンテナに展開
+window.EMGPlayer.loadEmgFromCDN('https://example.com/character.emg', 'layerContainer');
 ```
 
-`loadEmgFromCDN` 関数の引数:
-- `url` (必須): ZIPファイルのURL
-- `containerId` (オプション): アニメーションを描画するHTML要素のID (デフォルト: `layerContainer`)
+## JSON 仕様 (v0.2.2)
 
-## 内部処理
-1. `loadEmgFromCDN(url, containerId)` を使用してZIPファイルをダウンロード
-2. `JSZip` を利用してZIPを展開
-3. JSONファイルを解析し、スプライトデータを取得
-4. テクスチャ画像を適用し、レイヤーをHTML要素として配置
-5. スプライトの `animID` に基づきアニメーションを実行
+詳細は `emg-json-spec.md` を参照してください。
 
-## JSON 仕様
-- `baseCanvasWidth` / `baseCanvasHeight`: キャンバスのサイズ
-- `layers`: レイヤー情報のリスト
-  - `textureID`: レイヤーの一意なID
-  - `imgType`: "Texture" または "Sprite"
-  - `assignID`: スプライトの識別ID
-  - `animID`: アニメーションID
-  - `x`, `y`, `width`, `height`: テクスチャ内の座標
-  - `basePosition_x`, `basePosition_y`: 描画位置
-  - `textureZIndex`: レイヤーのZ-index
-- `sprites`: スプライトアニメーション情報
-  - `fps`: フレームレート
-  - `loop`: ループタイプ (0:なし, 1:ループ, 2:ランダム, 3:タイムライン)
-  - `useTex`: 使用するスプライトのリスト
+### ルートオブジェクト
+- `version`: "0.2.2"
+- `baseCanvasWidth`, `baseCanvasHeight`: キャンバスサイズ
+- `textures`: テクスチャアトラスの定義リスト `{ textureFile, width, height }`
+- `parts`: パーツ定義リスト `{ partID, type, layers, default? }`
+- `sprites`: アニメーション定義リスト `{ spriteID, targetPartID, sequence, trigger? }`
+
+### Parts
+パーツは `type` により挙動が異なります。
+- `static`: 常時表示（体、背景など）
+- `switch`: レイヤーのうち1つだけを表示（目、口など）。`default` で初期表示を指定。
+
+### Sprites & Triggers
+アニメーションは `sequence` でフレーム順序を定義し、`trigger` で再生タイミングを制御します。
+- `sequence.type`: `"ordered"` (順次再生), `"random_hold"` (ランダム選択)
+- `trigger.type`: `"auto_loop"` (ループ), `"random_interval"` (ランダム間隔で発火), `"external"` (外部制御)
 
 ## 依存ライブラリ
-- `JSZip`: ZIPデータの展開用 (CDN経由で自動ロード)
-
-## 今後の拡張
-- 追加アニメーション制御の導入
-- JSONのカスタマイズオプション追加
-- ユーザーインターフェースの拡張
-
+- `JSZip`: .emg (ZIP) ファイルの解凍に使用
 
 ## ライセンス
 このスクリプトはオープンソースとして提供されています。
@@ -68,4 +62,3 @@ EMG Lite は、よりモダンな設計に基づいた新しいアバター表�
 
 -   **[EMG Lite ドキュメント (README)](./emg-lite/README.md)**
 -   **[EMG Viewer ツール](./emg-lite/tools/emg-viewer/)**
-

@@ -22,16 +22,16 @@ The model is defined by a single JSON object with the following top-level proper
 
 ### 1. Global Properties
 -   **width / height** (`number`):
-    -   Optional. Represents the dimensions of the base image or intended canvas size.
-    -   The `base` image size usually defines these values automatically if not set.
+    -   **推奨 (Recommended)**. ベース画像の寸法を記録します。
+    -   ツール（作成ツール等）は、`base` 画像を読み込んだ際のサイズをデフォルトの `width` および `height` として記録することが推奨されます。
 -   **license** (`string`):
-    -   Optional. Text summarizing the license (e.g. "CC0", "MIT", "URL...").
+    -   任意。作者によるライセンス情報（例: "CC0", "MIT", "再配布禁止" 等）。
 -   **defaultStatus** (`string`):
-    -   Optional. Defaults to `idle.neutral`.
-    -   The status ID (e.g., `idle.neutral`) to fall back to if a requested status is not found in `mapping`.
+    -   任意。デフォルトは `idle.neutral` です。
+    -   要求されたステータスが `mapping` に見つからない場合にフォールバックするステータスID。
 -   **anchorX / anchorY** (`number`):
-    -   Optional. Defaults to `0.5` (Center).
-    -   Determines the pivot point for rendering and scaling. `(0,0)` is top-left, `(1,1)` is bottom-right.
+    -   任意。**デフォルトは `0.5` (中心) です**。
+    -   中心を `0.5` とし、描画やスケーリングの基準点（ピボット）を決定します。`(0,0)` は左上、`(1,1)` は右下です。
 
 ### 2. Assets Root (`assetsRoot`)
 -   **Type**: `string`
@@ -127,16 +127,16 @@ Allows disabling specific automatic behaviors for certain slots.
 
 ### 1. グローバルプロパティ (Global Properties)
 -   **width / height** (`number`):
-    -   任意。ベース画像の寸法、または意図するキャンバスサイズを表します。
-    -   未設定の場合、通常は `base` 画像のサイズから自動的に決定されます。
+    -   推奨。ベース画像の寸法を記録します。
+    -   `base` 画像を読み込んだ際のサイズをデフォルトの `width` および `height` として記録することが推奨されます。
 -   **license** (`string`):
-    -   任意。ライセンス情報のテキスト (例: "CC0", "MIT", "URL...")。
+    -   任意。作者によるライセンス情報のテキスト (例: "CC0", "MIT", "再配布禁止" 等)。
 -   **defaultStatus** (`string`):
     -   任意。デフォルトは `idle.neutral` です。
     -   要求されたステータスが `mapping` に見つからない場合にフォールバックするステータスID (例: `idle.neutral`)。
 -   **anchorX / anchorY** (`number`):
-    -   任意。デフォルトは `0.5` (中心) です。
-    -   描画やスケーリングの基準点（ピボット）を決定します。`(0,0)` は左上、`(1,1)` は右下です。
+    -   任意。**デフォルトは `0.5` (中心) です**。
+    -   中心を `0.5` とし、描画やスケーリングの基準点（ピボット）を決定します。`(0,0)` は左上、`(1,1)` は右下です。
 
 ### 2. アセットルート (`assetsRoot`)
 -   **型**: `string`
