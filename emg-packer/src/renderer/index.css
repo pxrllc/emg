@@ -1,0 +1,124 @@
+:root {
+  --bg-color: #1e1e1e;
+  --panel-bg: #252526;
+  --header-bg: #333333;
+  --border-color: #3e3e42;
+  --accent-color: #007acc;
+  --text-color: #cccccc;
+  --text-disabled: #6e6e6e;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+.layout-container {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--panel-bg);
+}
+
+.panel-header {
+  height: 30px;
+  background-color: var(--header-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+}
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+}
+
+.resize-handle {
+  width: 4px;
+  background-color: var(--bg-color);
+  transition: background-color 0.2s;
+  cursor: col-resize;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background-color: var(--accent-color);
+}
+
+.preview-area {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-image:
+    linear-gradient(45deg, #2d2d2d 25%, transparent 25%),
+    linear-gradient(-45deg, #2d2d2d 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2d2d2d 75%),
+    linear-gradient(-45deg, transparent 75%, #2d2d2d 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+/* Layer Tree Styles */
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tree-item:hover {
+  background-color: #3e3e42;
+}
+
+.tree-item.selected {
+  background-color: #094771;
+  color: white;
+}
+
+.tree-item-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.icon-btn:hover {
+  color: white;
+}
+
+.indent {
+  width: 16px;
+  display: inline-block;
+}

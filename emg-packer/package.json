@@ -1,0 +1,52 @@
+{
+  "name": "emg-packer",
+  "private": true,
+  "version": "0.0.0",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "electron:dev": "electron-vite dev",
+    "electron:build": "electron-vite build && electron-builder"
+  },
+  "dependencies": {
+    "ag-psd": "^30.1.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.569.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-resizable-panels": "^4.6.4"
+  },
+  "build": {
+    "appId": "com.emg.packer",
+    "productName": "EMG Packer",
+    "directories": {
+      "output": "dist-build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "main": "out/main/index.js",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "concurrently": "^9.2.1",
+    "electron": "^33.2.1",
+    "electron-builder": "^26.7.0",
+    "electron-vite": "^2.3.0",
+    "typescript": "~5.9.3",
+    "vite": "^5.0.0",
+    "wait-on": "^9.0.4"
+  }
+}

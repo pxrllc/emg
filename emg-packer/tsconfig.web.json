@@ -1,0 +1,20 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "lib": [
+            "DOM",
+            "DOM.Iterable",
+            "ESNext"
+        ],
+        "jsx": "react-jsx",
+        "types": [
+            "vite/client"
+        ]
+    },
+    "include": [
+        "src/renderer/**/*",
+        "src/preload/**/*"
+    ]
+}

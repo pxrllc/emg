@@ -55,7 +55,7 @@ window.EMGPlayer.loadEmgFromCDN('https://example.com/character.emg', 'layerConta
 
 ---
 
-# EMG Lite (次世代版)
+# EMG Lite (軽量版)
 
 EMG Lite は、よりモダンな設計に基づいた新しいアバター表現システムです。
 詳細な仕様やドキュメントについては、以下のリンクを参照してください。
