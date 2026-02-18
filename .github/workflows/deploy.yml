@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'emg-web-runtime/**'
+  workflow_dispatch:
 
 permissions:
   contents: write
