@@ -76,8 +76,8 @@ export class EmgGenerator {
 
         for (const { packed, meta, originalLayer } of items) {
             // Ensure part exists
-            // Use meta.partId if available, fallback to layer name?
-            const partId = meta?.partId || originalLayer.name || '';
+            // Use meta.partId if available, fallback to _partName (injected by PsdLoader), fallback to layer name
+            const partId = meta?.partId || (originalLayer as any)._partName || originalLayer.name || '';
             const type = meta?.type || 'static'; // Default type
 
             if (!partsMap.has(partId)) {
@@ -102,7 +102,10 @@ export class EmgGenerator {
                 width: packed.width,
                 height: packed.height,
                 uv: { u, v, w, h },
-                opacity: originalLayer.opacity != null ? originalLayer.opacity / 255 : 1.0, // ag-psd opacity is 0-255
+                // ag-psd opacity is 0-1 (float), NO division by 255 needed if it's already normalized.
+                // If it were 0-255, we would divide. But user reported 0.0039 which is 1/255.
+                // So input must be 1.0 (for 100%).
+                opacity: originalLayer.opacity != null ? originalLayer.opacity : 1.0,
                 blendMode: originalLayer.blendMode || 'normal',
                 visible: !originalLayer.hidden,
                 zIndex: zIndexCounter++

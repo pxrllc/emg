@@ -1,0 +1,22 @@
+{
+    "name": "com.emg.importer",
+    "version": "0.1.0",
+    "displayName": "EMG Importer",
+    "description": "Imports .emg files (EMG Packer format) as GameObjects with Sprites.",
+    "unity": "2021.3",
+    "documentationUrl": "",
+    "changelogUrl": "",
+    "licensesUrl": "",
+    "dependencies": {},
+    "keywords": [
+        "emg",
+        "importer",
+        "2d",
+        "sprite"
+    ],
+    "author": {
+        "name": "PXR",
+        "email": "",
+        "url": ""
+    }
+}

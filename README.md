@@ -12,6 +12,30 @@
 
 ## 使用方法
 
+## Key Assignments
+
+By default, EMG Web Runtime assigns states to number keys (1–4) for maximum compatibility with browsers and OBS.
+
+- **1**: neutral (default)
+- **2**: joy
+- **3**: angry
+- **4**: sorrow
+
+Key assignments can be customized by editing the EMG configuration (`trigger` property in `states.json`). Function keys and special keys are supported but not recommended in browser-based environments.
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Run dev server
+npm run dev
+
+# Build for production
+npm run build
+```
+
 ### 1. スクリプトのロード
 ```html
 <!-- JSZip (必須依存) -->
@@ -55,10 +79,17 @@ window.EMGPlayer.loadEmgFromCDN('https://example.com/character.emg', 'layerConta
 
 ---
 
-# EMG Lite (軽量版)
+# EMG Web Runtime (v0.1)
 
-EMG Lite は、よりモダンな設計に基づいた新しいアバター表現システムです。
-詳細な仕様やドキュメントについては、以下のリンクを参照してください。
+⚠️ **Work In Progress (WIP)** ⚠️
+Some features are currently under development.
+- Performance Tuning (WIP)
+- Error Handling (WIP)
+- Unity Importer (WIP)
+
+## 概要
+EMG (Extended Model Graph) アバターをブラウザ上で再生・確認・簡易編集するためのランタイム環境。
+OBS などのブラウザソースとして利用することを想定。仕様やドキュメントについては、以下のリンクを参照してください。
 
 -   **[EMG Lite ドキュメント (README)](./emg-lite/README.md)**
 -   **[EMG Viewer ツール](./emg-lite/tools/emg-viewer/)**
