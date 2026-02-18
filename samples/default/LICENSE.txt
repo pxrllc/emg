@@ -1,0 +1,4 @@
+Sample Model License
+
+This sample model is provided under CC0 1.0 Universal (Public Domain Dedication).
+You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission.

@@ -86,6 +86,66 @@ const StatePill = styled.div<{ $active: boolean }>`
 
 // --- Main App Component ---
 
+// --- Localization ---
+const T = {
+    en: {
+        runtimeTitle: "EMG Runtime",
+        newProject: "New Project",
+        projectName: "Project Name",
+        undo: "Undo",
+        redo: "Redo",
+        enableMic: "Enable Mic",
+        disableMic: "Disable Mic",
+        onSound: "On Sound:",
+        enterEdit: "Enter Edit Mode",
+        exitEdit: "Exit Edit Mode",
+        snapOn: "Snap: ON",
+        snapOff: "Snap: OFF",
+        export: "Export .zip",
+        hideUI: "Hide UI (H)",
+        showUI: "Show UI (H)",
+        states: "States",
+        inspector: "Inspector",
+        runtimeTags: "Runtime Tags:",
+        loadProject: "Load a project to start",
+        noProject: "No project loaded",
+        usage: {
+            zoom: "Zoom: Mouse Wheel",
+            pan: "Pan: Middle Click / Space+Drag",
+            ui: "Toggle UI: 'H' Key"
+        },
+        license: "License"
+    },
+    ja: {
+        runtimeTitle: "EMG ランタイム",
+        newProject: "新規プロジェクト",
+        projectName: "プロジェクト名",
+        undo: "元に戻す",
+        redo: "やり直す",
+        enableMic: "マイク有効化",
+        disableMic: "マイク無効化",
+        onSound: "音声反応:",
+        enterEdit: "編集モード開始",
+        exitEdit: "編集モード終了",
+        snapOn: "スナップ: ON",
+        snapOff: "スナップ: OFF",
+        export: ".zip エクスポート",
+        hideUI: "UIを隠す (H)",
+        showUI: "UIを表示 (H)",
+        states: "ステート",
+        inspector: "インスペクタ",
+        runtimeTags: "ランタイムタグ:",
+        loadProject: "プロジェクトをロードして開始",
+        noProject: "プロジェクト未ロード",
+        usage: {
+            zoom: "ズーム: ホイール",
+            pan: "移動: 中クリック / Space+ドラッグ",
+            ui: "UI切替: 'H'キー"
+        },
+        license: "ライセンス"
+    }
+};
+
 function App() {
     const [project, setProject, undo, redo, canUndo, canRedo] = useUndo<LoadedProject | null>(null);
     const [stateMachine, setStateMachine] = useState<EmgStateMachine | null>(null);
@@ -103,14 +163,20 @@ function App() {
     // Phase 3.12 (Fix Name Edit)
     const [projectNameInput, setProjectNameInput] = useState("");
 
+    // Phase 3.15 (Localization)
+    const [lang, setLang] = useState<'en' | 'ja'>('ja'); // Default to JA
+    const t = T[lang];
+
     // Make sure local input stays in sync with external project changes (Undo/Redo/Load)
     useEffect(() => {
         if (project?.avatar.name) {
             setProjectNameInput(project.avatar.name);
         } else {
-            setProjectNameInput("New Project");
+            setProjectNameInput(t.newProject); // Use localized default? Or keep "New Project" as data? Keeping data clean.
+            // Actually, keep data as "New Project" for consistency, only localize UI labels.
+            if (!project) setProjectNameInput("New Project");
         }
-    }, [project]);
+    }, [project, t]);
 
     const audioMonitorRef = useRef<AudioMonitor>(new AudioMonitor());
     const requestRef = useRef<number | null>(null);
@@ -345,14 +411,23 @@ function App() {
         <Container>
             {/* Toggle UI Button (Floating) */}
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 1000, opacity: showUI ? 0 : 0.5, transition: 'opacity 0.2s' }}>
-                {!showUI && <Button onClick={() => setShowUI(true)}>Show UI (H)</Button>}
+                {!showUI && <Button onClick={() => setShowUI(true)}>{t.showUI}</Button>}
             </div>
 
             {showUI && (
                 <Sidebar>
-                    <h3>EMG Runtime</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ margin: 0 }}>{t.runtimeTitle}</h3>
+                        <Button
+                            style={{ padding: '2px 5px', fontSize: '0.7rem', background: 'transparent', border: '1px solid #555' }}
+                            onClick={() => setLang(l => l === 'en' ? 'ja' : 'en')}
+                        >
+                            {lang === 'en' ? 'JP' : 'EN'}
+                        </Button>
+                    </div>
+
                     <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                        <Button onClick={handleNewProject}>New Project</Button>
+                        <Button onClick={handleNewProject}>{t.newProject}</Button>
                         <input
                             type="file"
                             accept=".zip,.emg"
@@ -362,7 +437,7 @@ function App() {
 
                         {/* Project Name Input (Phase 3.12 Fix) */}
                         <div style={{ marginTop: '0.5rem' }}>
-                            <label style={{ fontSize: '0.7rem', color: '#888' }}>Project Name</label>
+                            <label style={{ fontSize: '0.7rem', color: '#888' }}>{t.projectName}</label>
                             <input
                                 value={projectNameInput}
                                 onChange={(e) => setProjectNameInput(e.target.value)}
@@ -395,17 +470,17 @@ function App() {
                     <hr style={{ width: '100%', borderColor: '#333' }} />
 
                     <div style={{ display: 'flex', gap: '5px' }}>
-                        <Button onClick={undo} disabled={!canUndo} style={{ flex: 1 }}>Undo</Button>
-                        <Button onClick={redo} disabled={!canRedo} style={{ flex: 1 }}>Redo</Button>
+                        <Button onClick={undo} disabled={!canUndo} style={{ flex: 1 }}>{t.undo}</Button>
+                        <Button onClick={redo} disabled={!canRedo} style={{ flex: 1 }}>{t.redo}</Button>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', background: '#333', padding: '5px', borderRadius: '4px' }}>
                         <Button onClick={toggleMic} style={{ width: '100%' }}>
-                            {isMicActive ? 'Disable Mic' : 'Enable Mic'}
+                            {isMicActive ? t.disableMic : t.enableMic}
                         </Button>
                         {/* Sound State Selector */}
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                            <span style={{ color: '#aaa' }}>On Sound:</span>
+                            <span style={{ color: '#aaa' }}>{t.onSound}</span>
                             <select
                                 value={talkingState || ""}
                                 onChange={(e) => setTalkingState(e.target.value || null)}
@@ -420,24 +495,24 @@ function App() {
                     </div>
 
                     <Button onClick={() => setEditMode(!editMode)} style={{ background: editMode ? '#ff8800' : '#444' }}>
-                        {editMode ? 'Exit Edit Mode' : 'Enter Edit Mode'}
+                        {editMode ? t.exitEdit : t.enterEdit}
                     </Button>
 
                     <Button onClick={() => setSnapToOrigin(!snapToOrigin)} style={{ background: snapToOrigin ? '#007acc' : '#444' }}>
-                        {snapToOrigin ? 'Snap: ON' : 'Snap: OFF'}
+                        {snapToOrigin ? t.snapOn : t.snapOff}
                     </Button>
 
                     <Button onClick={handleExport} disabled={!project}>
-                        Export .zip
+                        {t.export}
                     </Button>
 
                     <Button onClick={() => setShowUI(false)} style={{ fontSize: '0.8rem', background: '#222' }}>
-                        Hide UI (H)
+                        {t.hideUI}
                     </Button>
 
                     <hr style={{ width: '100%', borderColor: '#333' }} />
 
-                    <h3>States</h3>
+                    <h3>{t.states}</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
                         {project?.states.states.map(s => (
                             <div key={s.name} style={{ display: 'flex', gap: '2px' }}>
@@ -470,7 +545,7 @@ function App() {
             <MainContent>
                 {project && stateMachine ? (
                     <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                        {/* Meter overlay (Hide if UI Hidden? Or keep? Request said "hide UI". Let's hide it too or keep it subtle. I'll hide it for clean view.) */}
+                        {/* Meter overlay */}
                         {showUI && (
                             <div style={{
                                 position: 'absolute',
@@ -494,6 +569,26 @@ function App() {
                             </div>
                         )}
 
+                        {/* Usage Overlay (Faint) */}
+                        {showUI && (
+                            <div style={{
+                                position: 'absolute',
+                                top: 20,
+                                left: 20,
+                                color: 'rgba(255, 255, 255, 0.3)',
+                                pointerEvents: 'none',
+                                zIndex: 50,
+                                fontSize: '0.8rem',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '2px'
+                            }}>
+                                <div>{t.usage.zoom}</div>
+                                <div>{t.usage.pan}</div>
+                                <div>{t.usage.ui}</div>
+                            </div>
+                        )}
+
                         <EmgCanvas
                             avatar={project.avatar}
                             stateMachine={stateMachine}
@@ -505,13 +600,43 @@ function App() {
                         />
                     </div>
                 ) : (
-                    <div style={{ color: '#666' }}>Load a project to start</div>
+                    <div style={{ color: '#666' }}>{t.loadProject}</div>
                 )}
+
+                {/* Copyright / License Footer */}
+                {/* Unobtrusive, bottom right */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: 5,
+                    right: 10,
+                    fontSize: '0.7rem',
+                    color: '#444',
+                    zIndex: 20,
+                    display: 'flex',
+                    gap: '10px'
+                }}>
+                    <a
+                        href="https://github.com/pxrllc/emg/blob/main/LICENSE.md"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                        {t.license}
+                    </a>
+                    <a
+                        href="https://pxr.co.jp"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                        &copy; PXR LLC
+                    </a>
+                </div>
             </MainContent>
 
             {showUI && (
                 <RightPanel>
-                    <h3>Inspector</h3>
+                    <h3>{t.inspector}</h3>
                     {project ? (
                         <VariantEditor
                             project={project}
@@ -519,12 +644,12 @@ function App() {
                             onUpdate={handleProjectUpdate}
                         />
                     ) : (
-                        <div style={{ color: '#666' }}>No project loaded</div>
+                        <div style={{ color: '#666' }}>{t.noProject}</div>
                     )}
 
                     <hr style={{ width: '100%', borderColor: '#333' }} />
 
-                    <div>Runtime Tags:</div>
+                    <div>{t.runtimeTags}</div>
                     <pre style={{ fontSize: '0.8rem', color: '#aaa' }}>
                         {JSON.stringify(currentTags, null, 2)}
                     </pre>
