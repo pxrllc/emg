@@ -8,43 +8,61 @@ namespace Emg.Runtime
     public class EmgData
     {
         public string version;
-        public int width;
-        public int height;
+        public int baseCanvasWidth;
+        public int baseCanvasHeight;
         public List<EmgTexture> textures;
-        public List<EmgLayer> layers;
+        public List<EmgPart> parts;
+        public List<EmgSprite> sprites;
     }
 
     [Serializable]
     public class EmgTexture
     {
-        public string id;
+        public string textureFile;
         public int width;
         public int height;
+    }
+
+    [Serializable]
+    public class EmgPart
+    {
+        public string partID;
+        public string type; // "static" or "switch"
+        public string @default; // default textureID (for switch)
+        public List<EmgLayer> layers;
     }
 
     [Serializable]
     public class EmgLayer
     {
-        public string layerID;
-        public string partID;
-        public string textureID;
+        // V0.2.2: Layer is now nested under Part
+        public string textureID; // Used for switching
+        public string textureFile;
+        
+        // Atlas Coordinates (Pixel)
         public int x;
         public int y;
         public int width;
         public int height;
-        public EmgUv uv;
+        
+        // Canvas Coordinates (Pixel, Top-Left based)
+        public int basePosition_x;
+        public int basePosition_y;
+        
+        public int textureZIndex;
         public float opacity = 1.0f;
         public string blendMode = "normal";
-        public bool visible = true;
-        public int zIndex;
+        
+        // "visible" is no longer primary for switch parts (controlled by default), but kept for static?
+        // Actually spec says static parts have 1 layer. Switch parts toggle layers.
     }
 
     [Serializable]
-    public class EmgUv
+    public class EmgSprite
     {
-        public float u;
-        public float v;
-        public float w;
-        public float h;
+        public string spriteID;
+        public string targetPartID;
+        public float fps;
+        // Simplified for now, just to allow deserialization without error
     }
 }

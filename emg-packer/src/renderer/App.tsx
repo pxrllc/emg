@@ -26,87 +26,93 @@ function App() {
     const [compositionItems, setCompositionItems] = useState<PreviewItem[]>([]);
     const [packResult, setPackResult] = useState<PackResult | null>(null);
 
+    // Helper to recalculate metadata based on current tree structure
+    const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Record<number, LayerMeta> => {
+        const newMeta = { ...currentMeta };
+
+        root.children?.forEach(child => {
+            // Top-level item determines the PartID
+            const partId = child.name || `Part_${child.id}`;
+            const partType = (child.children && child.children.length > 0) ? 'switch' : 'static'; // Heuristic
+
+            // Assign to the top-level item itself
+            if (child.id !== undefined) {
+                if (!newMeta[child.id]) {
+                    newMeta[child.id] = {
+                        id: child.id,
+                        partId: partId,
+                        type: partType,
+                        visible: !child.hidden
+                    };
+                } else {
+                    // Update PartID if moved
+                    newMeta[child.id].partId = partId;
+                }
+            }
+
+            // Traverse descendants and assign same PartID
+            const traverse = (layer: PsdLayer, pid: string) => {
+                if (layer.id !== undefined) {
+                    if (!newMeta[layer.id]) {
+                        newMeta[layer.id] = {
+                            id: layer.id,
+                            partId: pid,
+                            type: 'static', // layers inside are just layers
+                            visible: !layer.hidden
+                        };
+                    } else {
+                        newMeta[layer.id].partId = pid;
+                    }
+                }
+                layer.children?.forEach(l => traverse(l, pid));
+            };
+            child.children?.forEach(l => traverse(l, partId));
+        });
+
+        return newMeta;
+    };
+
     const handlePsdLoad = async (file: File) => {
         try {
             const root = await PsdLoader.load(file);
-            setPsdRoot(root);
             console.log('PSD Loaded:', root);
 
-            // Initialize metadata
-            const initialMeta: Record<number, LayerMeta> = {};
-            const packItems: PackItem[] = [];
-            const previewItems: PreviewItem[] = [];
-            const layerMap = new Map<number, PsdLayer>();
+            // Initial Meta Calculation
+            const initialMeta = recalculateMeta(root, {});
 
-            const traverse = (layer: PsdLayer) => {
-                if (layer.id !== undefined) {
-                    layerMap.set(layer.id, layer);
-                }
-                // Ensure layer has an ID, PsdLoader should ensure this but strictly speaking Layer id is optional in ag-psd until read?
-                // Actually PsdLoader just calls readPsd.
-                // If it doesn't have an ID, we might have issues. ag-psd usually adds it.
-                if (layer.id === undefined) {
-                    // Should act differently? For now lets assume it exists or ignore
-                } else {
-                    initialMeta[layer.id] = {
-                        id: layer.id,
-                        partId: layer.name || '',
-                        type: 'normal',
-                        visible: !layer.hidden
-                    };
-                }
-
-                if (layer.canvas && !layer.hidden && layer.id !== undefined) {
-                    packItems.push({
-                        id: layer.id.toString(),
-                        width: layer.canvas.width,
-                        height: layer.canvas.height,
-                        image: layer.canvas
-                    });
-
-                    previewItems.push({
-                        id: layer.id,
-                        image: layer.canvas,
-                        left: layer.left || 0,
-                        top: layer.top || 0
-                    });
-                }
-
-                layer.children?.forEach(traverse);
-            };
-            traverse(root);
+            // Batch updates
             setLayerMeta(initialMeta);
-            setCompositionItems(previewItems);
-
-            console.log(`Found ${packItems.length} items to pack`);
-
-            // Pack texture
-            if (packItems.length > 0) {
-                const res = await TexturePacker.pack(packItems);
-                setPackResult(res);
-                setPackedTextureUrl(res.canvas.toDataURL());
-                console.log(`Packed result: ${res.items.length} items, size ${res.width}x${res.height} `);
-            } else {
-                setPackResult(null);
-                setPackedTextureUrl(null);
-            }
+            setPsdRoot(root);
 
         } catch (e) {
             console.error('Failed to load PSD:', e);
         }
     };
 
-    const updatePacking = async (currentRoot: PsdLayer, currentMeta: Record<number, LayerMeta>) => {
+    const handlePsdUpdate = (newRoot: Psd) => {
+        // Called when LayerTree reorders items
+        const newMeta = recalculateMeta(newRoot, layerMeta);
+        setLayerMeta(newMeta);
+        setPsdRoot(newRoot);
+    };
+
+    // Effect to handle Packing and Composition updates whenever PSD or Meta changes
+    useEffect(() => {
+        if (!psdRoot) return;
+
         const packItems: PackItem[] = [];
         const previewItems: PreviewItem[] = [];
+
         const traverse = (layer: PsdLayer) => {
+            // Skip if no ID (shouldn't happen for valid layers)
             if (layer.id === undefined) {
                 layer.children?.forEach(traverse);
                 return;
             }
-            const meta = currentMeta[layer.id];
-            // Add to pack items if it's a leaf (or has image data) and visible? 
-            // AND is visible in metadata (which defaults to !hidden)
+
+            const meta = layerMeta[layer.id];
+
+            // Collect items if they have canvas and are visible in meta
             if (layer.canvas && meta && meta.visible) {
                 packItems.push({
                     id: layer.id.toString(),
@@ -114,6 +120,7 @@ function App() {
                     height: layer.canvas.height,
                     image: layer.canvas
                 });
+                // Preview uses same items
                 previewItems.push({
                     id: layer.id,
                     image: layer.canvas,
@@ -123,35 +130,40 @@ function App() {
             }
             layer.children?.forEach(traverse);
         };
-        traverse(currentRoot);
+        traverse(psdRoot);
+
         setCompositionItems(previewItems);
 
-        console.log(`Repacking ${packItems.length} items`);
+        // Async packing
+        const runPack = async () => {
+            if (packItems.length > 0) {
+                try {
+                    console.log(`Packing ${packItems.length} items...`);
+                    const res = await TexturePacker.pack(packItems);
+                    setPackResult(res);
+                    setPackedTextureUrl(res.canvas.toDataURL());
+                } catch (e) {
+                    console.error("Packing failed", e);
+                }
+            } else {
+                setPackResult(null);
+                setPackedTextureUrl(null);
+            }
+        };
+        runPack();
 
-        if (packItems.length > 0) {
-            const res = await TexturePacker.pack(packItems);
-            setPackResult(res);
-            setPackedTextureUrl(res.canvas.toDataURL());
-        } else {
-            setPackResult(null);
-            setPackedTextureUrl(null);
-        }
-    };
+    }, [psdRoot, layerMeta]);
 
     const handleLayerVisibilityChange = (layer: any, visible: boolean) => {
-        if (!psdRoot) return;
-
-        // Let's cast to PsdLayer
         const psdLayer = layer as PsdLayer;
-
-        const newMeta = { ...layerMeta };
-        if (psdLayer.id !== undefined && newMeta[psdLayer.id]) {
-            newMeta[psdLayer.id] = {
-                ...newMeta[psdLayer.id]!,
-                visible: visible
-            };
-            setLayerMeta(newMeta);
-            updatePacking(psdRoot, newMeta);
+        if (psdLayer.id !== undefined) {
+            setLayerMeta(prev => ({
+                ...prev,
+                [psdLayer.id!]: {
+                    ...prev[psdLayer.id!],
+                    visible: visible
+                }
+            }));
         }
     };
 
@@ -159,22 +171,36 @@ function App() {
     const emgData = useMemo(() => {
         if (!packResult || !psdRoot) return undefined;
 
-        // Collect export items similar to handleExport but purely for JSON generation
         const exportItems: ExportItem[] = [];
+        // Traverse to collect all visible/exportable layers in Front-to-Back order
+        // ag-psd children are Front-to-Back.
+
+        let allExportableLayers: PsdLayer[] = [];
         const traverse = (layer: PsdLayer) => {
-            if (layer.id !== undefined) {
-                const packed = packResult.items.find(p => p.id === layer.id!.toString());
-                if (packed && layerMeta[layer.id]) {
-                    exportItems.push({
-                        packed: packed,
-                        meta: layerMeta[layer.id],
-                        originalLayer: layer
-                    });
-                }
+            if (layer.id !== undefined && layerMeta[layer.id]?.visible && layer.canvas) {
+                allExportableLayers.push(layer);
             }
             layer.children?.forEach(traverse);
         };
-        traverse(psdRoot);
+        traverse(psdRoot as PsdLayer);
+
+        const totalLayers = allExportableLayers.length;
+
+        // Map them to ExportItems with Z-Index
+        allExportableLayers.forEach((layer, index) => {
+            const packed = packResult.items.find(p => p.id === layer.id!.toString());
+            // Note: If packed is missing (e.g. not packed due to size), we skip? 
+            // Or we should have ensured packResult contains it. 
+            // PackResult only contains packed items.
+            if (packed && layerMeta[layer.id!]) {
+                exportItems.push({
+                    packed: packed,
+                    meta: layerMeta[layer.id!],
+                    originalLayer: layer,
+                    zIndex: index // Front (High Index) gets Max Z
+                });
+            }
+        });
 
         return EmgGenerator.createData(packResult, exportItems, psdRoot.width, psdRoot.height);
     }, [packResult, psdRoot, layerMeta]);
@@ -183,13 +209,13 @@ function App() {
         if (!psdRoot) return;
         try {
             // Re-collect visible layers/items based on current meta
-            // (Or just pack all like before? User might have changed visibility?)
             // For consistency let's re-pack based on *visible* layers in meta
 
             const packItems: PackItem[] = [];
-            const exportItems: ExportItem[] = [];
 
-            // We need to traverse again to match layers with meta
+            // Collection for Z-Index calculation (Front-to-Back)
+            let allExportableLayers: PsdLayer[] = [];
+
             const traverse = (layer: PsdLayer) => {
                 const meta = layerMeta[layer.id!];
                 if (meta && meta.visible && layer.canvas && layer.id !== undefined) {
@@ -199,10 +225,11 @@ function App() {
                         height: layer.canvas.height,
                         image: layer.canvas
                     });
+                    allExportableLayers.push(layer);
                 }
                 layer.children?.forEach(traverse);
             };
-            traverse(psdRoot);
+            traverse(psdRoot as PsdLayer);
 
             if (packItems.length === 0) {
                 alert('No visible layers to export');
@@ -211,24 +238,28 @@ function App() {
 
             const packResult = await TexturePacker.pack(packItems);
 
-            // Map back packed items to ExportItems
-            // We need original layer data for positioning (left/top)
+            // Map back packed items to ExportItems with Z-Index
+            const exportItems: ExportItem[] = [];
+            const totalLayers = allExportableLayers.length;
 
-            const traverseForExport = (layer: PsdLayer) => {
-                // Find packed item for this layer
-                if (layer.id !== undefined) {
-                    const packed = packResult.items.find(p => p.id === layer.id!.toString());
-                    if (packed) {
-                        exportItems.push({
-                            packed: packed,
-                            meta: layerMeta[layer.id!],
-                            originalLayer: layer
-                        });
-                    }
+            console.log('--- Exporting Layers ---');
+            allExportableLayers.forEach((layer, index) => {
+                const packed = packResult.items.find(p => p.id === layer.id!.toString());
+                if (packed) {
+                    // Default Front=High (Top of list = High Z)
+                    // assuming ag-psd returns Back-to-Front (Standard)
+                    const zIndex = index;
+
+                    console.log(`Layer: ${layer.name}, Index: ${index}, Z-Index: ${zIndex}`);
+
+                    exportItems.push({
+                        packed: packed,
+                        meta: layerMeta[layer.id!],
+                        originalLayer: layer,
+                        zIndex: zIndex
+                    });
                 }
-                layer.children?.forEach(traverseForExport);
-            };
-            traverseForExport(psdRoot);
+            });
 
             if (!psdRoot.width || !psdRoot.height) {
                 throw new Error("PSD dimensions missing");
@@ -247,7 +278,51 @@ function App() {
             link.click();
         } catch (e) {
             console.error('Export failed:', e);
+            alert('Export failed: ' + e);
         }
+    };
+
+    const handleSaveProject = () => {
+        const projectData = {
+            version: '1.0',
+            layerMeta: layerMeta
+        };
+        const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'project.json';
+        link.click();
+    };
+
+    const handleLoadProject = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                try {
+                    const data = JSON.parse(re.target?.result as string);
+                    if (data.layerMeta) {
+                        // Merge or Replace? 
+                        // If we replace, we lose IDs for layers not in the JSON (if any).
+                        // But project file should be authoritative.
+                        // However, we must ensure IDs match PSD.
+                        // We'll merge: update existing keys, keep others? Or strict replace?
+                        // Let's Replace, assuming project matches PSD.
+                        setLayerMeta(data.layerMeta);
+                        alert('Project settings loaded.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Failed to load project file');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     };
 
     return (
@@ -272,6 +347,7 @@ function App() {
                         selectedLayer={selectedLayer}
                         onSelectionChange={setSelectedLayer}
                         onLayerVisibilityChange={handleLayerVisibilityChange}
+                        onPsdUpdate={handlePsdUpdate}
                     />
                 }
                 centerPanel={
@@ -288,6 +364,8 @@ function App() {
                         meta={selectedLayer?.id !== undefined ? layerMeta[selectedLayer.id] : undefined}
                         onChange={(newMeta) => selectedLayer?.id !== undefined && setLayerMeta(prev => ({ ...prev, [selectedLayer.id!]: newMeta }))}
                         onExport={handleExport}
+                        onSaveProject={handleSaveProject}
+                        onLoadProject={handleLoadProject}
                         emgData={emgData}
                     />
                 }

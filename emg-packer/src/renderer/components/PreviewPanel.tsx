@@ -70,10 +70,11 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                 // If we want to draw correctly (painters algorithm), we need to draw BOTTOM first.
                 // So we should reverse `compositionItems` if they were collected top-first.
 
-                // App.tsx collects using recursive traversal top-down.
-                // So compositionItems are Top -> Bottom order.
-                // We need to draw Bottom -> Top. So reverse.
-                [...compositionItems].reverse().forEach(item => {
+                // App.tsx collects using recursive traversal (Back-to-Front).
+                // So compositionItems are Back -> Front order.
+                // We draw in order (Back first).
+
+                [...compositionItems].forEach(item => {
                     ctx.drawImage(item.image, item.left, item.top);
                 });
 

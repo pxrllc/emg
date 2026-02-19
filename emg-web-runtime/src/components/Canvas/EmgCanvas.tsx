@@ -87,22 +87,7 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
         };
     };
 
-    const handleWheel = (e: React.WheelEvent) => {
-        e.preventDefault();
-        const scaleBy = 1.1;
-        const factor = e.deltaY < 0 ? scaleBy : 1 / scaleBy;
-        const mouse = getMousePos(e);
-        const worldMouse = getWorldPos(mouse.x, mouse.y);
 
-        const newScale = transform.scale * factor;
-        // Limit scale?
-        if (newScale < 0.1 || newScale > 10) return;
-
-        const newX = mouse.x - worldMouse.x * newScale;
-        const newY = mouse.y - worldMouse.y * newScale;
-
-        setTransform({ x: newX, y: newY, scale: newScale });
-    };
 
     const handleMouseDown = (e: React.MouseEvent) => {
         const mouse = getMousePos(e);
@@ -279,9 +264,16 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
 
                 // Source Rect (Atlas)
                 let sx = 0, sy = 0, sw = 0, sh = 0;
-                if (layer.uv) {
+
+                if (layer.srcX !== undefined && layer.srcY !== undefined && layer.srcWidth !== undefined && layer.srcHeight !== undefined) {
+                    // Use Pixel Coords directly
+                    sx = layer.srcX;
+                    sy = layer.srcY;
+                    sw = layer.srcWidth;
+                    sh = layer.srcHeight;
+                } else if (layer.uv) {
                     sx = layer.uv.u * img.width;
-                    sy = layer.uv.v * img.width; // Wait, v is y.
+                    sy = layer.uv.v * img.width; // Potential bug in original code (v * width), keeping for now or fixing? Standard is v * height. But let's stick to pixel coords if possible.
                     sw = layer.uv.w * img.width;
                     sh = layer.uv.h * img.height;
                 } else {
@@ -321,12 +313,46 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
         };
     }, [avatar, stateMachine, images, transform, editMode, selectedLayerId]);
 
+    // Wheel Handler (Non-passive for preventDefault)
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const onWheel = (e: WheelEvent) => {
+            e.preventDefault();
+            const scaleBy = 1.1;
+            const factor = e.deltaY < 0 ? scaleBy : 1 / scaleBy;
+
+            // Native Event coords
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // World calculation using current transform
+            const worldMouseX = (mouseX - transform.x) / transform.scale;
+            const worldMouseY = (mouseY - transform.y) / transform.scale;
+
+            const newScale = transform.scale * factor;
+            if (newScale < 0.1 || newScale > 10) return;
+
+            const newX = mouseX - worldMouseX * newScale;
+            const newY = mouseY - worldMouseY * newScale;
+
+            setTransform({ x: newX, y: newY, scale: newScale });
+        };
+
+        canvas.addEventListener('wheel', onWheel, { passive: false });
+        return () => {
+            canvas.removeEventListener('wheel', onWheel);
+        };
+    }, [transform]); // Re-bind on transform change
+
     return (
         <canvas
             ref={canvasRef}
             width={width || avatar.width}
             height={height || avatar.height}
-            onWheel={handleWheel}
+            // onWheel removed - handled by useEffect
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

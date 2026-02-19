@@ -10,10 +10,12 @@ interface PropertiesPanelProps {
     meta?: LayerMeta;
     onChange: (meta: LayerMeta) => void;
     onExport: () => void;
+    onSaveProject: () => void;
+    onLoadProject: () => void;
     emgData?: EmgData;
 }
 
-export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta, onChange, onExport, emgData }) => {
+export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta, onChange, onExport, onSaveProject, onLoadProject, emgData }) => {
     const [activeTab, setActiveTab] = useState<'properties' | 'json'>('properties');
 
     return (
@@ -63,11 +65,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta,
                     !layerId || !meta ? (
                         <div className="properties-empty" style={{ padding: '20px', color: '#888', textAlign: 'center' }}>
                             Select a layer to view properties
-                            <div style={{ marginTop: '20px' }}>
-                                <button className="btn-primary" onClick={onExport} style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto', padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                            <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <button className="btn-primary" onClick={onExport} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                                     <Download size={16} />
                                     Export EMG
                                 </button>
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    <button onClick={onSaveProject} style={{ flex: 1, padding: '8px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                        Save Project
+                                    </button>
+                                    <button onClick={onLoadProject} style={{ flex: 1, padding: '8px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                        Load Project
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ) : (
@@ -96,18 +106,38 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta,
                                     onChange={(e) => handleChange('type', e.target.value)}
                                     style={{ width: '100%', padding: '6px', background: '#333', border: '1px solid #555', color: '#fff', borderRadius: '4px' }}
                                 >
-                                    <option value="normal">Normal</option>
-                                    <option value="multiply">Multiply</option>
-                                    <option value="screen">Screen</option>
-                                    <option value="overlay">Overlay</option>
+                                    <option value="static">Static</option>
+                                    <option value="switch">Switch</option>
                                 </select>
                             </div>
+
+                            {meta.type === 'switch' && (
+                                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="isDefault"
+                                        checked={meta.isDefault || false}
+                                        onChange={(e) => handleChange('isDefault', e.target.checked)}
+                                    />
+                                    <label htmlFor="isDefault" style={{ fontSize: '12px', color: '#ccc', cursor: 'pointer' }}>
+                                        Set as Default for this Part
+                                    </label>
+                                </div>
+                            )}
 
                             <div className="form-actions" style={{ marginTop: '20px' }}>
                                 <button className="btn-primary" onClick={onExport} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                                     <Download size={16} />
                                     Export EMG
                                 </button>
+                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                    <button onClick={onSaveProject} style={{ flex: 1, padding: '8px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                        Save Project
+                                    </button>
+                                    <button onClick={onLoadProject} style={{ flex: 1, padding: '8px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                                        Load Project
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )

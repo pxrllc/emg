@@ -42,34 +42,37 @@ public class EmgImporter : ScriptedImporter
 
                 // 2. Load Textures
                 var textures = new Dictionary<string, Texture2D>();
-                foreach (var texInfo in emgData.textures)
+                if (emgData.textures != null)
                 {
-                    // Filename expectation: "texture_{id}.png"
-                    string texFileName = $"texture_{texInfo.id}.png";
-                    var texEntry = archive.GetEntry(texFileName);
-                    
-                    if (texEntry != null)
+                    foreach (var texInfo in emgData.textures)
                     {
-                        using (var memStream = new MemoryStream())
+                        // v0.2.2: Use textureFile directly
+                        string texFileName = texInfo.textureFile;
+                        var texEntry = archive.GetEntry(texFileName);
+                        
+                        if (texEntry != null)
                         {
-                            texEntry.Open().CopyTo(memStream);
-                            // Disable MipChain for Sprites
-                            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                            tex.LoadImage(memStream.ToArray());
-                            tex.name = texFileName;
-                            
-                            // Texture Settings
-                            tex.filterMode = FilterMode.Bilinear;
-                            tex.wrapMode = TextureWrapMode.Clamp;
-                            tex.alphaIsTransparency = true;
-                            
-                            ctx.AddObjectToAsset($"texture_{texInfo.id}", tex);
-                            textures[texInfo.id] = tex;
+                            using (var memStream = new MemoryStream())
+                            {
+                                texEntry.Open().CopyTo(memStream);
+                                // Disable MipChain for Sprites
+                                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                                tex.LoadImage(memStream.ToArray());
+                                tex.name = texFileName;
+                                
+                                // Texture Settings
+                                tex.filterMode = FilterMode.Bilinear;
+                                tex.wrapMode = TextureWrapMode.Clamp;
+                                tex.alphaIsTransparency = true;
+                                
+                                ctx.AddObjectToAsset(texFileName, tex);
+                                textures[texFileName] = tex;
+                            }
                         }
-                    }
-                    else
-                    {
-                         Debug.LogWarning($"[EmgImporter] Texture {texFileName} not found.");
+                        else
+                        {
+                             Debug.LogWarning($"[EmgImporter] Texture {texFileName} not found.");
+                        }
                     }
                 }
 
@@ -81,113 +84,119 @@ public class EmgImporter : ScriptedImporter
                 // 4. Create GameObject Hierarchy
                 var rootGo = new GameObject(Path.GetFileNameWithoutExtension(ctx.assetPath));
                 
-                // Sort layers by zIndex (ascending order for Painter's algo, but Unity SortingOrder handles it)
-                // We'll still sort to keep Hierarchy clean
-                emgData.layers.Sort((a, b) => a.zIndex.CompareTo(b.zIndex));
-
-                // Dictionary to hold part parents
-                var partParents = new Dictionary<string, GameObject>();
-                // Count layers per part to decide hierarchy structure
-                var partLayerCounts = new Dictionary<string, int>();
-                foreach (var layer in emgData.layers)
+                if (emgData.parts != null)
                 {
-                    if (!partLayerCounts.ContainsKey(layer.partID)) partLayerCounts[layer.partID] = 0;
-                    partLayerCounts[layer.partID]++;
-                }
-
-                foreach (var layer in emgData.layers)
-                {
-                    // Update opacity if 0 (fixing issue where default might be loaded as 0)
-                    if (layer.opacity == 0f) layer.opacity = 1.0f;
-
-                    if (!textures.ContainsKey(layer.textureID)) continue;
-
-                    GameObject targetGo;
-                    bool isContainer = false;
-
-                    // --- Parent / Object Creation ---
-                    if (partLayerCounts[layer.partID] == 1)
+                    foreach (var part in emgData.parts)
                     {
-                        // Single layer part: The part object IS the layer object
-                        if (!partParents.TryGetValue(layer.partID, out targetGo))
-                        {
-                            targetGo = new GameObject(layer.partID);
-                            targetGo.transform.SetParent(rootGo.transform, false);
-                            targetGo.SetActive(layer.visible);
-                            partParents[layer.partID] = targetGo;
-                        }
-                    }
-                    else
-                    {
-                        // Multi-layer part: Create container if needed, then child
-                        GameObject partParent;
-                        if (!partParents.TryGetValue(layer.partID, out partParent))
-                        {
-                            partParent = new GameObject(layer.partID);
-                            partParent.transform.SetParent(rootGo.transform, false);
-                            // Container remains active, children control visibility
-                            partParents[layer.partID] = partParent;
-                        }
-                        isContainer = true;
+                        if (part.layers == null) continue;
 
-                        // Create child object for the layer
-                        targetGo = new GameObject($"{layer.partID}_{layer.layerID}");
-                        targetGo.transform.SetParent(partParent.transform, false);
-                        targetGo.SetActive(layer.visible);
-                    }
-
-                    // --- Position Calculation ---
-                    // 1. Calculate center of the layer in Canvas coordinates
-                    float layerCenterX = layer.x + layer.width / 2f;
-                    float layerCenterY = layer.y + layer.height / 2f;
-
-                    // 2. Calculate center of the Canvas
-                    float canvasCenterX = emgData.width / 2f;
-                    float canvasCenterY = emgData.height / 2f;
-
-                    // 3. Calculate offset from Canvas Center
-                    float offsetX = layerCenterX - canvasCenterX;
-                    float offsetY = layerCenterY - canvasCenterY;
-
-                    // 4. Convert to Unity Units and Coordinates (Flip Y)
-                    float unityX = offsetX / pixelsPerUnit;
-                    float unityY = -offsetY / pixelsPerUnit;
-
-                    // Apply position
-                    // If grouped (isContainer), parent is at (0,0), so child sets localPosition.
-                    // If single (merged), targetGo is at root (0,0), so we set localPosition relative to root.
-                    targetGo.transform.localPosition = new Vector3(unityX, unityY, 0);
-
-                    // --- SpriteRenderer ---
-                    var renderer = targetGo.AddComponent<SpriteRenderer>();
-                    renderer.sharedMaterial = material;
-                    renderer.sortingOrder = layer.zIndex;
-                    
-                    // Opacity
-                    Color color = Color.white;
-                    color.a = layer.opacity;
-                    renderer.color = color;
-
-                    // --- Sprite Creation ---
-                    Texture2D tex = textures[layer.textureID];
-                    
-                    float rectX = layer.uv.u * tex.width;
-                    float rectY = (1.0f - (layer.uv.v + layer.uv.h)) * tex.height;
-                    float rectW = layer.uv.w * tex.width;
-                    float rectH = layer.uv.h * tex.height;
-                    
-                    rectX = Mathf.Max(0, rectX);
-                    rectY = Mathf.Max(0, rectY);
-                    rectW = Mathf.Min(tex.width - rectX, rectW);
-                    rectH = Mathf.Min(tex.height - rectY, rectH);
-
-                    if (rectW > 0 && rectH > 0)
-                    {
-                        var sprite = Sprite.Create(tex, new Rect(rectX, rectY, rectW, rectH), new Vector2(0.5f, 0.5f), pixelsPerUnit);
-                        sprite.name = $"{layer.partID}_sprite";
+                        GameObject partGo;
                         
-                        ctx.AddObjectToAsset($"sprite_{layer.layerID}", sprite);
-                        renderer.sprite = sprite;
+                        // Sort layers by textureZIndex (ascending)
+                        part.layers.Sort((a, b) => a.textureZIndex.CompareTo(b.textureZIndex));
+
+                        if (part.type == "switch")
+                        {
+                             // Container for Switch parts
+                             partGo = new GameObject(part.partID);
+                             partGo.transform.SetParent(rootGo.transform, false);
+                        }
+                        else // static
+                        {
+                             // Static parts usually have 1 layer, the object IS the layer
+                             // But to keep logic simple and uniform: Create Part object, put layer inside?
+                             // Or direct? 
+                             // EmgImporter v0.1 strategy: "Single layer -> direct".
+                             // Let's stick to Container strategy for consistency if helpful, OR direct.
+                             // V0.2.2 spec implies "static" is simple.
+                             // Let's make "static" a container too, usually with 1 child. 
+                             // OR: If static, create GO named partID, add renderer.
+                             // BUT static parts might technically have multiple layers in some complex PSD setups? 
+                             // Spec says "type: static". 
+                             // Let's treat valid static part as simple container for safety.
+                             partGo = new GameObject(part.partID);
+                             partGo.transform.SetParent(rootGo.transform, false);
+                        }
+
+                        // Create Layers
+                        foreach (var layer in part.layers)
+                        {
+                            // Update opacity if close to 0 (fixing field initialization issues)
+                            if (layer.opacity <= 0.001f) layer.opacity = 1.0f;
+                            
+                            // Debug.Log($"LayerOp: {layer.textureID} = {layer.opacity}");
+
+                            if (string.IsNullOrEmpty(layer.textureFile) || !textures.ContainsKey(layer.textureFile)) 
+                            {
+                                // Fallback: try to find any texture if textureFile missing?
+                                // v0.2.2 spec requires textureFile.
+                                continue; 
+                            }
+
+                            var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
+                            layerGo.transform.SetParent(partGo.transform, false);
+                            
+                            // Visibility / Active State
+                            if (part.type == "switch")
+                            {
+                                // Only default is active
+                                layerGo.SetActive(layer.textureID == part.@default);
+                            }
+                            else
+                            {
+                                layerGo.SetActive(true);
+                            }
+
+                            // --- Position Calculation ---
+                            // 1. Calculate center of the layer in Canvas coordinates
+                            // v0.2.2: basePosition is Top-Left of the layer on Canvas
+                            float layerCenterX = layer.basePosition_x + layer.width / 2f;
+                            float layerCenterY = layer.basePosition_y + layer.height / 2f;
+
+                            // 2. Calculate center of the Canvas
+                            float canvasCenterX = emgData.baseCanvasWidth / 2f;
+                            float canvasCenterY = emgData.baseCanvasHeight / 2f;
+
+                            // 3. Calculate offset from Canvas Center
+                            float offsetX = layerCenterX - canvasCenterX;
+                            float offsetY = layerCenterY - canvasCenterY;
+
+                            // 4. Convert to Unity Units and Coordinates (Flip Y)
+                            float unityX = offsetX / pixelsPerUnit;
+                            float unityY = -offsetY / pixelsPerUnit;
+
+                            // Apply position (Local to Parent, but Parent is at 0,0 relative to Root)
+                            layerGo.transform.localPosition = new Vector3(unityX, unityY, 0);
+
+                            // --- SpriteRenderer ---
+                            var renderer = layerGo.AddComponent<SpriteRenderer>();
+                            renderer.sharedMaterial = material;
+                            renderer.sortingOrder = layer.textureZIndex;
+                            
+                            // Opacity
+                            Color color = Color.white;
+                            color.a = layer.opacity;
+                            renderer.color = color;
+
+                            // --- Sprite Creation ---
+                            Texture2D tex = textures[layer.textureFile];
+                            
+                            // Rect from Pixel Coords (Atlas)
+                            // Unity Rect Origin is Bottom-Left. Atlas is Top-Left.
+                            float rectX = layer.x;
+                            float rectY = tex.height - (layer.y + layer.height); // Flip Y
+                            float rectW = layer.width;
+                            float rectH = layer.height;
+                            
+                            if (rectW > 0 && rectH > 0)
+                            {
+                                var sprite = Sprite.Create(tex, new Rect(rectX, rectY, rectW, rectH), new Vector2(0.5f, 0.5f), pixelsPerUnit);
+                                sprite.name = $"{layer.textureID}_sprite";
+                                
+                                ctx.AddObjectToAsset($"sprite_{part.partID}_{layer.textureID}", sprite);
+                                renderer.sprite = sprite;
+                            }
+                        }
                     }
                 }
 

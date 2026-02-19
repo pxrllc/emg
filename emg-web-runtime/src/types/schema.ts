@@ -16,11 +16,29 @@ export interface EmgPart {
     partID: string;
     type: 'static' | 'switch';
     default?: string; // textureID for initial state
+    layers?: EmgPartLayer[]; // v0.2.2 Nested Layers
+}
+
+export interface EmgPartLayer {
+    layerID?: string; // might be missing or optional in sub-layer?
+    textureID: string;
+    textureFile?: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    basePosition_x?: number;
+    basePosition_y?: number;
+    textureZIndex?: number;
+    opacity?: number;
+    blendMode?: string;
+    // ... mapped to EmgLayer during load
 }
 
 export interface EmgTexture {
-    id: string; // "0", "1"...
-    src: string; // Filename in zip, e.g. "texture_0.png"
+    id?: string; // "0", "1"... (Optional if using textureFile mapping)
+    src?: string; // Filename in zip (Spec)
+    textureFile?: string; // Filename in zip (Packer v0.2.2 output)
     width: number;
     height: number;
     // Runtime internal: Blob URL after loading
@@ -53,6 +71,11 @@ export interface EmgLayer {
     uv?: {
         u: number; v: number; w: number; h: number;
     };
+    // Pixel-based Atlas Coords (Alternative to UV)
+    srcX?: number;
+    srcY?: number;
+    srcWidth?: number;
+    srcHeight?: number;
     opacity: number;
     blendMode: string;
     visible: boolean;

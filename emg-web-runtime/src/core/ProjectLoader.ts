@@ -37,11 +37,58 @@ class ProjectLoader {
                 avatar.name = fileName;
             }
 
+            // 1.5. Polyfill / Migration for v0.2.2 (Parts-based structure)
+            if (!avatar.layers || avatar.layers.length === 0) {
+                // Flatten layers from parts
+                const flattenedLayers: any[] = [];
+                if (avatar.parts) {
+                    avatar.parts.forEach(part => {
+                        if (part.layers) {
+                            part.layers.forEach((l: any) => {
+                                // Ensure standard properties
+                                l.partID = l.partID || part.partID;
+                                // Ensure layerID exists (for React keys and selection)
+                                if (!l.layerID) {
+                                    l.layerID = l.textureID || `${part.partID}_${l.zIndex || 0}`;
+                                }
+                                // Map textureZIndex -> zIndex if missing
+                                if (l.zIndex === undefined && l.textureZIndex !== undefined) {
+                                    l.zIndex = l.textureZIndex;
+                                }
+                                // Map Packer Coords to Runtime Coords
+                                // Packer: x,y=Atlas, basePosition=Canvas
+                                // Runtime: srcX,srcY=Atlas, x,y=Canvas
+
+                                // 1. Save Atlas Coords
+                                if (l.srcX === undefined) l.srcX = l.x;
+                                if (l.srcY === undefined) l.srcY = l.y;
+                                if (l.srcWidth === undefined) l.srcWidth = l.width;
+                                if (l.srcHeight === undefined) l.srcHeight = l.height;
+
+                                // 2. Map Canvas Coords
+                                if (l.basePosition_x !== undefined) l.x = l.basePosition_x;
+                                if (l.basePosition_y !== undefined) l.y = l.basePosition_y;
+
+                                // If basePosition is missing (legacy?), keep l.x as canvas x (dangerous if it was atlas x)
+                                // But Packer v0.2.2 always outputs basePosition.
+
+                                flattenedLayers.push(l);
+                            });
+                        }
+                    });
+                }
+                avatar.layers = flattenedLayers;
+            }
+
             // Force visibility and opacity for Web Runtime (User Request)
             if (avatar.layers) {
                 avatar.layers.forEach(layer => {
-                    layer.visible = true;
-                    layer.opacity = 1.0;
+                    // Ensure zIndex exists
+                    if (layer.zIndex === undefined && (layer as any).textureZIndex !== undefined) {
+                        layer.zIndex = (layer as any).textureZIndex;
+                    }
+                    if (layer.visible === undefined) layer.visible = true;
+                    if (layer.opacity === undefined) layer.opacity = 1.0;
                 });
             }
 
@@ -82,13 +129,39 @@ class ProjectLoader {
 
             // 3. Load Assets (Textures)
             const assets = new Map<string, string>();
-            // Collect all texture paths
-            // From avatar.textures
             const texturePaths = new Set<string>();
+
+            // 3a. Ensure Textures have IDs (Polyfill)
             if (avatar.textures) {
-                avatar.textures.forEach(t => texturePaths.add(t.src));
+                avatar.textures.forEach((t, index) => {
+                    const src = t.src || t.textureFile;
+                    if (src) {
+                        t.src = src; // Polyfill src for Runtime use
+                        texturePaths.add(src);
+                    } else {
+                        console.warn('Texture definition missing src or textureFile:', t);
+                    }
+                    // Ensure ID exists
+                    if (!t.id) {
+                        t.id = index.toString();
+                    }
+                });
             }
-            // Also check old schema if textures array missing? v0.2.2 has it.
+
+            // 3b. Fix Layer TextureIDs (Polyfill for Packer v0.2.2)
+            // Packer v0.2.2 sets layer.textureID = layerID, but we want it to point to the Texture (Atlas).
+            // Current Packer only outputs 1 texture. So we map all to "0".
+            if (avatar.layers && avatar.textures && avatar.textures.length > 0) {
+                const availableTextureIds = new Set(avatar.textures.map(t => t.id));
+                const defaultTextureId = avatar.textures[0].id; // "0"
+
+                avatar.layers.forEach(l => {
+                    // If layer references a non-existent texture, assume it belongs to the default atlas
+                    if (!availableTextureIds.has(l.textureID)) {
+                        l.textureID = defaultTextureId!;
+                    }
+                });
+            }
 
             // Load blobs
             for (const path of texturePaths) {
