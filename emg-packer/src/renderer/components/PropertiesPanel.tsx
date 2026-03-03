@@ -5,6 +5,25 @@ import type { EmgData } from '../services/EmgGenerator';
 
 import type { LayerMeta } from '../types';
 
+const BLEND_MODES = [
+    { value: 'normal',      label: 'Normal' },
+    { value: 'multiply',    label: 'Multiply' },
+    { value: 'screen',      label: 'Screen' },
+    { value: 'overlay',     label: 'Overlay' },
+    { value: 'darken',      label: 'Darken' },
+    { value: 'lighten',     label: 'Lighten' },
+    { value: 'color dodge', label: 'Color Dodge' },
+    { value: 'color burn',  label: 'Color Burn' },
+    { value: 'soft light',  label: 'Soft Light' },
+    { value: 'hard light',  label: 'Hard Light' },
+    { value: 'difference',  label: 'Difference' },
+    { value: 'exclusion',   label: 'Exclusion' },
+    { value: 'hue',         label: 'Hue' },
+    { value: 'saturation',  label: 'Saturation' },
+    { value: 'color',       label: 'Color' },
+    { value: 'luminosity',  label: 'Luminosity' },
+];
+
 interface PropertiesPanelProps {
     layerId: number | null;
     meta?: LayerMeta;
@@ -13,9 +32,10 @@ interface PropertiesPanelProps {
     onSaveProject: () => void;
     onLoadProject: () => void;
     emgData?: EmgData;
+    onTypeAll?: (type: 'static' | 'switch') => void;
 }
 
-export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta, onChange, onExport, onSaveProject, onLoadProject, emgData }) => {
+export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta, onChange, onExport, onSaveProject, onLoadProject, emgData, onTypeAll }) => {
     const [activeTab, setActiveTab] = useState<'properties' | 'json'>('properties');
 
     return (
@@ -66,6 +86,19 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta,
                         <div className="properties-empty" style={{ padding: '20px', color: '#888', textAlign: 'center' }}>
                             Select a layer to view properties
                             <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {onTypeAll && (
+                                    <div style={{ textAlign: 'left' }}>
+                                        <label style={{ display: 'block', marginBottom: '6px', fontSize: '12px', color: '#ccc' }}>Batch Set Type</label>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => onTypeAll('static')} style={{ flex: 1, padding: '6px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                                                All Static
+                                            </button>
+                                            <button onClick={() => onTypeAll('switch')} style={{ flex: 1, padding: '6px', background: '#444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                                                All Switch
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                                 <button className="btn-primary" onClick={onExport} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                                     <Download size={16} />
                                     Export EMG
@@ -109,6 +142,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta,
                                     <option value="static">Static</option>
                                     <option value="switch">Switch</option>
                                 </select>
+                                {onTypeAll && (
+                                    <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                                        <button onClick={() => onTypeAll('static')} style={{ flex: 1, padding: '4px', background: '#555', color: '#ccc', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>
+                                            All Static
+                                        </button>
+                                        <button onClick={() => onTypeAll('switch')} style={{ flex: 1, padding: '4px', background: '#555', color: '#ccc', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>
+                                            All Switch
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             {meta.type === 'switch' && (
@@ -124,6 +167,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ layerId, meta,
                                     </label>
                                 </div>
                             )}
+
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#ccc' }}>
+                                    Opacity: {Math.round((meta.opacity ?? 1) * 100)}%
+                                </label>
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={100}
+                                    value={Math.round((meta.opacity ?? 1) * 100)}
+                                    onChange={(e) => handleChange('opacity', parseInt(e.target.value) / 100)}
+                                    style={{ width: '100%', accentColor: '#3b82f6' }}
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', color: '#ccc' }}>Blend Mode</label>
+                                <select
+                                    value={meta.blendMode || 'normal'}
+                                    onChange={(e) => handleChange('blendMode', e.target.value)}
+                                    style={{ width: '100%', padding: '6px', background: '#333', border: '1px solid #555', color: '#fff', borderRadius: '4px' }}
+                                >
+                                    {BLEND_MODES.map(mode => (
+                                        <option key={mode.value} value={mode.value}>{mode.label}</option>
+                                    ))}
+                                </select>
+                            </div>
 
                             <div className="form-actions" style={{ marginTop: '20px' }}>
                                 <button className="btn-primary" onClick={onExport} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>

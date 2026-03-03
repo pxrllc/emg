@@ -217,12 +217,8 @@ export class EmgGenerator {
                 basePosition_x: (item.originalLayer.left || 0),
                 basePosition_y: (item.originalLayer.top || 0),
                 textureZIndex: item.zIndex,
-                // ag-psd value range: sometimes 0-1, sometimes 0-255?
-                // Logic: If > 1, assume 0-255 range. If <= 1, assume 0-1 range.
-                opacity: (typeof item.originalLayer.opacity === 'number')
-                    ? (item.originalLayer.opacity > 1 ? item.originalLayer.opacity / 255 : item.originalLayer.opacity)
-                    : 1.0,
-                blendMode: item.originalLayer.blendMode || 'normal'
+                opacity: item.meta.opacity ?? 1.0,
+                blendMode: item.meta.blendMode || 'normal'
             });
         }
 

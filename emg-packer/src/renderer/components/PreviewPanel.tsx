@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 
 export interface PreviewItem {
     id: number;
@@ -20,6 +20,22 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
     const [viewport, setViewport] = useState({ x: 0, y: 0, w: 0, h: 0 }); // Percentages 0-1
     const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
     const [mode, setMode] = useState<'texture' | 'composition'>('composition');
+    const [scale, setScale] = useState(1.0);
+
+    const handleFit = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (!container || imgSize.w === 0 || imgSize.h === 0) return;
+        const s = Math.min(
+            container.clientWidth / imgSize.w,
+            container.clientHeight / imgSize.h
+        );
+        setScale(Math.max(0.1, Math.min(4.0, +s.toFixed(2))));
+    }, [imgSize]);
+
+    const displayStyle = useMemo(() => ({
+        width: imgSize.w > 0 ? imgSize.w * scale + 'px' : undefined,
+        height: imgSize.h > 0 ? imgSize.h * scale + 'px' : undefined,
+    }), [imgSize, scale]);
 
     // Draw Canvas
     useEffect(() => {
@@ -37,10 +53,15 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                 img.onload = () => {
                     canvas.width = img.width;
                     canvas.height = img.height;
-                    setImgSize({ w: img.width, h: img.height });
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     ctx.drawImage(img, 0, 0);
-                    updateViewport();
+                    setImgSize({ w: img.width, h: img.height });
+                };
+                img.onerror = () => {
+                    console.error('Failed to load texture atlas image');
+                    canvas.width = 0;
+                    canvas.height = 0;
+                    setImgSize({ w: 0, h: 0 });
                 };
                 img.src = textureUrl;
             } else {
@@ -121,7 +142,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {/* Toolbar */}
-            <div className="flex gap-2 p-2 bg-gray-800 border-b border-gray-700">
+            <div className="flex gap-2 p-2 bg-gray-800 border-b border-gray-700" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                     className={`px-3 py-1 text-xs rounded ${mode === 'composition' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
                     onClick={() => setMode('composition')}
@@ -134,6 +155,31 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                 >
                     Texture Atlas
                 </button>
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
+                        onClick={() => setScale(s => Math.max(0.1, +(s - 0.25).toFixed(2)))}
+                        title="Zoom Out"
+                    >－</button>
+                    <span style={{ minWidth: '44px', textAlign: 'center', fontSize: '12px', color: '#ccc' }}>
+                        {Math.round(scale * 100)}%
+                    </span>
+                    <button
+                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
+                        onClick={() => setScale(s => Math.min(4.0, +(s + 0.25).toFixed(2)))}
+                        title="Zoom In"
+                    >＋</button>
+                    <button
+                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
+                        onClick={() => setScale(1.0)}
+                        title="Reset to 100%"
+                    >100%</button>
+                    <button
+                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
+                        onClick={handleFit}
+                        title="Fit to panel"
+                    >Fit</button>
+                </div>
             </div>
 
             <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
@@ -144,7 +190,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                     style={{ width: '100%', height: '100%', overflow: 'auto', display: 'flex' }}
                 >
                     <div style={{ margin: 'auto', position: 'relative' }}>
-                        <canvas ref={canvasRef} style={{ display: 'block', maxWidth: 'none', background: 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHElEQVQYlWNgYGD4z8AARwyyD46kAqJhCg0QAABD1AIG7K6OBAAAAABJRU5ErkJggg==) repeat' }} />
+                        <canvas ref={canvasRef} style={{ display: 'block', maxWidth: 'none', background: 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHElEQVQYlWNgYGD4z8AARwyyD46kAqJhCg0QAABD1AIG7K6OBAAAAABJRU5ErkJggg==) repeat', ...displayStyle }} />
                     </div>
                 </div>
 

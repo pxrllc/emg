@@ -29,8 +29,25 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                 <span>Layers</span>
                             </div>
                             {onLoadPsd && (
-                                <button className="icon-btn" onClick={onLoadPsd} title="Open PSD">
-                                    <FileUp size={16} />
+                                <button
+                                    onClick={onLoadPsd}
+                                    title="Import PSD / KRA"
+                                    style={{
+                                        background: '#3b82f6',
+                                        border: 'none',
+                                        color: 'white',
+                                        padding: '3px 10px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                        fontSize: '12px',
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    <FileUp size={13} />
+                                    Import
                                 </button>
                             )}
                         </div>

@@ -1,7 +1,7 @@
 {
   "name": "emg-packer",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.1",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -26,10 +26,8 @@
       "output": "dist-build"
     },
     "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
+      "out/**/*"
     ],
-    "main": "out/main/index.js",
     "win": {
       "target": [
         "nsis",

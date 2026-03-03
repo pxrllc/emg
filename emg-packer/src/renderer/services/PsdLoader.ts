@@ -1,6 +1,26 @@
 import { readPsd, type Psd, type Layer } from 'ag-psd';
+import { KraLoader } from './KraLoader';
 
 export type PsdLayer = Layer;
+
+export class FileLoader {
+    static async load(file: File): Promise<Psd> {
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (ext === 'kra') {
+            const psd = await KraLoader.load(file);
+            console.log('KRA Loaded:', psd);
+            return psd;
+        }
+        if (ext === 'clip') {
+            throw new Error(
+                'Clip Studio (.clip) 形式は現在未対応です。\n' +
+                'Clip Studio から「ファイル → 書き出し → PSD形式」でエクスポートしてから読み込んでください。'
+            );
+        }
+        // Default: treat as PSD
+        return PsdLoader.load(file);
+    }
+}
 
 export class PsdLoader {
     /**
@@ -35,6 +55,18 @@ export class PsdLoader {
         // Or better, let the UI handle the tree, but ensure we have the partId info.
         // Actually, PsdLoader just returns Psd. EmgGenerator or the UI component likely iterates it.
         // Let's inject `partId` into the layer objects (ag-psd Layer type is open enough or we extend it).
+
+        // Assign synthetic IDs to layers that don't have them (some PSDs omit layer IDs)
+        let idCounter = 1;
+        const ensureIds = (layers: Layer[]) => {
+            for (const layer of layers) {
+                if (layer.id === undefined) {
+                    (layer as any).id = idCounter++;
+                }
+                if (layer.children) ensureIds(layer.children);
+            }
+        };
+        if (psd.children) ensureIds(psd.children);
 
         // We'll traverse and add a custom property `_partName` to identifying the group.
         if (psd.children) {

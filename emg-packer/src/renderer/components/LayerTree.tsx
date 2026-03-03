@@ -1,6 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import type { Layer, Psd } from 'ag-psd';
-import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, Plus, FolderPlus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FolderPlus } from 'lucide-react';
+
+// Module-level variable for reliable drag tracking in Electron
+let _activeDragLayerId: number | null = null;
 
 interface LayerTreeProps {
     psd: Psd | null;
@@ -9,6 +12,7 @@ interface LayerTreeProps {
     onSelectionChange?: (layer: Layer) => void;
     onPsdUpdate?: (psd: Psd) => void;
     selectedLayer?: Layer | null;
+    onVisibilityAll?: (visible: boolean) => void;
 }
 
 export const LayerTree: React.FC<LayerTreeProps> = ({
@@ -17,9 +21,17 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     onLayerVisibilityChange,
     onSelectionChange,
     onPsdUpdate,
-    selectedLayer
+    selectedLayer,
+    onVisibilityAll
 }) => {
-    if (!psd || !psd.children) return <div className="p-2 text-sm text-gray-500">No PSD loaded</div>;
+    if (!psd || !psd.children) return (
+        <div style={{ padding: '24px 16px', color: '#666', textAlign: 'center', fontSize: '12px', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: '8px', fontSize: '28px' }}>📂</div>
+            <div style={{ color: '#999', marginBottom: '4px' }}>No file loaded</div>
+            <div style={{ color: '#555' }}>Supported formats:</div>
+            <div style={{ color: '#555' }}>PSD · KRA</div>
+        </div>
+    );
 
     const handleCreateGroup = () => {
         if (!psd || !onPsdUpdate) return;
@@ -145,12 +157,26 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
 
     return (
         <div className="layer-tree">
-            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #444', display: 'flex', gap: '8px' }}>
+            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #444', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                     onClick={handleCreateGroup}
                     style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
                 >
                     <FolderPlus size={14} /> New Group
+                </button>
+                <button
+                    onClick={() => onVisibilityAll?.(true)}
+                    title="Show All Layers"
+                    style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                >
+                    <Eye size={14} /> Show All
+                </button>
+                <button
+                    onClick={() => onVisibilityAll?.(false)}
+                    title="Hide All Layers"
+                    style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                >
+                    <EyeOff size={14} /> Hide All
                 </button>
             </div>
             <div className="tree-content" style={{ padding: '8px' }}>
@@ -218,14 +244,20 @@ const LayerNode: React.FC<LayerNodeProps> = ({
 
     const handleDragStart = (e: React.DragEvent) => {
         if (layer.id === undefined) return;
-        e.dataTransfer.setData('application/emg-layer-id', layer.id.toString());
+        _activeDragLayerId = layer.id;
+        e.dataTransfer.effectAllowed = 'move';
         e.stopPropagation();
+    };
+
+    const handleDragEnd = () => {
+        _activeDragLayerId = null;
+        setDragOverPos(null);
     };
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!layer.id) return;
+        if (layer.id === undefined) return;
 
         const rect = e.currentTarget.getBoundingClientRect();
         const y = e.clientY - rect.top;
@@ -244,26 +276,21 @@ const LayerNode: React.FC<LayerNodeProps> = ({
         e.preventDefault();
         e.stopPropagation();
         setDragOverPos(null);
-    }
+    };
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
+
+        const pos = dragOverPos === 'top' ? 'before' : dragOverPos === 'bottom' ? 'after' : 'inside';
         setDragOverPos(null);
 
-        const draggedIdStr = e.dataTransfer.getData('application/emg-layer-id');
-        if (!draggedIdStr) return;
-        const draggedId = parseInt(draggedIdStr, 10);
+        const draggedId = _activeDragLayerId;
+        _activeDragLayerId = null;
 
-        if (draggedId === layer.id) return; // Drop on self
+        if (draggedId === null || draggedId === layer.id) return;
 
         if (layer.id !== undefined) {
-            // Map UI position to logic position
-            // "top" -> "before"
-            // "bottom" -> "after"
-            // "inside" -> "inside"
-
-            const pos = dragOverPos === 'top' ? 'before' : dragOverPos === 'bottom' ? 'after' : 'inside';
             onMove(draggedId, layer.id, pos);
         }
     };
@@ -300,6 +327,7 @@ const LayerNode: React.FC<LayerNodeProps> = ({
                 onClick={handleSelect}
                 draggable
                 onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
