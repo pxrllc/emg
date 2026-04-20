@@ -74,7 +74,7 @@ function App() {
                 pointerEvents: 'none',
                 letterSpacing: '0.03em',
             }}>
-                v0.1.1a · pxrllc
+                v0.1.2 · pxrllc
             </div>
         </>
     );

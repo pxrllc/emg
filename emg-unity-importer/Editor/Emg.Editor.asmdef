@@ -2,7 +2,8 @@
     "name": "Emg.Editor",
     "rootNamespace": "",
     "references": [
-        "Emg.Runtime"
+        "Emg.Runtime",
+        "Unity.ugui"
     ],
     "includePlatforms": [
         "Editor"

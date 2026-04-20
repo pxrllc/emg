@@ -3,22 +3,32 @@ using System.IO;
 using System.IO.Compression;
 using UnityEditor.AssetImporters;
 using UnityEngine;
+using UnityEngine.UI;
 using Emg.Runtime;
 using UnityEditor;
 
-[ScriptedImporter(1, "emg")]
-public class EmgImporter : ScriptedImporter
+namespace Emg.Editor
 {
-    [SerializeField] public float pixelsPerUnit = 100f;
-
-    public override void OnImportAsset(AssetImportContext ctx)
+    public enum EmgRenderMode
     {
-        try
+        SpriteRenderer,
+        UIImage
+    }
+
+    [ScriptedImporter(1, "emg")]
+    public class EmgImporter : ScriptedImporter
+    {
+        [SerializeField] public EmgRenderMode renderMode = EmgRenderMode.SpriteRenderer;
+        [Tooltip("SpriteRenderer モード時の Pixels Per Unit")]
+        [SerializeField] public float pixelsPerUnit = 100f;
+
+        public override void OnImportAsset(AssetImportContext ctx)
         {
-            // Read .emg file as ZIP
-            using (var stream = new FileStream(ctx.assetPath, FileMode.Open, FileAccess.Read))
-            using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+            try
             {
+                using var stream = new FileStream(ctx.assetPath, FileMode.Open, FileAccess.Read);
+                using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+
                 // 1. Parse data.json
                 var dataEntry = archive.GetEntry("data.json");
                 if (dataEntry == null)
@@ -27,12 +37,9 @@ public class EmgImporter : ScriptedImporter
                     return;
                 }
 
-                EmgData emgData = null;
+                EmgData emgData;
                 using (var reader = new StreamReader(dataEntry.Open()))
-                {
-                    string json = reader.ReadToEnd();
-                    emgData = JsonUtility.FromJson<EmgData>(json);
-                }
+                    emgData = JsonUtility.FromJson<EmgData>(reader.ReadToEnd());
 
                 if (emgData == null)
                 {
@@ -40,173 +47,293 @@ public class EmgImporter : ScriptedImporter
                     return;
                 }
 
-                // 2. Load Textures
-                var textures = new Dictionary<string, Texture2D>();
-                if (emgData.textures != null)
-                {
-                    foreach (var texInfo in emgData.textures)
-                    {
-                        // v0.2.2: Use textureFile directly
-                        string texFileName = texInfo.textureFile;
-                        var texEntry = archive.GetEntry(texFileName);
-                        
-                        if (texEntry != null)
-                        {
-                            using (var memStream = new MemoryStream())
-                            {
-                                texEntry.Open().CopyTo(memStream);
-                                // Disable MipChain for Sprites
-                                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                                tex.LoadImage(memStream.ToArray());
-                                tex.name = texFileName;
-                                
-                                // Texture Settings
-                                tex.filterMode = FilterMode.Bilinear;
-                                tex.wrapMode = TextureWrapMode.Clamp;
-                                tex.alphaIsTransparency = true;
-                                
-                                ctx.AddObjectToAsset(texFileName, tex);
-                                textures[texFileName] = tex;
-                            }
-                        }
-                        else
-                        {
-                             Debug.LogWarning($"[EmgImporter] Texture {texFileName} not found.");
-                        }
-                    }
-                }
+                // 2. Load Textures (shared)
+                var textures = LoadTextures(archive, emgData, ctx);
 
-                // 3. Create Material (Simple unlit/sprite material)
-                var material = new Material(Shader.Find("Sprites/Default"));
-                material.name = "EmgMaterial";
-                ctx.AddObjectToAsset("material", material);
+                // 3. Create Sprites (shared: Sprite.Create is same for both modes)
+                var sprites = CreateSprites(emgData, textures);
 
-                // 4. Create GameObject Hierarchy
+                // 4. Create EmgAssetData ScriptableObject
+                var assetData = BuildAssetData(emgData);
+                ctx.AddObjectToAsset("emgAssetData", assetData);
+
+                // 5. Build GameObject hierarchy
                 var rootGo = new GameObject(Path.GetFileNameWithoutExtension(ctx.assetPath));
-                
-                if (emgData.parts != null)
-                {
-                    foreach (var part in emgData.parts)
-                    {
-                        if (part.layers == null) continue;
 
-                        GameObject partGo;
-                        
-                        // Sort layers by textureZIndex (ascending)
-                        part.layers.Sort((a, b) => a.textureZIndex.CompareTo(b.textureZIndex));
+                if (renderMode == EmgRenderMode.UIImage)
+                    BuildHierarchy_UIImage(rootGo, emgData, sprites, ctx);
+                else
+                    BuildHierarchy_SpriteRenderer(rootGo, emgData, sprites, textures, ctx);
 
-                        if (part.type == "switch")
-                        {
-                             // Container for Switch parts
-                             partGo = new GameObject(part.partID);
-                             partGo.transform.SetParent(rootGo.transform, false);
-                        }
-                        else // static
-                        {
-                             // Static parts usually have 1 layer, the object IS the layer
-                             // But to keep logic simple and uniform: Create Part object, put layer inside?
-                             // Or direct? 
-                             // EmgImporter v0.1 strategy: "Single layer -> direct".
-                             // Let's stick to Container strategy for consistency if helpful, OR direct.
-                             // V0.2.2 spec implies "static" is simple.
-                             // Let's make "static" a container too, usually with 1 child. 
-                             // OR: If static, create GO named partID, add renderer.
-                             // BUT static parts might technically have multiple layers in some complex PSD setups? 
-                             // Spec says "type: static". 
-                             // Let's treat valid static part as simple container for safety.
-                             partGo = new GameObject(part.partID);
-                             partGo.transform.SetParent(rootGo.transform, false);
-                        }
-
-                        // Create Layers
-                        foreach (var layer in part.layers)
-                        {
-                            // Update opacity if close to 0 (fixing field initialization issues)
-                            if (layer.opacity <= 0.001f) layer.opacity = 1.0f;
-                            
-                            // Debug.Log($"LayerOp: {layer.textureID} = {layer.opacity}");
-
-                            if (string.IsNullOrEmpty(layer.textureFile) || !textures.ContainsKey(layer.textureFile)) 
-                            {
-                                // Fallback: try to find any texture if textureFile missing?
-                                // v0.2.2 spec requires textureFile.
-                                continue; 
-                            }
-
-                            var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
-                            layerGo.transform.SetParent(partGo.transform, false);
-                            
-                            // Visibility / Active State
-                            if (part.type == "switch")
-                            {
-                                // Only default is active
-                                layerGo.SetActive(layer.textureID == part.@default);
-                            }
-                            else
-                            {
-                                layerGo.SetActive(true);
-                            }
-
-                            // --- Position Calculation ---
-                            // 1. Calculate center of the layer in Canvas coordinates
-                            // v0.2.2: basePosition is Top-Left of the layer on Canvas
-                            float layerCenterX = layer.basePosition_x + layer.width / 2f;
-                            float layerCenterY = layer.basePosition_y + layer.height / 2f;
-
-                            // 2. Calculate center of the Canvas
-                            float canvasCenterX = emgData.baseCanvasWidth / 2f;
-                            float canvasCenterY = emgData.baseCanvasHeight / 2f;
-
-                            // 3. Calculate offset from Canvas Center
-                            float offsetX = layerCenterX - canvasCenterX;
-                            float offsetY = layerCenterY - canvasCenterY;
-
-                            // 4. Convert to Unity Units and Coordinates (Flip Y)
-                            float unityX = offsetX / pixelsPerUnit;
-                            float unityY = -offsetY / pixelsPerUnit;
-
-                            // Apply position (Local to Parent, but Parent is at 0,0 relative to Root)
-                            layerGo.transform.localPosition = new Vector3(unityX, unityY, 0);
-
-                            // --- SpriteRenderer ---
-                            var renderer = layerGo.AddComponent<SpriteRenderer>();
-                            renderer.sharedMaterial = material;
-                            renderer.sortingOrder = layer.textureZIndex;
-                            
-                            // Opacity
-                            Color color = Color.white;
-                            color.a = layer.opacity;
-                            renderer.color = color;
-
-                            // --- Sprite Creation ---
-                            Texture2D tex = textures[layer.textureFile];
-                            
-                            // Rect from Pixel Coords (Atlas)
-                            // Unity Rect Origin is Bottom-Left. Atlas is Top-Left.
-                            float rectX = layer.x;
-                            float rectY = tex.height - (layer.y + layer.height); // Flip Y
-                            float rectW = layer.width;
-                            float rectH = layer.height;
-                            
-                            if (rectW > 0 && rectH > 0)
-                            {
-                                var sprite = Sprite.Create(tex, new Rect(rectX, rectY, rectW, rectH), new Vector2(0.5f, 0.5f), pixelsPerUnit);
-                                sprite.name = $"{layer.textureID}_sprite";
-                                
-                                ctx.AddObjectToAsset($"sprite_{part.partID}_{layer.textureID}", sprite);
-                                renderer.sprite = sprite;
-                            }
-                        }
-                    }
-                }
+                // 6. Attach EmgController
+                var controller = rootGo.AddComponent<EmgController>();
+                controller.assetData = assetData;
 
                 ctx.AddObjectToAsset("root", rootGo);
                 ctx.SetMainObject(rootGo);
             }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[EmgImporter] Error importing {ctx.assetPath}: {e}");
+            }
         }
-        catch (System.Exception e)
+
+        // -------------------------
+        // Texture Loading
+        // -------------------------
+
+        private static Dictionary<string, Texture2D> LoadTextures(
+            ZipArchive archive, EmgData emgData, AssetImportContext ctx)
         {
-            Debug.LogError($"[EmgImporter] Error importing {ctx.assetPath}: {e}");
+            var textures = new Dictionary<string, Texture2D>();
+            if (emgData.textures == null) return textures;
+
+            foreach (var texInfo in emgData.textures)
+            {
+                var texEntry = archive.GetEntry(texInfo.textureFile);
+                if (texEntry == null)
+                {
+                    Debug.LogWarning($"[EmgImporter] Texture {texInfo.textureFile} not found.");
+                    continue;
+                }
+
+                using var memStream = new MemoryStream();
+                texEntry.Open().CopyTo(memStream);
+
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                tex.LoadImage(memStream.ToArray());
+                tex.name = texInfo.textureFile;
+                tex.filterMode = FilterMode.Bilinear;
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.alphaIsTransparency = true;
+
+                ctx.AddObjectToAsset(texInfo.textureFile, tex);
+                textures[texInfo.textureFile] = tex;
+            }
+
+            return textures;
+        }
+
+        // -------------------------
+        // Sprite Creation (shared)
+        // -------------------------
+
+        // key: "{partID}_{textureID}"
+        private static Dictionary<string, Sprite> CreateSprites(
+            EmgData emgData, Dictionary<string, Texture2D> textures)
+        {
+            var sprites = new Dictionary<string, Sprite>();
+            if (emgData.parts == null) return sprites;
+
+            foreach (var part in emgData.parts)
+            {
+                if (part.layers == null) continue;
+                foreach (var layer in part.layers)
+                {
+                    if (string.IsNullOrEmpty(layer.textureFile) || !textures.ContainsKey(layer.textureFile))
+                        continue;
+
+                    var tex = textures[layer.textureFile];
+                    float rectX = layer.x;
+                    float rectY = tex.height - (layer.y + layer.height); // flip Y for Unity
+                    float rectW = layer.width;
+                    float rectH = layer.height;
+
+                    if (rectW <= 0 || rectH <= 0) continue;
+
+                    var sprite = Sprite.Create(
+                        tex,
+                        new Rect(rectX, rectY, rectW, rectH),
+                        new Vector2(0.5f, 0.5f),
+                        100f); // pixelsPerUnit fixed at 100 for sprite creation
+                    sprite.name = $"{part.partID}_{layer.textureID}_sprite";
+                    sprites[$"{part.partID}_{layer.textureID}"] = sprite;
+                }
+            }
+
+            return sprites;
+        }
+
+        // -------------------------
+        // SpriteRenderer Hierarchy
+        // -------------------------
+
+        private void BuildHierarchy_SpriteRenderer(
+            GameObject rootGo, EmgData emgData,
+            Dictionary<string, Sprite> sprites,
+            Dictionary<string, Texture2D> textures,
+            AssetImportContext ctx)
+        {
+            var material = new Material(Shader.Find("Sprites/Default"));
+            material.name = "EmgMaterial";
+            ctx.AddObjectToAsset("material", material);
+
+            if (emgData.parts == null) return;
+
+            foreach (var part in emgData.parts)
+            {
+                if (part.layers == null) continue;
+                part.layers.Sort((a, b) => a.textureZIndex.CompareTo(b.textureZIndex));
+
+                var partGo = new GameObject(part.partID);
+                partGo.transform.SetParent(rootGo.transform, false);
+
+                foreach (var layer in part.layers)
+                {
+                    if (layer.opacity <= 0.001f) layer.opacity = 1.0f;
+                    if (string.IsNullOrEmpty(layer.textureFile) || !textures.ContainsKey(layer.textureFile))
+                        continue;
+
+                    var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
+                    layerGo.transform.SetParent(partGo.transform, false);
+                    layerGo.SetActive(part.type == "switch"
+                        ? layer.textureID == part.@default
+                        : true);
+
+                    // Position
+                    float cx = layer.basePosition_x + layer.width / 2f;
+                    float cy = layer.basePosition_y + layer.height / 2f;
+                    float unityX = (cx - emgData.baseCanvasWidth / 2f) / pixelsPerUnit;
+                    float unityY = -((cy - emgData.baseCanvasHeight / 2f) / pixelsPerUnit);
+                    layerGo.transform.localPosition = new Vector3(unityX, unityY, 0);
+
+                    // SpriteRenderer
+                    var sr = layerGo.AddComponent<SpriteRenderer>();
+                    sr.sharedMaterial = material;
+                    sr.sortingOrder = layer.textureZIndex;
+                    sr.color = new Color(1, 1, 1, layer.opacity);
+
+                    string key = $"{part.partID}_{layer.textureID}";
+                    if (sprites.TryGetValue(key, out var sprite))
+                    {
+                        ctx.AddObjectToAsset($"sprite_{key}", sprite);
+                        sr.sprite = sprite;
+                    }
+                }
+            }
+        }
+
+        // -------------------------
+        // UIImage Hierarchy
+        // -------------------------
+
+        private static void BuildHierarchy_UIImage(
+            GameObject rootGo, EmgData emgData,
+            Dictionary<string, Sprite> sprites,
+            AssetImportContext ctx)
+        {
+            // Root RectTransform sized to canvas
+            var rootRt = rootGo.AddComponent<RectTransform>();
+            rootRt.anchorMin = new Vector2(0.5f, 0.5f);
+            rootRt.anchorMax = new Vector2(0.5f, 0.5f);
+            rootRt.sizeDelta = new Vector2(emgData.baseCanvasWidth, emgData.baseCanvasHeight);
+            rootRt.anchoredPosition = Vector2.zero;
+
+            if (emgData.parts == null) return;
+
+            foreach (var part in emgData.parts)
+            {
+                if (part.layers == null) continue;
+                part.layers.Sort((a, b) => a.textureZIndex.CompareTo(b.textureZIndex));
+
+                var partGo = new GameObject(part.partID);
+                var partRt = partGo.AddComponent<RectTransform>();
+                partRt.anchorMin = new Vector2(0.5f, 0.5f);
+                partRt.anchorMax = new Vector2(0.5f, 0.5f);
+                partRt.sizeDelta = Vector2.zero;
+                partRt.anchoredPosition = Vector2.zero;
+                partGo.transform.SetParent(rootGo.transform, false);
+
+                foreach (var layer in part.layers)
+                {
+                    if (layer.opacity <= 0.001f) layer.opacity = 1.0f;
+
+                    var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
+                    layerGo.transform.SetParent(partGo.transform, false);
+                    layerGo.SetActive(part.type == "switch"
+                        ? layer.textureID == part.@default
+                        : true);
+
+                    // RectTransform: anchor center, position/size in pixels
+                    var rt = layerGo.AddComponent<RectTransform>();
+                    rt.anchorMin = new Vector2(0.5f, 0.5f);
+                    rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    rt.sizeDelta = new Vector2(layer.width, layer.height);
+
+                    float cx = layer.basePosition_x + layer.width / 2f;
+                    float cy = layer.basePosition_y + layer.height / 2f;
+                    float anchoredX = cx - emgData.baseCanvasWidth / 2f;
+                    float anchoredY = -((cy - emgData.baseCanvasHeight / 2f)); // flip Y
+                    rt.anchoredPosition = new Vector2(anchoredX, anchoredY);
+
+                    // Image
+                    var img = layerGo.AddComponent<Image>();
+                    img.raycastTarget = false;
+                    img.color = new Color(1, 1, 1, layer.opacity);
+
+                    string key = $"{part.partID}_{layer.textureID}";
+                    if (sprites.TryGetValue(key, out var sprite))
+                    {
+                        ctx.AddObjectToAsset($"sprite_{key}", sprite);
+                        img.sprite = sprite;
+                        img.type = Image.Type.Simple;
+                        img.preserveAspect = false;
+                    }
+                }
+            }
+        }
+
+        // -------------------------
+        // EmgAssetData Generation
+        // -------------------------
+
+        private static EmgAssetData BuildAssetData(EmgData emgData)
+        {
+            var assetData = ScriptableObject.CreateInstance<EmgAssetData>();
+            assetData.name = "EmgAssetData";
+            assetData.baseCanvasWidth = emgData.baseCanvasWidth;
+            assetData.baseCanvasHeight = emgData.baseCanvasHeight;
+
+            if (emgData.sprites == null || emgData.sprites.Count == 0)
+            {
+                assetData.spriteDefinitions = new EmgSpriteDefinition[0];
+                return assetData;
+            }
+
+            var defs = new List<EmgSpriteDefinition>();
+            foreach (var sprite in emgData.sprites)
+            {
+                if (sprite.sequence == null) continue;
+
+                var def = new EmgSpriteDefinition
+                {
+                    spriteID = sprite.spriteID,
+                    targetPartID = sprite.targetPartID,
+                    fps = sprite.fps,
+                    sequenceType = sprite.sequence.type == "random_hold"
+                        ? SequenceType.random_hold
+                        : SequenceType.ordered,
+                    frames = sprite.sequence.frames?.ToArray() ?? new string[0],
+                    hasTrigger = sprite.trigger != null
+                };
+
+                if (sprite.trigger != null)
+                {
+                    def.triggerType = sprite.trigger.type switch
+                    {
+                        "auto_loop"       => TriggerType.auto_loop,
+                        "random_interval" => TriggerType.random_interval,
+                        _                 => TriggerType.external
+                    };
+                    def.intervalMin = sprite.trigger.intervalMin;
+                    def.intervalMax = sprite.trigger.intervalMax;
+                }
+
+                defs.Add(def);
+            }
+
+            assetData.spriteDefinitions = defs.ToArray();
+            return assetData;
         }
     }
 }

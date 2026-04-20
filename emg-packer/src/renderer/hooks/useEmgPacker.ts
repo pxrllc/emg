@@ -16,43 +16,43 @@ const normalizeOpacity = (v?: number): number => {
 const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Record<number, LayerMeta> => {
     const newMeta = { ...currentMeta };
 
-    root.children?.forEach(child => {
-        const partId = child.name || `Part_${child.id}`;
-        const partType = (child.children && child.children.length > 0) ? 'switch' : 'static';
-
-        if (child.id !== undefined) {
-            if (!newMeta[child.id]) {
-                newMeta[child.id] = {
-                    id: child.id,
-                    partId: partId,
-                    type: partType,
-                    visible: !child.hidden,
-                    opacity: normalizeOpacity(child.opacity),
-                    blendMode: child.blendMode || 'normal'
-                };
-            } else {
-                newMeta[child.id].partId = partId;
-            }
+    const traverse = (layer: PsdLayer, defaultPartId: string, defaultType: 'static' | 'switch') => {
+        const isGroup = layer.children && layer.children.length > 0;
+        
+        let currentPartId = defaultPartId;
+        let currentType = defaultType;
+        
+        if (isGroup) {
+            currentPartId = layer.name || `Group_${layer.id}`;
+            currentType = 'switch';
         }
 
-        const traverse = (layer: PsdLayer, pid: string) => {
-            if (layer.id !== undefined) {
-                if (!newMeta[layer.id]) {
-                    newMeta[layer.id] = {
-                        id: layer.id,
-                        partId: pid,
-                        type: 'static',
-                        visible: !layer.hidden,
-                        opacity: normalizeOpacity(layer.opacity),
-                        blendMode: layer.blendMode || 'normal'
-                    };
-                } else {
-                    newMeta[layer.id].partId = pid;
-                }
+        if (layer.id !== undefined) {
+            if (!newMeta[layer.id]) {
+                newMeta[layer.id] = {
+                    id: layer.id,
+                    partId: currentPartId,
+                    type: currentType,
+                    visible: !layer.hidden,
+                    opacity: normalizeOpacity(layer.opacity),
+                    blendMode: layer.blendMode || 'normal'
+                };
+            } else {
+                newMeta[layer.id].partId = currentPartId;
             }
-            layer.children?.forEach(l => traverse(l, pid));
-        };
-        child.children?.forEach(l => traverse(l, partId));
+        }
+        
+        if (isGroup) {
+            layer.children?.forEach(l => traverse(l, currentPartId, currentType));
+        }
+    };
+
+    root.children?.forEach(child => {
+        const isGroup = child.children && child.children.length > 0;
+        const pid = child.name || `Root_${child.id}`;
+        const ptype = isGroup ? 'switch' : 'static';
+        
+        traverse(child, pid, ptype);
     });
 
     return newMeta;

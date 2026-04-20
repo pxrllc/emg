@@ -63,6 +63,22 @@ namespace Emg.Runtime
         public string spriteID;
         public string targetPartID;
         public float fps;
-        // Simplified for now, just to allow deserialization without error
+        public EmgSequence sequence;
+        public EmgTrigger trigger; // nullable: null means external-only control
+    }
+
+    [Serializable]
+    public class EmgSequence
+    {
+        public string type; // "ordered" | "random_hold"
+        public List<string> frames;
+    }
+
+    [Serializable]
+    public class EmgTrigger
+    {
+        public string type; // "auto_loop" | "random_interval" | "external"
+        public float intervalMin;
+        public float intervalMax;
     }
 }
