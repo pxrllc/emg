@@ -3,6 +3,7 @@ import type { PackResult } from './TexturePacker';
 import type { LayerMeta } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
+import { generateDraftMapping } from './MappingGenerator';
 
 export interface EmgData {
     version: string;
@@ -327,6 +328,12 @@ export class EmgGenerator {
         // 2. Generate JSON
         const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
+
+        // 3. Generate mapping.json draft (optional, only when blink/lipSync candidates are found)
+        const mapping = generateDraftMapping(emgData);
+        if (mapping) {
+            zip.file('mapping.json', JSON.stringify(mapping, null, 2));
+        }
 
         return await zip.generateAsync({ type: 'blob' });
     }

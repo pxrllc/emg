@@ -1,7 +1,7 @@
 # EMG フォーマット JSON 仕様書
 
-**バージョン：** 0.2.2（Draft）  
-**更新日：** 2026-02-16
+**バージョン：** 0.3.0（Draft）  
+**更新日：** 2026-08-19
 
 ---
 
@@ -12,11 +12,14 @@ EMG（easy Movable Graphic）は、パーツ分割されたキャラクター素
 
 ```
 *.emg（ZIP）
-├── data.json      ← メタデータ・レイヤー・パーツ・アニメーション定義
-└── texture.png    ← テクスチャアトラス（全パーツをパッキングした1枚の画像）
+├── data.json        ← メタデータ・レイヤー・パーツ・アニメーション定義
+├── mapping.json      ← [任意] 表情/まばたき/リップシンクの意味づけ（v0.3.0〜、詳細は emg-mapping-spec.md）
+└── texture.png       ← テクスチャアトラス（全パーツをパッキングした1枚の画像）
 ```
 
 テクスチャアトラスは複数枚になる場合は `texture_0.png`, `texture_1.png` のように連番で持つことができます。
+
+`mapping.json` は完全にオプショナルなコンパニオンファイルであり、存在しなくても `.emg` ファイルとして有効です。詳細は `emg-mapping-spec.md` を参照してください。
 
 ---
 
@@ -221,6 +224,8 @@ EMG プレイヤーが自律的にアニメーションを発火させるタイ�
 | `random_interval` | `intervalMin` ～ `intervalMax` 秒のランダムな間隔で発火する | 瞬き（3〜8秒ごとなど） |
 | `external` | EMG プレイヤーは自律発火しない。`spriteID` で外部から明示的にトリガーする | 会話中の口パクなど |
 
+> **`mapping.json` との共存について：** `mapping.json`（`emg-mapping-spec.md` 参照）で明示的にまばたき/リップシンク対象として指定された `partID` に対応する `sprites[]` エントリが存在する場合、プレイヤーは `mapping.json` 側の制御を優先し、当該エントリの自律発火（`trigger`）を行ってはなりません。詳細な共存ルールは `emg-mapping-spec.md` を参照してください。
+
 ---
 
 ## JSON 全体サンプル
@@ -381,3 +386,4 @@ PSD を EMG にパッキングする際の各フィールドの対応表です�
 | 0.2.0 (Draft) | `parts[]` によるグループ化導入。`type: static/switch`、`default`、`partID` を追加。`textureFile` フィールドを追加（複数アトラス対応） |
 | 0.2.1 (Draft) | `Sprite` を全面刷新。`loop` / `useTex` を廃止し `targetPartID`、`sequence`（`type` + `frames`）、`trigger`（オプション）に変更 |
 | 0.2.2 (Draft) | ルートに `textures[]` を追加。テクスチャファイル名・サイズを一元管理。`textureFile` 文字列がファイル名兼参照キーとして機能 |
+| 0.3.0 (Draft) | `mapping.json`（コンパニオンファイル）を追加。表情/まばたき/リップシンクの意味づけレイヤーを定義。既存の `data.json` ルートスキーマへの破壊的変更は無し（詳細は `emg-mapping-spec.md`） |
