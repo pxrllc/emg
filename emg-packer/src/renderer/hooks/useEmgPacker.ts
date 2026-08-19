@@ -186,7 +186,7 @@ export function useEmgPacker() {
         // Return minimal structure while waiting for pack result (enables JSON tab immediately)
         if (!packResult) {
             return {
-                version: '0.2.2',
+                version: '0.3.0',
                 baseCanvasWidth: psdRoot.width || 0,
                 baseCanvasHeight: psdRoot.height || 0,
                 textures: [],

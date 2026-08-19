@@ -47,6 +47,23 @@ namespace Emg.Editor
                     return;
                 }
 
+                // 1.5 Parse mapping.json (optional companion file, v0.3.0+)
+                EmgMapping emgMapping = null;
+                var mappingEntry = archive.GetEntry("mapping.json");
+                if (mappingEntry != null)
+                {
+                    try
+                    {
+                        using var mReader = new StreamReader(mappingEntry.Open());
+                        emgMapping = EmgMappingJsonUtil.ParseMapping(mReader.ReadToEnd());
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning($"[EmgImporter] Failed to parse mapping.json in {ctx.assetPath}: {e}");
+                        emgMapping = null;
+                    }
+                }
+
                 // 2. Load Textures (shared)
                 var textures = LoadTextures(archive, emgData, ctx);
 
@@ -54,7 +71,7 @@ namespace Emg.Editor
                 var sprites = CreateSprites(emgData, textures);
 
                 // 4. Create EmgAssetData ScriptableObject
-                var assetData = BuildAssetData(emgData);
+                var assetData = BuildAssetData(emgData, emgMapping);
                 ctx.AddObjectToAsset("emgAssetData", assetData);
 
                 // 5. Build GameObject hierarchy
@@ -287,12 +304,37 @@ namespace Emg.Editor
         // EmgAssetData Generation
         // -------------------------
 
-        private static EmgAssetData BuildAssetData(EmgData emgData)
+        private static EmgAssetData BuildAssetData(EmgData emgData, EmgMapping emgMapping)
         {
             var assetData = ScriptableObject.CreateInstance<EmgAssetData>();
             assetData.name = "EmgAssetData";
             assetData.baseCanvasWidth = emgData.baseCanvasWidth;
             assetData.baseCanvasHeight = emgData.baseCanvasHeight;
+            assetData.semanticMapping = emgMapping;
+
+            // Note: captured before BuildHierarchy_* sorts part.layers by textureZIndex,
+            // so layerTextureIDs preserves data.json's original array order (needed for the
+            // blink/lipSync positional fallback in emg-mapping-spec.md, which indexes by
+            // layers[0]/[1]/[2] as declared, not by render order).
+            if (emgData.parts != null)
+            {
+                var metas = new List<EmgPartMeta>();
+                foreach (var part in emgData.parts)
+                {
+                    metas.Add(new EmgPartMeta
+                    {
+                        partID = part.partID,
+                        type = part.type,
+                        defaultTextureID = part.@default,
+                        layerTextureIDs = part.layers?.ConvertAll(l => l.textureID).ToArray() ?? new string[0]
+                    });
+                }
+                assetData.partMetas = metas.ToArray();
+            }
+            else
+            {
+                assetData.partMetas = new EmgPartMeta[0];
+            }
 
             if (emgData.sprites == null || emgData.sprites.Count == 0)
             {

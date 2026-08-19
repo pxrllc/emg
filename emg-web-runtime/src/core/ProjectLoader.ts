@@ -1,11 +1,12 @@
 
 import JSZip from 'jszip';
-import type { EmgAvatar, EmgStates } from '../types/schema';
+import type { EmgAvatar, EmgStates, EmgSemanticMapping } from '../types/schema';
 
 export interface LoadedProject {
     avatar: EmgAvatar;
     states: EmgStates;
     assets: Map<string, string>; // path -> blobUrl
+    mapping?: EmgSemanticMapping; // mapping.json (v0.3.0+, optional)
 }
 
 class ProjectLoader {
@@ -127,6 +128,19 @@ class ProjectLoader {
                 }
             });
 
+            // 2.5. Load mapping.json (Optional companion file, v0.3.0+)
+            let mapping: EmgSemanticMapping | undefined;
+            const mappingFile = content.file('mapping.json');
+            if (mappingFile) {
+                try {
+                    const mappingJsonStr = await mappingFile.async('string');
+                    mapping = JSON.parse(mappingJsonStr);
+                } catch (e) {
+                    console.warn('Failed to parse mapping.json, ignoring:', e);
+                    mapping = undefined;
+                }
+            }
+
             // 3. Load Assets (Textures)
             const assets = new Map<string, string>();
             const texturePaths = new Set<string>();
@@ -175,7 +189,7 @@ class ProjectLoader {
                 }
             }
 
-            return { avatar, states, assets };
+            return { avatar, states, assets, mapping };
 
         } catch (e) {
             console.error('Failed to load project:', e);
@@ -223,7 +237,8 @@ class ProjectLoader {
         return {
             avatar: JSON.parse(JSON.stringify(project.avatar)), // Deep clone avatar
             states: JSON.parse(JSON.stringify(project.states)), // Deep clone states
-            assets: new Map(project.assets) // Shallow clone map (values are strings/urls, so safe)
+            assets: new Map(project.assets), // Shallow clone map (values are strings/urls, so safe)
+            mapping: project.mapping ? JSON.parse(JSON.stringify(project.mapping)) : undefined
         };
     }
 
@@ -240,7 +255,8 @@ class ProjectLoader {
                 sprites: []
             },
             states: this.generateDefaultStates(),
-            assets: new Map()
+            assets: new Map(),
+            mapping: undefined
         };
     }
 }

@@ -296,7 +296,7 @@ export class EmgGenerator {
         // Then `App.tsx` will fill it.
 
         return {
-            version: '0.2.2',
+            version: '0.3.0',
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
             textures: [{

@@ -137,3 +137,27 @@ export interface EmgVariant {
         [partID: string]: string;
     };
 }
+
+// --- mapping.json (EMG v0.3.0+, optional companion file) ---
+// See emg-mapping-spec.md for the normative schema and resolution logic.
+
+export interface EmgSemanticMapping {
+    avatarId: string;
+    baseMapping: {
+        blinkPartKey?: string;
+        blinkParts?: { open?: string; half?: string; closed?: string };
+        blink: { open: string; half: string; closed: string };
+        lipSyncPartKey?: string;
+        lipSyncParts?: { a?: string; i?: string; u?: string; e?: string; o?: string; n?: string };
+        lipSync: { open?: string; a: string; i: string; u: string; e: string; o: string; n: string };
+    };
+    expressions: Record<string, {
+        parts?: Record<string, string[]>;
+        eyebrow?: string;
+        other?: string[];
+        overrides?: {
+            blink?: { open: string; half: string; closed: string };
+            lipSync?: { a: string; i: string; u: string; e: string; o: string; n: string };
+        };
+    }>;
+}

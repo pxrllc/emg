@@ -257,6 +257,7 @@ function App() {
         setProject(newProject);
         // Reload State Machine
         const sm = new EmgStateMachine(newProject.states);
+        sm.loadMapping(newProject.mapping, newProject.avatar.parts);
         setStateMachine(sm);
 
         // Restore current state if possible
@@ -272,6 +273,7 @@ function App() {
         const empty = projectLoader.createEmptyProject();
         setProject(empty);
         const sm = new EmgStateMachine(empty.states);
+        sm.loadMapping(empty.mapping, empty.avatar.parts);
         setStateMachine(sm);
         setCurrentState(empty.states.defaultState);
     };
@@ -321,6 +323,7 @@ function App() {
                 setProject(loaded);
 
                 const sm = new EmgStateMachine(loaded.states);
+                sm.loadMapping(loaded.mapping, loaded.avatar.parts);
                 setStateMachine(sm);
                 setCurrentState(sm.getCurrentState()?.name || 'neutral');
 

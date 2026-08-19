@@ -12,6 +12,11 @@ export const exportProject = async (project: LoadedProject): Promise<Blob> => {
     // Save states data
     zip.file('states.json', JSON.stringify(project.states, null, 2));
 
+    // Save mapping data (Optional companion file, v0.3.0+)
+    if (project.mapping) {
+        zip.file('mapping.json', JSON.stringify(project.mapping, null, 2));
+    }
+
     // Save Assets
     // We iterate through all assets in the map. 
     // Keys are relative paths (e.g. "texture_0.png", "custom/foo.png").

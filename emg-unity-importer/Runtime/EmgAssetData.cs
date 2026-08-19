@@ -8,6 +8,22 @@ namespace Emg.Runtime
         public int baseCanvasWidth;
         public int baseCanvasHeight;
         public EmgSpriteDefinition[] spriteDefinitions;
+
+        // mapping.json (v0.3.0+) から読み込んだ意味づけ情報。無ければ null。
+        public EmgMapping semanticMapping;
+
+        // parts[] の役割解決（blink/mouth ヒューリスティック・位置的フォールバック）に必要な
+        // 静的メタデータ。GameObject 階層には type/default/レイヤー順序が残らないためここに保持する。
+        public EmgPartMeta[] partMetas;
+    }
+
+    [Serializable]
+    public class EmgPartMeta
+    {
+        public string partID;
+        public string type; // "static" or "switch"
+        public string defaultTextureID;
+        public string[] layerTextureIDs; // data.json 記載順（textureZIndex ソート前）
     }
 
     [Serializable]
