@@ -133,6 +133,15 @@
         element.style.opacity = "1";
     }
 
+    // 表示/非表示は display で行う。
+    // 以前は opacity:0 で隠していたが、それだと (1) 非表示レイヤーも合成対象として残り
+    // （senti は 36 レイヤー中 18 枚が常時非表示）、(2) レイヤー固有の不透明度
+    // （data.json の layer.opacity）を上書きしてしまい反映できなかった。
+    // opacity は layer.opacity 専用に使う。
+    function setLayerVisible(el, visible) {
+        el.style.display = visible ? 'block' : 'none';
+    }
+
     function renderLayers(jsonData, textureBlobs, containerId) {
         const container = document.getElementById(containerId);
         if (!container) {
@@ -158,7 +167,10 @@
                     div.classList.add('layer');
                     div.dataset.partId = part.partID;
                     div.dataset.type = part.type;
-                    div.id = layer.textureID; // ユニークIDとして使用
+                    div.id = layer.textureID; // 後方互換のため維持
+                    // textureID はパーツ間で重複しうる（senti では "01" が Mouth/Eyes/Eyebrows に存在）ため、
+                    // 切り替えの一致判定には id ではなく data 属性を使う。
+                    div.dataset.textureId = layer.textureID;
 
                     applyLayerStyles(div);
 
@@ -196,15 +208,13 @@
                         div.style.backgroundSize = `${texW}px ${texH}px`;
                     }
 
+                    // レイヤー固有の不透明度（未指定なら 1）
+                    const baseOpacity = (typeof layer.opacity === 'number') ? layer.opacity : 1;
+                    div.dataset.baseOpacity = String(baseOpacity);
+                    div.style.opacity = String(baseOpacity);
+
                     // type: switch の場合、default でないものは非表示
-                    if (part.type === 'switch') {
-                        if (layer.textureID === part.default) {
-                            div.style.opacity = '1';
-                        } else {
-                            // display: none だとレイアウト崩れの恐れはないが（absoluteなので）、opacity制御の方がフェード等しやすい
-                            div.style.opacity = '0';
-                        }
-                    }
+                    setLayerVisible(div, part.type !== 'switch' || layer.textureID === part.default);
 
                     container.appendChild(div);
                 });
@@ -406,7 +416,7 @@
                 if (!Array.isArray(layerIDs) || layerIDs.length === 0) return;
                 const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
                 layers.forEach(el => {
-                    el.style.opacity = layerIDs.includes(el.id) ? '1' : '0';
+                    setLayerVisible(el, layerIDs.includes(el.dataset.textureId));
                 });
             });
         }
@@ -434,7 +444,7 @@
     function setPartVisible(partID, visible) {
         const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
         layers.forEach(el => {
-            el.style.opacity = visible ? '1' : '0';
+            setLayerVisible(el, visible);
         });
     }
 
@@ -518,13 +528,7 @@
         // partIDを持つ全レイヤーを探し、textureIDに一致するものだけ表示
         const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
         layers.forEach(el => {
-            if (el.id === textureID) {
-                el.style.opacity = '1';
-                // el.style.display = 'block';
-            } else {
-                el.style.opacity = '0';
-                // el.style.display = 'none';
-            }
+            setLayerVisible(el, el.dataset.textureId === textureID);
         });
     }
 

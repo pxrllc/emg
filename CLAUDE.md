@@ -73,13 +73,14 @@ dotnet build emg-ymm4.slnx    # post-build copies the DLLs into YMM4's user/plug
 
 ### Deployment
 
-One workflow (`.github/workflows/github-pages.yml`) handles GitHub Pages. **It currently
-publishes only a "準備中" placeholder** (`.github/pages-placeholder/index.html`) — the real
-build steps are kept in the file, commented out, and can be re-enabled to restore:
+One workflow (`.github/workflows/github-pages.yml`) handles GitHub Pages. It publishes:
 
 ```
 /          → emg-cdn        /runtime/  → emg-web-runtime        /packer/  → emg-web-packer
 ```
+
+To take the site down again, swap the build steps for the "準備中" placeholder
+(`.github/pages-placeholder/index.html`) — see the comment at the top of the workflow.
 
 Pages background you need before touching this:
 - The repo's Pages **cannot be disabled via the API** (`DELETE .../pages` → 422 "not allowed"),
@@ -114,9 +115,32 @@ Test files in `emg-packer/asset/` (gitignored) are the ground truth for what act
 
 - **`textureID` is often just a number** (`"14"`, `"24"`, `"15_1"`), so nothing can be inferred from layer names. Any "guess the vowel/closed-eye from the name" logic must degrade to *disabled*, never to a wrong guess.
 - **The same `textureID` repeats across parts.** In `himari3.emg`, `"1"`–`"5"` exist in 眉/口/目 and `"6"`–`"14"` in 口/目. **A layer reference is only unique as `(partID, textureID)`** — storing a bare `textureID` picks whichever part is enumerated first (this caused a real "eyebrows are blinking" bug).
-- **z-order is sometimes inverted** (`himari3.emg` gives the body the frontmost `textureZIndex`), an artifact of an old `emg-packer` bug. `emg-ymm4` exposes a "Z-Index反転" toggle to work around such files.
-- **A whole avatar may be a single `switch` part** (`senti.emg`: 36 layers, one part), so per-part role detection finds nothing.
+- **z-order is sometimes inverted** (`himari3.emg` gives the body the frontmost `textureZIndex`), an artifact of an old `emg-packer` bug. `emg-ymm4` exposes a "Z-Index反転" toggle to work around such files. Confirmed again in `senti_02.emg`, where drawing in spec order (ascending = back to front) puts the body over the face; the fix applied to the bundled demo was to **normalise the file** (`z' = maxZ - z`) rather than add another toggle.
+- **A whole avatar may be a single `switch` part** (`senti.emg`: 36 layers, one part), so per-part role detection finds nothing. This is a **producer-side defect, already fixed**: `recalculateMeta()` used to walk only `root.children`, collapsing every nested group into one part; commit `e4306a7` made it recurse. Files exported before that fix stay broken — the correctly-parted export of the same character is `senti_02.emg` (`Body`/`arms`/`Mouth`/`Blushs`/`Eyes`/`Eyebrows`/`Character`), which is what `emg-cdn/assets/senti-demo.emg` is built from. **Re-export such files rather than teaching consumers to cope**; the alternative is layer-level (`textureID`) filtering inside a `static` part, which nothing in this repo implements.
 - A `version` field can lie: `yuriko.emg` claimed `0.2.2` while holding the pre-0.2 flat `layers[]`/`uv` schema.
+- **Store the atlas PNG uncompressed.** `EmgGenerator` calls `zip.generateAsync({ type: 'blob' })` with no `compression` option, so JSZip's default STORE applies. PNG is already deflated, so re-compressing buys ~0.3% and costs decode time on every load. Any hand-built `.emg` should match this.
+
+### Reference player (`emg-cdn/emg-player.0.3.0.js`)
+
+- **Visibility is `display`, opacity is data.** Layers are shown/hidden with `display: block|none`
+  (`setLayerVisible`); `style.opacity` is reserved for the layer's own `layer.opacity` from
+  `data.json`. These were previously the same channel, so per-layer opacity never took effect and
+  hidden layers stayed in the compositing tree.
+- **Match layers on `dataset.textureId`, not `el.id`.** `textureID` repeats across parts, so
+  `div.id` is not unique (senti has `"01"` in `Mouth`, `Eyes` and `Eyebrows`). `div.id` is still set
+  for backwards compatibility, but every lookup goes through `data-part-id` + `data-texture-id`.
+- The JSON entry is found by `endsWith("data.json")` with a fallback to any non-`mapping.json`
+  `.json`, so both `data.json` and `model.json` work.
+
+### Verifying player changes in a browser
+
+The reference player is only meaningfully testable with a **foreground** tab. JSZip's `.async()`
+chunks its work across timers, and Chrome throttles timers in hidden tabs to roughly one tick per
+minute — a background tab therefore appears to hang while loading, and `Page.captureScreenshot`
+times out with "renderer may be frozen". It is neither frozen nor a JSZip bug. Keep the tab
+foregrounded (an input action such as click/hover reactivates it) before concluding anything about
+load performance. For pure geometry/z-order questions, rendering the composite offline (extract the
+zip, draw the layers with any 2D library) is faster and avoids the issue entirely.
 
 ### Two coexisting, structurally different specs — don't conflate them
 
