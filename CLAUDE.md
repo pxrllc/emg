@@ -11,15 +11,18 @@ There is no root build system — each subdirectory below is an **independent np
 | Directory | What it is | Stack |
 |---|---|---|
 | `emg-packer/` | Electron desktop app: loads a PSD (or `.kra`), lets the user assign `partID`/`type` per layer, packs a texture atlas, and exports a `.emg` file | Electron + Vite (electron-vite) + React + TypeScript, `ag-psd` |
-| `emg-web-runtime/` | Browser app for playing/authoring EMG avatars (states, variants, undo history) — WIP, deployed to GitHub Pages on push to `main` | Vite + React + TypeScript + styled-components |
+| `emg-web-runtime/` | Browser app for playing/authoring EMG avatars (states, variants, undo history) — WIP. Note `npm run build` runs `tsc` first, so a type error blocks deployment entirely (this silently broke Pages for ~6 months) | Vite + React + TypeScript + styled-components |
 | `emg-lite/` | Spec + adapter + tools for **EMG-lite** (`.emgl`), a *separate*, simpler 5-slot avatar IR (base/mouthOpen/mouthClosed/eyesOpen/eyesClosed) distinct from full EMG — see "Two coexisting specs" below | Spec docs + `adapter/png-adapter.ts` + `tools/emg-viewer` (Vite + Electron) |
-| `emg-cdn/` | Deployable reference player (`emg-player.0.1.0.js`, `emg-player.0.2.2.js`) and demo page, served via GitHub Pages from repo root config | Vanilla JS + JSZip, no build step |
-| `emg-unity-importer/` | Unity Editor/Runtime package that imports `.emg` files (`EmgImporter.cs`, `EmgController.cs`, `EmgData.cs`) — WIP | C# (Unity Editor/Runtime asmdefs) |
+| `emg-cdn/` | Deployable reference player (`emg-player.0.1.0.js`, `.0.2.2.js`, `.0.3.0.js` — **0.3.0 is current**, adds `mapping.json`) and demo page | Vanilla JS + JSZip, no build step |
+| `emg-unity-importer/` | Unity Editor/Runtime package that imports `.emg` files (`EmgImporter.cs`, `EmgController.cs`, `EmgData.cs`, `EmgMapping.cs`) — WIP, never compiled (no Unity here) | C# (Unity Editor/Runtime asmdefs) |
 | `emg-renpy/` | Ren'Py loader script (`emg_loader.rpy`) for playing EMG avatars inside a Ren'Py game | Ren'Py `.rpy` |
+| `emg-godot/` | Godot 4.x loader (`emg_avatar.gd`, `class_name EmgAvatar`) — written but **never run** (no Godot editor here) | GDScript |
+| `emg-ymm4/` | YMM4 (ゆっくりムービーメーカー4) Tachie plugin loading `.emg` — **builds and runs; verified in the real app** (display, blink, vowel lip-sync, layer-picker UI). See "emg-ymm4" below | C# `net10.0-windows`; `Emg.Core/` sub-library is YMM4-independent |
+| `emg-web-packer/` | Planned browser-only PSD → `.emg` converter. **Not implemented — `PLAN.md` only.** Read that file before starting | (Vite + React planned) |
 | `aviutl-for-egml/` | Electron/React app that imports EMG-lite assets and exports AviUtl `.exo` project/timeline data | Electron + Vite + React + TypeScript + Tailwind + Zustand |
 | `develop/` | Standalone integration/dev HTML+CSS+JS sandbox (no build) | Vanilla |
-| `doc/` | Spec documents for the packer, Ren'Py loader, and Unity importer (dated `260219`), plus `emg_upstream_contribution_plan.md` | Markdown |
-| `samples/` | Sample EMG data (`avatar.json`, `states.json`, assets) | Data |
+| `doc/` | Spec/design docs (packer, Ren'Py, Unity importer, upstream contribution plans, YMM4 verification) — **intentionally gitignored, local-only**, not part of the tracked repo for other clones | Markdown |
+| `samples/` | Sample EMG data (`avatar.json`, `states.json`, `senti.emg`, assets) | Data |
 
 Top-level spec docs: `emg-json-spec.md` (full EMG v0.3.0 JSON schema, normative — `data.json` root structure), `emg-mapping-spec.md` (v0.3.0 `mapping.json` companion-file schema for expression/blink/lip-sync semantics), and `emg-spec-intent.md` (design rationale — read this to understand *why* a field exists, not just what it is).
 
@@ -61,11 +64,30 @@ There is **no test suite** in this repository (no `*.test.*`/`*.spec.*` files, n
 
 `emg-unity-importer` is a Unity package (no npm build) — changes are verified by importing the package into a Unity project. `emg-renpy` and `emg-cdn` have no build step; `emg-cdn` is served as static files and `emg-renpy`'s `.rpy` is loaded directly by Ren'Py.
 
+```bash
+# emg-ymm4 (YMM4 plugin) — needs .NET 10 SDK + a local YMM4 install
+cd emg-ymm4
+cp Directory.Build.props.sample Directory.Build.props   # then set YMM4DirPath
+dotnet build emg-ymm4.slnx    # post-build copies the DLLs into YMM4's user/plugin/
+```
+
 ### Deployment
 
-Two GitHub Actions workflows deploy to GitHub Pages on push to `main`:
-- `Deploy Web Runtime` — triggers only on changes under `emg-web-runtime/**`, builds it, publishes `emg-web-runtime/dist`.
-- `Deploy to GitHub Pages` — publishes the `emg-cdn/` directory as-is (no build).
+One workflow (`.github/workflows/github-pages.yml`) handles GitHub Pages. **It currently
+publishes only a "準備中" placeholder** (`.github/pages-placeholder/index.html`) — the real
+build steps are kept in the file, commented out, and can be re-enabled to restore:
+
+```
+/          → emg-cdn        /runtime/  → emg-web-runtime        /packer/  → emg-web-packer
+```
+
+Pages background you need before touching this:
+- The repo's Pages **cannot be disabled via the API** (`DELETE .../pages` → 422 "not allowed"),
+  which is why the site is neutralised by swapping its content rather than turning it off.
+- Pages source was switched from `legacy` (gh-pages branch) to `build_type: workflow`.
+  The stale `gh-pages` branch is intentionally **left in place as a rollback path**.
+- `pxrllc/NewScopeDaily` is a **separate repo with its own independent Pages site**;
+  nothing here affects it (verified). There is no `pxrllc.github.io` org site.
 
 ## Architecture notes
 
@@ -84,22 +106,75 @@ sprites:  [{ spriteID, targetPartID, sequence, trigger? }]
 - **`sprites[].trigger.type`** is `auto_loop` (player-driven loop), `random_interval` (player-driven, randomized timing), or `external` (driven by host code — e.g. lip sync).
 - Layer positions are given twice: `x/y/width/height` are **atlas-pixel coordinates** (where to sample from the texture), `basePosition_x/basePosition_y` are **canvas coordinates** (where to draw it). Don't confuse the two when touching packing/rendering code.
 - `emg-json-spec.md` is the normative schema reference for `data.json`; `emg-spec-intent.md` explains *why* (texture atlasing for draw-call reduction, `partID` decoupled from PSD layer names so artists can rename freely, `static`/`switch` split to keep player logic simple, etc.) — consult it before proposing schema changes.
-- **`mapping.json`** (optional companion file, v0.3.0+, spec'd in `emg-mapping-spec.md`) adds expression/blink/lip-sync *semantics* on top of `data.json`'s structural `parts[]`/`layers[]`. It is spec-only so far — no reference implementation consumes it yet (see below). Where a `partID` is explicitly targeted by `mapping.json`'s blink/lipSync mapping, any `sprites[]` entry with the same `targetPartID` MUST NOT self-trigger; `mapping.json` takes control of that part instead.
+- **`mapping.json`** (optional companion file, v0.3.0+, spec'd in `emg-mapping-spec.md`) adds expression/blink/lip-sync *semantics* on top of `data.json`'s structural `parts[]`/`layers[]`. It is **implemented in every consumer**: `emg-cdn/emg-player.0.3.0.js`, `emg-web-runtime`, `emg-unity-importer`, `emg-godot`, `emg-ymm4`. Where a `partID` is explicitly targeted by `mapping.json`'s blink/lipSync mapping, any `sprites[]` entry with the same `targetPartID` MUST NOT self-trigger; `mapping.json` takes control of that part instead.
+
+### Real-world `.emg` files break naive assumptions
+
+Test files in `emg-packer/asset/` (gitignored) are the ground truth for what actually ships, and they are messier than the spec examples. Check against them before trusting a heuristic:
+
+- **`textureID` is often just a number** (`"14"`, `"24"`, `"15_1"`), so nothing can be inferred from layer names. Any "guess the vowel/closed-eye from the name" logic must degrade to *disabled*, never to a wrong guess.
+- **The same `textureID` repeats across parts.** In `himari3.emg`, `"1"`–`"5"` exist in 眉/口/目 and `"6"`–`"14"` in 口/目. **A layer reference is only unique as `(partID, textureID)`** — storing a bare `textureID` picks whichever part is enumerated first (this caused a real "eyebrows are blinking" bug).
+- **z-order is sometimes inverted** (`himari3.emg` gives the body the frontmost `textureZIndex`), an artifact of an old `emg-packer` bug. `emg-ymm4` exposes a "Z-Index反転" toggle to work around such files.
+- **A whole avatar may be a single `switch` part** (`senti.emg`: 36 layers, one part), so per-part role detection finds nothing.
+- A `version` field can lie: `yuriko.emg` claimed `0.2.2` while holding the pre-0.2 flat `layers[]`/`uv` schema.
 
 ### Two coexisting, structurally different specs — don't conflate them
 
 The repo hosts **two separate avatar formats** that share a name prefix but are not interchangeable:
 
-1. **Full EMG** (`.emg`, `emg-json-spec.md`) — the `version`/`textures[]`/`parts[]`/`sprites[]` schema above. Has a working reference player (`emg-cdn/emg-player.0.2.2.js`). Consumed by `emg-packer` (producer), `emg-web-runtime`, `emg-unity-importer`, `emg-renpy`.
+1. **Full EMG** (`.emg`, `emg-json-spec.md`) — the `version`/`textures[]`/`parts[]`/`sprites[]` schema above. Reference player: `emg-cdn/emg-player.0.3.0.js`. Consumed by `emg-packer` (producer), `emg-web-runtime`, `emg-unity-importer`, `emg-renpy`, `emg-godot`, `emg-ymm4`.
 2. **EMG-lite** (`.emgl`, spec under `emg-lite/tools/emg-viewer/docs/`) — a simpler 5-slot state IR (`base`/`mouthOpen`/`mouthClosed`/`eyesOpen`/`eyesClosed`) meant as a rendering-agnostic internal representation, not a texture-atlas format. Consumed by `emg-lite/adapter/png-adapter.ts`, `emg-lite/tools/emg-viewer`, and `aviutl-for-egml` (which imports EMG-lite assets to export AviUtl `.exo` timelines).
 
 When working in `emg-lite/` or `aviutl-for-egml/`, you're in the EMG-lite world (5-slot, `AvatarData`/`assetsRoot`/`mapping`), not the full-EMG world (`parts[]`/`textures[]`). Don't confuse EMG-lite's `mapping: Record<string, AvatarLayerMap>` with full EMG's `mapping.json` (`emg-mapping-spec.md`) — same word, unrelated schemas. See `doc/emg_upstream_contribution_plan.md` for the original field-by-field comparison and rationale behind the `mapping.json` extension.
 
 ### emg-packer internals (PSD → `.emg`)
 
-Flow: `PsdLoader` (parses PSD via `ag-psd`, injects `_partName` from top-level group names as a starting hint) → user assigns `partID`/`type`/`default` per layer in the UI (`App.tsx` state, `LayerMeta` in `types.ts`) → `TexturePacker` (shelf-packing algorithm, power-of-two atlas sizing, default max 2048×2048) → `EmgGenerator.createData()`/`generate()` builds the v0.2.2 JSON and zips it with the atlas PNG via JSZip.
+Flow: `PsdLoader` (parses PSD via `ag-psd`, injects `_partName` from top-level group names as a starting hint) → user assigns `partID`/`type`/`default` per layer in the UI (`App.tsx` state, `LayerMeta` in `types.ts`) → `TexturePacker` (shelf packing, power-of-two sizing, `startSize = 2048`, `maxSize = 8192`) → `EmgGenerator.createData()`/`generate()` builds the v0.3.0 JSON and zips it with the atlas PNG (plus a `mapping.json` draft from `MappingGenerator`, when blink/mouth parts can be detected) via JSZip.
 
-Known rough edge (see comments in `EmgGenerator.ts` and `doc/emg-packer-spec_260219.md`): `TexturePacker` sorts items by height for packing, so by the time `EmgGenerator` sees `items`, original PSD z-order (front/back) has been lost; `textureZIndex` assignment needs a z-order value threaded through from the original tree traversal in `App.tsx` rather than being recovered inside `EmgGenerator`. Read that TODO trail before touching z-index logic.
+z-order: `TexturePacker` sorts items by height, so packing order carries no z information. `useEmgPacker` therefore computes `zIndex = totalLayers - 1 - index` from its own top-down traversal (index 0 = frontmost) and passes it in on `ExportItem`. `EmgGenerator.ts` still carries a long stale comment trail claiming this is unsolved — **the comments are out of date; the caller supplies z-order.**
+
+**`emg-packer/src/renderer/services/` must stay free of Electron/Node APIs.** It currently uses only `ag-psd`, `jszip` and browser APIs, which is what makes the planned `emg-web-packer` able to reuse it verbatim. Put anything Electron-specific outside `services/`.
+
+### emg-ymm4 (YMM4 plugin)
+
+`Emg.Core/` is plain .NET (parsing + blink/lip-sync/expression resolution, no YMM4 types) so it can
+be exercised from a console app without YMM4 — do that before testing in the app. `EmgTachiePlugin/`
+holds the YMM4-facing code and the Direct2D compositing.
+
+**YMM4's plugin API is undocumented; get facts by decompiling the real DLLs** rather than guessing:
+
+```bash
+dotnet tool install -g ilspycmd
+ilspycmd -t "YukkuriMovieMaker.Plugin.Tachie.Psd.PsdTachieSource" \
+  "F:/YukkuriMovieMaker_v4/YukkuriMovieMaker.Plugin.Tachie.Psd.dll"
+```
+The bundled PSD Tachie plugin is the best reference implementation. Guessing produced several real
+bugs here; each of these was only settled by decompiling:
+
+- **`ITachieSource2` is what you want.** Its `Update(TachieSourceDescription desc)` supplies
+  `desc.MouthShape` (`Silent/A/I/U/E/O`) and `desc.VoiceVolume` (`-1.0` means "no speech").
+  The older 8-arg `ITachieSource.Update` only gets a single `kuchipaku` double — with it, **vowel
+  lip-sync is impossible**. (`doc/emg-ymm4-plugin-verification.md` concluded vowel lip-sync was
+  unachievable; that conclusion is **wrong** and this is why.)
+- **`Vortice.Mathematics.Rect(x, y, width, height)`** — *not* `(left, top, right, bottom)`.
+  Passing `x + width` inflated every source rect and bled neighbouring atlas regions into the frame.
+- **Output must be centred**: `TransformMatrix = CreateTranslation(-w/2, -h/2) * …`, or the art sits
+  off-screen (YMM4 positions around the image centre).
+- `CreateCompatibleRenderTarget` needs an explicit `B8G8R8A8_UNorm` + `Premultiplied` pixel format
+  on some display adapters, otherwise it throws `0x88982F80`.
+- Property editors: `bool` needs `[ToggleSlider]`, enums need `[EnumComboBox]` — `[Display]` alone
+  renders nothing. A custom editor implements `PropertyEditorAttribute` +
+  `IPropertyEditorForTachieParameterAttribute`, and YMM4 then injects `CharacterParameter` so the
+  editor can reach the `.emg` path (see `Editors/EmgLayerEditorAttribute.cs`).
+- Blink timing must be derived from `tachieTime` alone (no `Random`, no wall clock) so scrubbing the
+  timeline is stable. `string.GetHashCode()` is **per-process randomised** — using it as a seed makes
+  re-exports differ; `Emg.Core` has a stable FNV-1a hash for this.
+- Anything cached against the composited frame must include **every** input in its cache key. A
+  missing key silently freezes the picture (this is how the "Z-Index反転 toggle does nothing" bug
+  happened).
+
+**YMM4 locks the plugin DLLs while running**, so the post-build copy fails with MSB3027 unless YMM4
+is closed. Ask the user to close it rather than retrying.
 
 ### Licensing
 
