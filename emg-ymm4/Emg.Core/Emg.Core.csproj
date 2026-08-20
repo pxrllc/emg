@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Emg.Core</RootNamespace>
+    <Version>0.1.0</Version>
+    <Company>pxrllc</Company>
+    <Copyright>Copyright (c) pxrllc</Copyright>
+  </PropertyGroup>
+
+  <!--
+    YMM4 の Plugin DLL や Vortice.Direct2D1 には依存しない、純粋な .emg パーサー兼
+    状態解決ロジックのクラスライブラリ。EmgTachiePlugin プロジェクトから参照される。
+    YMM4本体・Visual Studioが無くても `dotnet build` 単体で成立する想定（この開発環境では
+    dotnet CLI 自体が無いため未検証）。
+  -->
+
+</Project>

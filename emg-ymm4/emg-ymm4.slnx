@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Emg.Core/Emg.Core.csproj" />
+  <Project Path="EmgTachiePlugin/EmgTachiePlugin.csproj" />
+</Solution>

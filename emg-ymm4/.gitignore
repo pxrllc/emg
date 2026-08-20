@@ -1,0 +1,4 @@
+bin/
+obj/
+Directory.Build.props
+dist/

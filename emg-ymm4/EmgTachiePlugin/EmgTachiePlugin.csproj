@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- YukkuriMovieMaker4PluginSamples の YMM4SamplePlugin.csproj と同じ TFM（YMM4 v4.47.0.0時点）。
+         YMM4本体のバージョンにより変わる可能性があるため、ビルド時にエラーが出たら
+         公式サンプルの最新 csproj を確認してください。 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>EmgTachiePlugin</RootNamespace>
+    <AssemblyName>EmgTachiePlugin</AssemblyName>
+
+    <!-- 配布パッケージ名（package.ps1）とプラグイン一覧の表示に使う。 -->
+    <Version>0.1.0</Version>
+    <Product>EMG 立ち絵プラグイン</Product>
+    <Company>pxrllc</Company>
+    <Copyright>Copyright (c) pxrllc</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Emg.Core\Emg.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    YMM4本体・関連DLLはNuGetではなくローカルのYMM4インストールフォルダから直接参照する
+    （公式サンプルと同じ方式）。$(YMM4DirPath) は Directory.Build.props（Directory.Build.props.sample
+    をコピーして作成）で定義すること。
+  -->
+  <ItemGroup>
+    <Reference Include="YukkuriMovieMaker.Plugin">
+      <HintPath>$(YMM4DirPath)YukkuriMovieMaker.Plugin.dll</HintPath>
+    </Reference>
+    <Reference Include="YukkuriMovieMaker.Controls">
+      <HintPath>$(YMM4DirPath)YukkuriMovieMaker.Controls.dll</HintPath>
+    </Reference>
+    <Reference Include="SharpGen.Runtime">
+      <HintPath>$(YMM4DirPath)SharpGen.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Include="SharpGen.Runtime.COM">
+      <HintPath>$(YMM4DirPath)SharpGen.Runtime.COM.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.Direct2D1">
+      <HintPath>$(YMM4DirPath)Vortice.Direct2D1.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.DirectX">
+      <HintPath>$(YMM4DirPath)Vortice.DirectX.dll</HintPath>
+    </Reference>
+    <Reference Include="Vortice.Mathematics">
+      <HintPath>$(YMM4DirPath)Vortice.Mathematics.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- ビルド後、YMM4のプラグインフォルダへ自動配置する（公式サンプルと同じ方式）。
+       YMM4 起動中は DLL がロックされ MSB3027 で失敗するため、配布用ZIPを作るだけの
+       ビルド（package.ps1）では -p:SkipYmm4Deploy=true で丸ごとスキップする。 -->
+  <Target Name="CopyToYmm4PluginFolder" AfterTargets="Build" Condition="'$(SkipYmm4Deploy)' != 'true'">
+    <ItemGroup>
+      <PluginOutputFiles Include="$(TargetDir)EmgTachiePlugin.dll" />
+      <PluginOutputFiles Include="$(TargetDir)Emg.Core.dll" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(PluginOutputFiles)"
+      DestinationFolder="$(YMM4DirPath)user\plugin\$(ProjectName)\"
+      SkipUnchangedFiles="true"
+      Condition="'$(YMM4DirPath)' != ''" />
+  </Target>
+
+</Project>

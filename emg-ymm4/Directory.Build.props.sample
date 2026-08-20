@@ -1,0 +1,15 @@
+<!--
+  YMM4公式サンプル（YukkuriMovieMaker4PluginSamples）の流儀に倣ったビルド設定テンプレート。
+  このファイルを同じディレクトリに `Directory.Build.props`（拡張子から .sample を外した名前）として
+  コピーし、YMM4Path を自分の環境の YMM4 インストールフォルダに書き換えてください。
+  YMM4Path は EmgTachiePlugin.csproj から $(YMM4DirPath) として参照され、
+  YukkuriMovieMaker.Plugin.dll / Vortice.Direct2D1.dll 等の参照解決に使われます。
+
+  `Directory.Build.props`（本体、.sample無し）は .gitignore 対象とし、個人のローカルパスを
+  リポジトリにコミットしないようにしてください。
+-->
+<Project>
+  <PropertyGroup>
+    <YMM4DirPath>C:\Path\To\YukkuriMovieMaker4\</YMM4DirPath>
+  </PropertyGroup>
+</Project>
