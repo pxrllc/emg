@@ -1,12 +1,24 @@
 name: Deploy to GitHub Pages
 
+# EMG の Web 系成果物をまとめて1サイトとして配信する。
+#   /          → emg-cdn（リファレンスプレイヤー + デモ）
+#   /runtime/  → emg-web-runtime
+#
+# 以前は emg-cdn 用のこのワークフローと、emg-web-runtime を gh-pages ブランチへ
+# force_orphan で上書きする deploy.yml の2本が別方式で並走していて、
+# 実際には gh-pages ブランチの内容（古い web-runtime）だけが公開され、
+# emg-cdn は一度も配信されていなかった。ここに統合して1本にしている。
+
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+  workflow_dispatch:
+
+# 同時に走ったデプロイ同士が競合しないようにする。
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -19,11 +31,33 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v4
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
         with:
-          path: emg-cdn
-      - if: github.ref == 'refs/heads/main'
-        uses: actions/deploy-pages@v4
+          node-version: 22
+
+      - name: Collect emg-cdn (site root)
+        run: |
+          mkdir -p _site
+          cp -r emg-cdn/. _site/
+
+      - name: Build emg-web-runtime (/runtime/)
+        working-directory: emg-web-runtime
+        run: |
+          npm ci
+          npm run build
+
+      - name: Place emg-web-runtime
+        run: |
+          mkdir -p _site/runtime
+          cp -r emg-web-runtime/dist/. _site/runtime/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - uses: actions/deploy-pages@v4
         id: deployment

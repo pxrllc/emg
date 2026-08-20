@@ -257,7 +257,7 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
 
                 // Get Atlas Image
                 const atlasDef = avatar.textures.find(t => t.id === (layer as any).textureID); // Cast if needed or update schema
-                if (!atlasDef) return;
+                if (!atlasDef?.src) return;
 
                 const img = images.get(atlasDef.src);
                 if (!img) return;
