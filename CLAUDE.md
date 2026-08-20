@@ -167,6 +167,18 @@ z-order: `TexturePacker` sorts items by height, so packing order carries no z in
 be exercised from a console app without YMM4 — do that before testing in the app. `EmgTachiePlugin/`
 holds the YMM4-facing code and the Direct2D compositing.
 
+A throwaway console project that `ProjectReference`s `Emg.Core` and prints
+`EmgAnimation.Create(...).Summary` plus `EmgStateResolver.ResolveActiveTextures(...)` for a range of
+blink/vowel/expression inputs is the fastest way to check a `.emg`. It answers, without launching
+YMM4: whether `mapping.json` was picked up, which parts got the blink/mouth roles, whether the
+z-order needs the "Z-Index反転" toggle, and whether blink actually changes layer over time.
+
+**Expressions cannot set the eye or mouth part directly.** `ResolveActiveTextures` applies
+`expressions[].parts` first and then lets blink and lip-sync overwrite their own parts, so an
+expression listing `Eyes` in `parts` silently has no effect. Use `overrides.blink` /
+`overrides.lipSync` for those; `parts` is for everything else (eyebrows, blush, …). The reference
+JS player behaves the same way.
+
 **YMM4's plugin API is undocumented; get facts by decompiling the real DLLs** rather than guessing:
 
 ```bash
