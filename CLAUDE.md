@@ -18,7 +18,7 @@ There is no root build system — each subdirectory below is an **independent np
 | `emg-renpy/` | Ren'Py loader script (`emg_loader.rpy`) for playing EMG avatars inside a Ren'Py game | Ren'Py `.rpy` |
 | `emg-godot/` | Godot 4.x loader (`emg_avatar.gd`, `class_name EmgAvatar`) — written but **never run** (no Godot editor here) | GDScript |
 | `emg-ymm4/` | YMM4 (ゆっくりムービーメーカー4) Tachie plugin loading `.emg` — **builds and runs; verified in the real app** (display, blink, vowel lip-sync, layer-picker UI). See "emg-ymm4" below | C# `net10.0-windows`; `Emg.Core/` sub-library is YMM4-independent |
-| `emg-web-packer/` | Planned browser-only PSD → `.emg` converter. **Not implemented — `PLAN.md` only.** Read that file before starting | (Vite + React planned) |
+| `emg-web-packer/` | Browser-only PSD/KRA → `.emg` converter (no server, no install). Reuses `emg-packer`'s services via a Vite alias rather than copying them — see its `README.md` | Vite + React + TypeScript |
 | `aviutl-for-egml/` | Electron/React app that imports EMG-lite assets and exports AviUtl `.exo` project/timeline data | Electron + Vite + React + TypeScript + Tailwind + Zustand |
 | `develop/` | Standalone integration/dev HTML+CSS+JS sandbox (no build) | Vanilla |
 | `doc/` | Spec/design docs (packer, Ren'Py, Unity importer, upstream contribution plans, YMM4 verification) — **intentionally gitignored, local-only**, not part of the tracked repo for other clones | Markdown |
@@ -133,7 +133,9 @@ Flow: `PsdLoader` (parses PSD via `ag-psd`, injects `_partName` from top-level g
 
 z-order: `TexturePacker` sorts items by height, so packing order carries no z information. `useEmgPacker` therefore computes `zIndex = totalLayers - 1 - index` from its own top-down traversal (index 0 = frontmost) and passes it in on `ExportItem`. `EmgGenerator.ts` still carries a long stale comment trail claiming this is unsolved — **the comments are out of date; the caller supplies z-order.**
 
-**`emg-packer/src/renderer/services/` must stay free of Electron/Node APIs.** It currently uses only `ag-psd`, `jszip` and browser APIs, which is what makes the planned `emg-web-packer` able to reuse it verbatim. Put anything Electron-specific outside `services/`.
+**`emg-packer/src/renderer/services/` must stay free of Electron/Node APIs.** It uses only `ag-psd`, `jszip` and browser APIs, which is what lets `emg-web-packer` reuse it verbatim through a Vite alias. Put anything Electron-specific outside `services/`.
+
+**Hidden layers are meaningful, not noise.** A PSD keeps one variant of each differential group visible and the rest hidden. Exporting only visible layers therefore throws away every alternative of a `switch` part — measured on a real file, 17 layers collapsed to 3. The rule both packers follow: `switch` parts export **all** layers (the one that was visible becomes `part.default`), `static` parts export only visible ones.
 
 ### emg-ymm4 (YMM4 plugin)
 

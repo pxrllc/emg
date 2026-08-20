@@ -61,99 +61,17 @@ export class EmgGenerator {
     ): EmgData {
         const partsMap = new Map<string, EmgPart>();
 
-        // Items are typically in pack order (unsorted relative to Z). 
-        // Usage logic: We need to assign Z-Index.
-        // Assuming `items` passed here might not be in Z-order if they came from Packer.
-        // However, `TexturePacker` takes items, sorts by height, and returns packing.
-        // But `ExportItem[]` contains `originalLayer` which usually we can access via ID if needed.
-        // Better approach: The `items` passed to generate should probably retain knowledge of their Z-order
-        // or we calculate Z-index before packing.
-        // 
-        // The `items` array passed here is `ExportItem[]`. 
-        // If the caller collected them from the LayerTree traversal (top-down), 
-        // then index 0 is Top (Front), index N is Bottom (Back).
-        // Let's assume the caller passes items in the order they were in the tree (Front to Back).
-        // 
-        // We need to verify how `App.tsx` constructs `items`. 
-        // If it constructs from `packResult.items`, the order is strictly by Packing (Height).
-        // That loses Z-order!
-        // 
-        // FIX: We need to map `packed.id` back to the original layer structure z-index.
-        // But for now, let's assume `items` usually has a way to determine Z.
-        // Actually, we can just assign a simple Z-Index. 
-        // Wait, if `items` is sorted by height, we lost the Z info.
-        // 
-        // WE MUST RECOVER Z-ORDER.
-        // Valid approach: The `meta` or `originalLayer` might not have absolute Z-index property.
-        // But `App.tsx` knows the tree.
-        // 
-        // For this implementation, we will assume `items` *might* be out of order.
-        // However, we don't have an easy way to recover strict Z-order here without extra data.
-        // 
-        // PROPOSAL: We will assume for now that we simply assign unique Z-indices.
-        // But the spec says "Front = Higher Index".
-        // If we can't guarantee order, we might have issues.
-        // 
-        // Let's assume for this specific function, we just output what we have.
-        // NOTE: In `App.tsx`, we should ensure we pass something that helps us, or accept that
-        // for v0.2.2 we might need to fix Z-order elsewhere. 
-        // 
-        // *Self-Correction*: Use `meta.id` (ag-psd layer ID)? No, IDs are arbitrary.
-        // 
-        // Temporary Fix: Since we change `zIndex` logic to "Front = High", 
-        // and we iterate `items`. If `items` is random, Z is random.
-        // 
-        // Let's stick to the Spec Implementation of the *Structure* first.
-        // We will assign `textureZIndex` based on a counter we decrement or increment?
-        // 
-        // Let's assign `0` arbitrarily if we don't know, BUT distinct.
-        // We'll use a globally incrementing counter for now, but note `App.tsx` needs to supply order key?
-        // 
-        // Actually, `ExportItem` has `originalLayer`. `Layer` objects from `ag-psd` don't have explicit global index.
-        // 
-        // Let's implement the structure transformation.
-
+        // textureZIndex（前面ほど大きい値）は呼び出し側が ExportItem.zIndex として渡す。
+        // TexturePacker が items を高さ順に並べ替えるため、ここに届いた時点の配列順からは
+        // 元の重なり順を復元できない。呼び出し側（useEmgPacker）がレイヤーツリーを
+        // 上から走査した際の index を使って zIndex を計算している。
         const textureFile = 'texture.png';
 
-        // 1. Group by PartID
-        const zIndexMap = new Map<number, number>(); // layerID -> zIndex
-        // If we want correct Z, we ideally need the list in Z-order. 
-        // Let's assume `items` *Order* logic will be fixed in App.tsx or we accept packing order for now.
-        // (The user spec says "Fix zIndex logic... Front = Higher").
-
-        // Helper to sanitize and uniquely identify textures based on layer name
-        // We need a mapping from packed.id (internal ID) to our new textureID
+        // packed.id（パッキング用の内部ID）→ 出力する textureID の対応。
         const packedIdToTextureId = new Map<string, string>();
 
-        // First pass: Generate IDs for all items
-        for (const item of items) {
-            let baseName = item.originalLayer.name;
-            if (!baseName) baseName = `Layer_${item.packed.id}`;
-
-            // Sanitize: Alphanumeric + underscore/hyphen/jap + simple
-            // Actually, Unity handles UTF8 names fine. Just remove slashes or path chars.
-            baseName = baseName.replace(/[\/\\:*?"<>|]/g, "_");
-
-            let textureId = baseName;
-
-            // Ensure uniqueness (simple collision handling)
-            // We need to check against all generated IDs? 
-            // Or just within the Part?
-            // Since textureID is used in "PartID_TextureID" in Unity, uniqueness within Part is key.
-            // BUT EmgImporter might rely on textureID being unique across the file if we load textures by ID?
-            // NO, EmgImporter loads by *textureFile* (which is shared) but creates sprites by *textureID*.
-            // For safety, let's make it unique GLOBAL or PER PART?
-            // EmgLayer definition: public string textureID;
-            // If we have two parts with same layer name "Normal", result "Head_Normal", "Body_Normal".
-            // This is fine. So uniqueness per part is enough.
-            // BUT we process items linearly.
-
-            // Let's settle on: Uniqueness per Part.
-            // We need to know the part first.
-            // logic below determines part.
-        }
-
-        // We can do it inside the loop if we track usage per part.
+        // textureID はレイヤー名から作り、同一パーツ内で重複したら連番サフィックスを付ける。
+        // パーツをまたいだ重複は許容する（consumer 側は partID との組で識別するため）。
         const partLayerNames = new Map<string, Set<string>>();
 
         // Let's generate Parts

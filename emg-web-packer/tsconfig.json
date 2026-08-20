@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* emg-packer の変換ロジックを共有する（vite.config.ts の alias と対応）。
+       ag-psd / jszip は emg-packer 側の node_modules にも存在するため、
+       解決先をここに固定しないと同じ型が別物として扱われエラーになる。 */
+    "baseUrl": ".",
+    "paths": {
+      "@packer/*": ["../emg-packer/src/renderer/services/*"],
+      "ag-psd": ["./node_modules/ag-psd"],
+      "jszip": ["./node_modules/jszip"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "../emg-packer/src/renderer/services"]
+}
