@@ -128,11 +128,23 @@ public sealed class EmgLayerEditor : UserControl
 
         foreach (var part in switchParts)
         {
+            var partChoices = allChoices.Where(c => c.PartID == part.PartID).ToList();
+
+            // 先頭は「このパーツを上書きしない」を表す項目。単に「（変更しない）」とだけ出すと、
+            // 何も選んでいない状態で実際に何が表示されているのか UI から分からないため、
+            // part.default のレイヤー名とサムネイルをそのまま見せる。
+            var defaultChoice = partChoices.FirstOrDefault(c => c.TextureID == part.Default);
             var choices = new List<EmgLayerChoice>
             {
-                new() { PartID = part.PartID, TextureID = "（変更しない）", IsNone = true },
+                new()
+                {
+                    PartID = part.PartID,
+                    TextureID = defaultChoice is not null ? $"既定 ({part.Default})" : "（変更しない）",
+                    Thumbnail = defaultChoice?.Thumbnail,
+                    IsNone = true,
+                },
             };
-            choices.AddRange(allChoices.Where(c => c.PartID == part.PartID));
+            choices.AddRange(partChoices);
 
             string? selectedTexture = FindValue(current, part.PartID);
             var selected = choices.FirstOrDefault(c => !c.IsNone && c.TextureID == selectedTexture) ?? choices[0];
