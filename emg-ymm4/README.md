@@ -34,16 +34,38 @@ dotnet build emg-ymm4.slnx
 ビルドすること。配置が不要なとき（配布 ZIP を作るだけのとき）は
 `-p:SkipYmm4Deploy=true` でスキップできる。
 
-### 配布パッケージ
+### 配布パッケージ（`.ymme`）
 
 ```powershell
-.\package.ps1              # Release、dist\EmgTachiePlugin-<version>.zip を出力
+.\package.ps1              # Release、dist\EmgTachiePlugin-<version>.ymme を出力
 .\package.ps1 -Configuration Debug
 ```
 
-ZIP は `user\plugin\` にフォルダごと展開する構成（`EmgTachiePlugin\` の中に DLL 2つ、
-`README.md`、`LICENSE.md`）。バージョンは `EmgTachiePlugin.csproj` の `<Version>` が唯一の情報源で、
-ZIP 名は DLL から読み取る。`package.ps1` は `-p:SkipYmm4Deploy=true` 付きでビルドするため、
+`.ymme` は **YMM4 公式のプラグインパッケージ形式**で、実体は拡張子を変えただけの ZIP。
+`.ymme` は OS に関連付けられており（`HKCU\Software\Classes\.ymme` →
+`YukkuriMovieMaker4.Plugin`）、ユーザーはダブルクリックするだけでインストールできる。
+生の ZIP を配って手で `user\plugin\` に置かせるのは非標準なので、こちらを使うこと。
+
+インストーラーの仕様は `Resources\bin\Installer\YukkuriMovieMaker.Plugin.Installer.exe`
+を逆コンパイルして確認した。パッケージを作るうえで効いてくるのは次の点：
+
+- 展開先は `user\plugin\<プラグイン名>\`。YMM4 のフォルダに書き込めない場合は
+  `%LocalAppData%\YukkuriMovieMaker\v4\plugin\<プラグイン名>\`
+- **プラグイン名は ZIP 内エントリの共通ルートフォルダ名**（無ければファイル名）。
+  共通ルートは展開時に剥がされるため、`EmgTachiePlugin/` を共通ルートにしておけば
+  `user\plugin\EmgTachiePlugin\` に中身が並ぶ（二重フォルダにならない）
+- `readme` または `利用規約`（`.txt` / `.md`）が入っていると、その中身が
+  **インストール画面に表示される**。同梱の `README.md` がこれに該当する
+- 展開先の外に出るパスやリパースポイントを含むエントリは拒否され、既存ファイルの
+  上書きは確認ダイアログになる
+- エントリ名は **Shift-JIS** で読まれる（ASCII 名にしておくのが無難）
+- CLI からも使える: `YukkuriMovieMaker.Plugin.Installer [--dir] [--clean] <path>...`
+
+`Compress-Archive` は拡張子 `.zip` を強制するため、`package.ps1` は
+`ZipFile.CreateFromDirectory(..., includeBaseDirectory: false)` を直接呼んでいる。
+
+バージョンは `EmgTachiePlugin.csproj` の `<Version>` が唯一の情報源で、ファイル名は
+ビルド済み DLL から読み取る。`package.ps1` は `-p:SkipYmm4Deploy=true` 付きでビルドするため、
 YMM4 を起動したままでも実行できる。
 
 > `package.ps1` は **UTF-8 BOM 付き**で保存すること。Windows PowerShell 5.1 は BOM の無い
