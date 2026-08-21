@@ -39,6 +39,7 @@ function App() {
                         onLayerVisibilityChange={handleLayerVisibilityChange}
                         onPsdUpdate={handlePsdUpdate}
                         onVisibilityAll={handleVisibilityAll}
+                        onLoadPsd={() => document.getElementById('psd-upload-input')?.click()}
                     />
                 }
                 centerPanel={
@@ -74,7 +75,7 @@ function App() {
                 pointerEvents: 'none',
                 letterSpacing: '0.03em',
             }}>
-                v0.1.2 · pxrllc
+                v0.1.5 · pxrllc
             </div>
         </>
     );

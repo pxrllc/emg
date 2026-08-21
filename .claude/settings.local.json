@@ -9,7 +9,13 @@
       "Bash(npm run:*)",
       "Bash(npx asar:*)",
       "Bash(node:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(git status *)",
+      "Bash(mkdir -p /tmp/emg_inspect)",
+      "Read(//tmp/**)",
+      "Bash(unzip -o -q \"/f/project/emg/emg/emg-packer/asset/senti.emg\" -d senti)",
+      "Bash(cd *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

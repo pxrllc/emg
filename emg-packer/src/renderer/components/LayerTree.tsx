@@ -13,6 +13,7 @@ interface LayerTreeProps {
     onPsdUpdate?: (psd: Psd) => void;
     selectedLayer?: Layer | null;
     onVisibilityAll?: (visible: boolean) => void;
+    onLoadPsd?: () => void;
 }
 
 export const LayerTree: React.FC<LayerTreeProps> = ({
@@ -22,14 +23,21 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     onSelectionChange,
     onPsdUpdate,
     selectedLayer,
-    onVisibilityAll
+    onVisibilityAll,
+    onLoadPsd
 }) => {
     if (!psd || !psd.children) return (
-        <div style={{ padding: '24px 16px', color: '#666', textAlign: 'center', fontSize: '12px', lineHeight: 1.6 }}>
-            <div style={{ marginBottom: '8px', fontSize: '28px' }}>📂</div>
-            <div style={{ color: '#999', marginBottom: '4px' }}>No file loaded</div>
-            <div style={{ color: '#555' }}>Supported formats:</div>
-            <div style={{ color: '#555' }}>PSD · KRA</div>
+        <div style={{ padding: '24px 16px', color: '#666', textAlign: 'center', fontSize: '12px', lineHeight: 1.6, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ marginBottom: '8px', fontSize: '48px', color: '#555' }}>📂</div>
+            <div style={{ color: '#999', marginBottom: '24px', fontSize: '14px' }}>No file loaded</div>
+            <button 
+                onClick={onLoadPsd}
+                style={{
+                    background: '#3b82f6', color: 'white', border: 'none', padding: '14px 24px', borderRadius: '6px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold', width: '100%', maxWidth: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}
+            >
+                <FolderPlus size={20} /> Open PSD / KRA
+            </button>
         </div>
     );
 
@@ -156,7 +164,17 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
 
 
     return (
-        <div className="layer-tree">
+        <div className="layer-tree" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ padding: '12px 8px', borderBottom: '1px solid #333' }}>
+                <button 
+                    onClick={onLoadPsd}
+                    style={{
+                        background: '#3b82f6', color: 'white', border: 'none', padding: '12px', borderRadius: '4px', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.2s', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                    }}
+                >
+                    <FolderPlus size={18} /> Open PSD / KRA
+                </button>
+            </div>
             <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #444', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button
                     onClick={handleCreateGroup}
