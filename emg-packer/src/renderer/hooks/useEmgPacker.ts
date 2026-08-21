@@ -215,7 +215,11 @@ export function useEmgPacker() {
                     packed: packed,
                     meta: layerMeta[layer.id!],
                     originalLayer: layer,
-                    zIndex: totalLayers - 1 - index // Front (index=0) gets highest Z
+                    // ag-psd の children は「下から上」（index 0 = 最背面）。textureZIndex は
+                    // 仕様上「大きいほど前面」なので、走査順をそのまま z にすればよい。
+                    // 以前は totalLayers-1-index として最背面に最大値を与えており、
+                    // 書き出した .emg の重なり順が全て前後逆になっていた。
+                    zIndex: index
                 });
             }
         });
@@ -258,8 +262,9 @@ export function useEmgPacker() {
                 const packed = result.items.find(p => p.id === layer.id!.toString());
                 const meta = layerMeta[layer.id!];
                 if (packed && meta) {
-                    // Front layer (index=0) gets highest Z-Index
-                    const zIndex = totalLayers - 1 - index;
+                    // ag-psd の children は「下から上」（index 0 = 最背面）。
+                    // textureZIndex は「大きいほど前面」なので走査順がそのまま z になる。
+                    const zIndex = index;
                     console.log(`Layer: ${layer.name}, Index: ${index}, Z-Index: ${zIndex}`);
                     exportItems.push({
                         packed: packed,

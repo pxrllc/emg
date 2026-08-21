@@ -139,12 +139,25 @@ func _build_parts() -> void:
 			sprite.centered = false
 			sprite.position = Vector2(layer.get("basePosition_x", 0), layer.get("basePosition_y", 0))
 			sprite.z_index = int(layer.get("textureZIndex", 0))
+			# Per-layer opacity from data.json. Visibility is a separate channel
+			# (sprite.visible), so modulate carries only the layer's own opacity.
+			sprite.modulate.a = float(layer.get("opacity", 1.0))
 			sprite.visible = true if part_type != "switch" else (texture_id == default_id)
 			add_child(sprite)
 
 			layer_map[texture_id] = sprite
-			_texture_to_part[texture_id] = part_id
-			_texture_to_sprite[texture_id] = sprite
+			# textureID repeats across parts (senti has "01" in Mouth, Eyes and Eyebrows),
+			# so a layer is only uniquely identified by (partID, textureID). Keying these
+			# flat maps on textureID alone made a lookup resolve to whichever part was
+			# enumerated first — that is how "the eyebrows blink" bugs happen.
+			var key := _layer_key(part_id, texture_id)
+			_texture_to_part[key] = part_id
+			_texture_to_sprite[key] = sprite
+			# Keep a bare-textureID entry as a fallback for callers that only know the
+			# textureID, but never let it overwrite an earlier part's entry.
+			if not _texture_to_part.has(texture_id):
+				_texture_to_part[texture_id] = part_id
+				_texture_to_sprite[texture_id] = sprite
 
 		_part_layers[part_id] = layer_map
 
@@ -162,7 +175,17 @@ func _set_part_visible(part_id: String, visible: bool) -> void:
 		(layer_map[tid] as Sprite2D).visible = visible
 
 
-func get_sprite_for_texture(texture_id: String) -> Sprite2D:
+## Builds the key used by the flat layer lookups. A layer is only unique as
+## (partID, textureID); see _build_parts().
+func _layer_key(part_id: String, texture_id: String) -> String:
+	return "%s\t%s" % [part_id, texture_id]
+
+
+## Looks up a layer's sprite. Pass part_id whenever it is known — without it the
+## lookup falls back to whichever part declared the textureID first.
+func get_sprite_for_texture(texture_id: String, part_id: String = "") -> Sprite2D:
+	if part_id != "":
+		return _texture_to_sprite.get(_layer_key(part_id, texture_id), null)
 	return _texture_to_sprite.get(texture_id, null)
 
 

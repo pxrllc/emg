@@ -42,9 +42,9 @@ export async function convertToEmg(
     // 黙って一部のレイヤーが欠けることはない。
     const packed = await TexturePacker.pack(packItems);
 
-    // textureZIndex は「前面ほど大きい」。走査順は上から（＝index 0 が最前面）なので反転させる。
+    // textureZIndex は「前面ほど大きい」。ag-psd の children は「下から上」に並んでいる
+    // （index 0 = 最背面。実 PSD で確認済み）ため、走査順をそのまま z にすればよい。
     // パッキングは高さ順にソートされ z 情報を保持しないため、ここで与える必要がある。
-    const total = exportable.length;
     const exportItems: ExportItem[] = [];
     exportable.forEach((l, index) => {
         const item = packed.items.find(p => p.id === String(l.layer.id));
@@ -53,7 +53,7 @@ export async function convertToEmg(
         exportItems.push({
             packed: item,
             originalLayer: l.layer,
-            zIndex: total - 1 - index,
+            zIndex: index,
             meta: {
                 id: l.layer.id!,
                 partId: l.partId,

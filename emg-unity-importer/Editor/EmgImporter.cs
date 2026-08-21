@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -30,7 +31,12 @@ namespace Emg.Editor
                 using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
 
                 // 1. Parse data.json
-                var dataEntry = archive.GetEntry("data.json");
+                // GetEntry() matches the full entry name exactly, so it misses both
+                // model.json and any archive that nests its files in a folder
+                // (zunda.emg stores "zunda/assigned_texture_data.json"). Use the same
+                // fallback rule as the reference player and Emg.Core: prefer an entry
+                // ending in "data.json", otherwise any .json that is not mapping.json.
+                var dataEntry = FindDataEntry(archive);
                 if (dataEntry == null)
                 {
                     Debug.LogError($"[EmgImporter] data.json not found in {ctx.assetPath}");
@@ -49,7 +55,7 @@ namespace Emg.Editor
 
                 // 1.5 Parse mapping.json (optional companion file, v0.3.0+)
                 EmgMapping emgMapping = null;
-                var mappingEntry = archive.GetEntry("mapping.json");
+                var mappingEntry = FindEntry(archive, n => n.EndsWith("mapping.json", StringComparison.OrdinalIgnoreCase));
                 if (mappingEntry != null)
                 {
                     try
@@ -99,6 +105,27 @@ namespace Emg.Editor
         // Texture Loading
         // -------------------------
 
+        /// <summary>
+        /// Finds the main JSON entry. Mirrors emg-cdn/emg-player.0.3.0.js and Emg.Core:
+        /// prefer an entry whose name ends with "data.json", then fall back to any .json
+        /// that is not the mapping.json companion. This is what makes both "data.json"
+        /// and "model.json" work, and what tolerates entries nested in a folder.
+        /// </summary>
+        private static ZipArchiveEntry FindDataEntry(ZipArchive archive) =>
+            FindEntry(archive, n => n.EndsWith("data.json", StringComparison.OrdinalIgnoreCase))
+            ?? FindEntry(archive, n =>
+                n.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+                !n.EndsWith("mapping.json", StringComparison.OrdinalIgnoreCase));
+
+        private static ZipArchiveEntry FindEntry(ZipArchive archive, Func<string, bool> predicate)
+        {
+            foreach (var entry in archive.Entries)
+            {
+                if (predicate(entry.FullName)) return entry;
+            }
+            return null;
+        }
+
         private static Dictionary<string, Texture2D> LoadTextures(
             ZipArchive archive, EmgData emgData, AssetImportContext ctx)
         {
@@ -107,7 +134,10 @@ namespace Emg.Editor
 
             foreach (var texInfo in emgData.textures)
             {
-                var texEntry = archive.GetEntry(texInfo.textureFile);
+                // Same reason as FindDataEntry: an exact-name lookup misses atlases
+                // stored inside a folder within the archive.
+                var texEntry = archive.GetEntry(texInfo.textureFile)
+                    ?? FindEntry(archive, n => n.EndsWith(texInfo.textureFile, StringComparison.OrdinalIgnoreCase));
                 if (texEntry == null)
                 {
                     Debug.LogWarning($"[EmgImporter] Texture {texInfo.textureFile} not found.");
