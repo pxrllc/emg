@@ -5,3 +5,5 @@ emg-lite/tools/emg-viewer/public/assets/
 node_modules/
 dist*/
 doc/
+# 互換性検証用の生成物（tools/make-compat-fixtures.js で再生成できる）
+test-fixtures/
