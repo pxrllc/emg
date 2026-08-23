@@ -45,12 +45,16 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
     private EmgAutoSetup? setup;
     private string? loadedOverridesKey;
 
-    // atlasImageSource は atlasBitmap（.Output）の生存期間を握っている。SampleTachieSource.cs の
+    // IImageFileSource は .Output（ID2D1Bitmap）の生存期間を握っている。SampleTachieSource.cs の
     // `source` フィールドと同じく、使い終わるたびに Dispose するのではなくフィールドとして
     // 保持し続け、次のロード時・クラス自体の Dispose() でのみ破棄する。
-    private IImageFileSource? atlasImageSource;
-    private ID2D1Bitmap? atlasBitmap;
-    private string? atlasBitmapTextureFile;
+    //
+    // アトラスは複数枚になりうる（emg-json-spec.md 1.3）。レイヤーは textureFile で
+    // どのアトラスを参照するかを個別に指定するため、textureFile をキーに保持する。
+    private readonly Dictionary<string, IImageFileSource> atlasSources = new();
+    private readonly Dictionary<string, ID2D1Bitmap> atlasBitmaps = new();
+    /// <summary>textures[0]。レイヤーの textureFile が解決できなかった場合のフォールバック。</summary>
+    private ID2D1Bitmap? primaryAtlas;
 
     private ID2D1BitmapRenderTarget? compositeTarget;
     private int compositeWidth;
@@ -100,7 +104,7 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
         // 「目パーツが複数重なって描画される」という実機不具合の原因調査のため、
         // Update() が複数スレッドから同時に呼ばれていないか（YMM4 の TimelineSource.Update は
         // Parallel.ForEach でアイテムを並行更新しているのを NRE のスタックトレースで確認済み）
-        // 再入検出を入れる。Direct2D の compositeTarget/atlasBitmap はスレッドセーフではないため、
+        // 再入検出を入れる。Direct2D の compositeTarget/アトラスはスレッドセーフではないため、
         // もし同一インスタンスへの Update() が並行実行されていれば BeginDraw/DrawBitmap/EndDraw の
         // 競合により描画が壊れる可能性がある。
         if (System.Threading.Interlocked.CompareExchange(ref updateReentrancyGuard, 1, 0) != 0)
@@ -428,52 +432,71 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
 
     private void LoadAtlasBitmap()
     {
-        // atlasBitmap 自体は atlasImageSource が所有しているため、直接 Dispose せず
-        // atlasImageSource ごと破棄する（.Output だけを個別に Dispose すると二重解放になりうる）。
-        atlasImageSource?.Dispose();
-        atlasImageSource = null;
-        atlasBitmap = null;
-        atlasBitmapTextureFile = null;
+        // ID2D1Bitmap（.Output）は IImageFileSource が所有しているため、直接 Dispose せず
+        // ソースごと破棄する（.Output だけを個別に Dispose すると二重解放になりうる）。
+        foreach (var s in atlasSources.Values) s.Dispose();
+        atlasSources.Clear();
+        atlasBitmaps.Clear();
+        primaryAtlas = null;
 
         if (loaded is null) return;
 
-        // 現状は単一アトラス（textures[0]）のみ対応。複数アトラス分割（texture_0.png, texture_1.png...）
-        // は emg-packer 側では未使用のため、必要になった時点で拡張する。
-        var texture = loaded.Data.Textures.FirstOrDefault();
-        if (texture is null)
+        if (loaded.Data.Textures.Count == 0)
         {
             Log.Default.Write("[EmgTachiePlugin] data.json に textures[] が1件もありません。アトラス読み込みをスキップします。");
             return;
         }
-        if (!loaded.TextureFilePaths.TryGetValue(texture.TextureFile, out var path))
+
+        foreach (var texture in loaded.Data.Textures)
         {
-            Log.Default.Write($"[EmgTachiePlugin] textureFile '{texture.TextureFile}' が .emg アーカイブ内に見つかりませんでした。展開済みファイル一覧: [{string.Join(", ", loaded.TextureFilePaths.Keys)}]");
-            return;
+            if (!loaded.TextureFilePaths.TryGetValue(texture.TextureFile, out var path))
+            {
+                Log.Default.Write($"[EmgTachiePlugin] textureFile '{texture.TextureFile}' が .emg アーカイブ内に見つかりませんでした。展開済みファイル一覧: [{string.Join(", ", loaded.TextureFilePaths.Keys)}]");
+                continue;
+            }
+
+            // ImageFileSourceFactory.Create(IGraphicsDevices, string) -> IImageFileSource
+            // （実DLLをリフレクションで確認済み）。IImageFileSource.Output が ID2D1Bitmap を返す。
+            // ここでは「1枚の画像をそのまま表示する」用途ではなく「アトラスとして保持し、
+            // DrawBitmap の src矩形で切り出す」用途なので、返された ID2D1Bitmap をそのまま保持する。
+            // imageSource 自体を（using で即破棄せず）フィールドとして生かしておく必要がある —
+            // .Output はこのオブジェクトが所有しているため。
+            var source = ImageFileSourceFactory.Create(devices, path);
+            if (source is null)
+            {
+                Log.Default.Write($"[EmgTachiePlugin] ImageFileSourceFactory.Create が null を返しました。path='{path}'");
+                continue;
+            }
+
+            atlasSources[texture.TextureFile] = source;
+            atlasBitmaps[texture.TextureFile] = source.Output;
+            primaryAtlas ??= source.Output;
+            Log.Default.Write($"[EmgTachiePlugin] アトラス読み込み成功: {path} ({source.Output.PixelSize.Width}x{source.Output.PixelSize.Height})");
         }
 
-        // ImageFileSourceFactory.Create(IGraphicsDevices, string) -> IImageFileSource
-        // （実DLLをリフレクションで確認済み）。IImageFileSource.Output が ID2D1Bitmap を返す。
-        // ここでは「1枚の画像をそのまま表示する」用途ではなく「アトラスとして保持し、
-        // DrawBitmap の src矩形で切り出す」用途なので、返された ID2D1Bitmap をそのまま保持する。
-        // imageSource 自体を（using で即破棄せず）フィールドとして生かしておく必要がある —
-        // atlasBitmap（.Output）はこのオブジェクトが所有しているため。
-        atlasImageSource = ImageFileSourceFactory.Create(devices, path);
-        if (atlasImageSource is null)
-        {
-            Log.Default.Write($"[EmgTachiePlugin] ImageFileSourceFactory.Create が null を返しました。path='{path}'");
-            return; // 画像ファイルの読み込みに失敗した場合はフォールバック（empty）のまま
-        }
+        if (atlasBitmaps.Count > 1)
+            Log.Default.Write($"[EmgTachiePlugin] 複数アトラス: {atlasBitmaps.Count} 枚 [{string.Join(", ", atlasBitmaps.Keys)}]");
+    }
 
-        atlasBitmap = atlasImageSource.Output;
-        atlasBitmapTextureFile = texture.TextureFile;
-        Log.Default.Write($"[EmgTachiePlugin] アトラス読み込み成功: {path} ({atlasBitmap.PixelSize.Width}x{atlasBitmap.PixelSize.Height})");
+    /// <summary>
+    /// レイヤーが参照するアトラスを返す。textureFile が解決できない場合は textures[0] に倒す
+    /// （単一アトラスのファイルで textureFile の表記ゆれがあっても描画できるようにするため）。
+    /// </summary>
+    private ID2D1Bitmap? ResolveAtlas(EmgLayer layer)
+    {
+        if (!string.IsNullOrEmpty(layer.TextureFile)
+            && atlasBitmaps.TryGetValue(layer.TextureFile!, out var bmp))
+        {
+            return bmp;
+        }
+        return primaryAtlas;
     }
 
     private void Composite(EmgData data, Dictionary<string, string> activeTextures, EmgExpression? expr, EmgItemParameter item)
     {
-        if (atlasBitmap is null)
+        if (primaryAtlas is null)
         {
-            LogOnce("Composite: atlasBitmap が未ロードのため合成をスキップします");
+            LogOnce("Composite: アトラスが未ロードのため合成をスキップします");
             return;
         }
 
@@ -552,7 +575,10 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
 
     private void DrawLayer(ID2D1BitmapRenderTarget target, EmgLayer layer)
     {
-        if (atlasBitmap is null) return;
+        // アトラスはレイヤーごとに異なりうる（emg-json-spec.md 1.3）。
+        // 常に1枚目から切り出すと、分割されたファイルで無関係な領域を描いてしまう。
+        var atlas = ResolveAtlas(layer);
+        if (atlas is null) return;
 
         // 実DLLをリフレクションで確認: Vortice.Mathematics.Rect の4引数コンストラクタは
         // (x, y, width, height) であり (left, top, right, bottom) ではない。
@@ -568,7 +594,7 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
 
         float opacity = (float)(layer.Opacity ?? 1.0);
 
-        target.DrawBitmap(atlasBitmap, dstRect, opacity, BitmapInterpolationMode.Linear, srcRect);
+        target.DrawBitmap(atlas, dstRect, opacity, BitmapInterpolationMode.Linear, srcRect);
     }
 
     public void Dispose()
@@ -581,6 +607,9 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
         transformEffect.Dispose();
         empty.Dispose();
         compositeTarget?.Dispose();
-        atlasImageSource?.Dispose(); // atlasBitmap（.Output）もこれが所有しているので個別Disposeしない
+        // .Output（ID2D1Bitmap）は IImageFileSource が所有しているので個別 Dispose しない
+        foreach (var src in atlasSources.Values) src.Dispose();
+        atlasSources.Clear();
+        atlasBitmaps.Clear();
     }
 }

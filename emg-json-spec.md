@@ -412,7 +412,7 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 
 | 事項 | 内容 |
 |---|---|
-| **アトラスの分割（1.3）** | 書き出し側（`emg-packer` / `emg-web-packer`）は分割に対応済み。**`emg-ymm4` は単一アトラスしか保持しない**ため、分割されたファイルを描画できない |
+| **アトラスの分割（1.3）** | 書き出し側・消費側とも対応済み（2026-08-24）。既知の未対応は無し |
 
 ### 10.3 前方互換の規定が存在しない
 
@@ -450,7 +450,7 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 | 実装 | JSON 探索（1.1） | 複数アトラス（1.3） | `opacity`（5.3） | `(partID, textureID)`（6章） |
 |---|---|---|---|---|
 | `emg-cdn/emg-player.0.3.0.js` | 後方一致 ✅ | `textureFile` でキー管理 ✅ | 適用 ✅ | `data-part-id` + `data-texture-id` ✅ |
-| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | **単一のみ** ❌ | 適用 ✅ | 保存形式が `partID<TAB>textureID` ✅ |
+| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | `textureFile` でキー管理 ✅ | 適用 ✅ | 保存形式が `partID<TAB>textureID` ✅ |
 | `emg-unity-importer` | 後方一致 ✅ | `Dictionary<string, Texture2D>` ✅ | 適用 ✅ | キーが `{partID}_{textureID}` ✅ |
 | `emg-godot` | 後方一致 ✅ | `textureFile -> ImageTexture` ✅ | 適用 ✅ | キーが `partID<TAB>textureID` ✅ |
 | `emg-web-runtime` | 後方一致 ✅ | 未確認 | 適用 ✅ | 重複する `textureID` のみ `partID` で修飾 ✅ |
