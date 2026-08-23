@@ -26,6 +26,8 @@ There is no root build system — each subdirectory below is an **independent np
 
 Top-level spec docs: `emg-json-spec.md` (full EMG v0.3.0 JSON schema, normative — `data.json` root structure), `emg-mapping-spec.md` (v0.3.0 `mapping.json` companion-file schema for expression/blink/lip-sync semantics), and `emg-spec-intent.md` (design rationale — read this to understand *why* a field exists, not just what it is).
 
+`emg-json-spec-0.4.0.md` is a **draft delta spec** against v0.3.0, not a replacement: it adds the compatibility rules v0.3.0 never had (how to treat unknown fields and unknown enum values), `requiredExtensions[]`, and `layers[].anchor_*`, and relaxes `sprites[].fps` to optional. It deliberately adds no expressive power — it is the groundwork that has to ship *before* implementations are widely distributed, because a forward-compatibility rule cannot retroactively change binaries already in the wild. Its §9.2 experiment (measuring how the existing six consumers actually react to unknown values) must be run before its §1.2 wording is settled.
+
 ## Common commands
 
 Each JS/TS project uses its own `package.json` in its own directory (`npm install` once per project you touch):
