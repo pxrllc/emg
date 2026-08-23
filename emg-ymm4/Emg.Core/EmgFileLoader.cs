@@ -47,6 +47,10 @@ public static class EmgFileLoader
 
         var data = ReadJson<EmgData>(dataEntry);
 
+        // v0.4.0 §2.2: 未対応の requiredExtensions があればここで失敗させる。
+        // mapping.json やテクスチャの展開より前に判定する。
+        EmgCompat.Validate(data);
+
         // mapping.json は完全にオプショナルなコンパニオンファイル。無い/壊れていても
         // 全体のロードを失敗させない（emg-mapping-spec.md の後方互換方針）。
         EmgMapping? mapping = null;

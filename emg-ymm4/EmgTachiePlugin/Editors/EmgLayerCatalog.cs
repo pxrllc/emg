@@ -84,7 +84,7 @@ public static class EmgLayerCatalog
         foreach (var part in loaded.Data.Parts)
         {
             // static パーツは常に全レイヤーが描画されるので、選択肢に出しても意味がない。
-            if (part.Type != "switch") continue;
+            if (part.ResolvedType != "switch") continue;
 
             foreach (var layer in part.Layers)
             {

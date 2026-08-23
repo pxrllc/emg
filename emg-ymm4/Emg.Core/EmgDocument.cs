@@ -25,6 +25,13 @@ public sealed class EmgData
 
     [JsonPropertyName("sprites")]
     public List<EmgSprite> Sprites { get; set; } = new();
+
+    /// <summary>
+    /// v0.4.0 §2。このファイルを正しく表示するために実装が理解している必要がある機能識別子。
+    /// 未知の識別子が含まれる場合、読み込みは拒否される（EmgCompat.Validate）。
+    /// </summary>
+    [JsonPropertyName("requiredExtensions")]
+    public List<string> RequiredExtensions { get; set; } = new();
 }
 
 public sealed class EmgTexture
@@ -53,6 +60,15 @@ public sealed class EmgPart
 
     [JsonPropertyName("layers")]
     public List<EmgLayer> Layers { get; set; } = new();
+
+    /// <summary>
+    /// v0.4.0 §1.2 F2。未知の <see cref="Type"/> は、<c>default</c> を持つなら switch、
+    /// 持たないなら static として扱う。描画・解決はすべてこちらを見ること
+    /// （生の Type を見ると、未知の値でパーツが丸ごと消える）。
+    /// </summary>
+    [JsonIgnore]
+    public string ResolvedType =>
+        Type is "static" or "switch" ? Type : (Default is not null ? "switch" : "static");
 }
 
 public sealed class EmgLayer
@@ -86,6 +102,23 @@ public sealed class EmgLayer
     [JsonPropertyName("textureZIndex")]
     public int TextureZIndex { get; set; }
 
+    /// <summary>
+    /// v0.4.0 §3。回転・拡縮の中心（キャンバス座標）。不在時は BasePositionX と同値。
+    /// v0.4.0 に座標変換は存在しないため描画には影響しないが、内部モデルには保持する。
+    /// </summary>
+    [JsonPropertyName("anchor_x")]
+    public double? AnchorX { get; set; }
+
+    [JsonPropertyName("anchor_y")]
+    public double? AnchorY { get; set; }
+
+    /// <summary>不在時の既定値を解決したアンカー（v0.4.0 §3.1）。</summary>
+    [JsonIgnore]
+    public double ResolvedAnchorX => AnchorX ?? BasePositionX;
+
+    [JsonIgnore]
+    public double ResolvedAnchorY => AnchorY ?? BasePositionY;
+
     [JsonPropertyName("opacity")]
     public double? Opacity { get; set; }
 
@@ -117,6 +150,10 @@ public sealed class EmgSequence
     [JsonPropertyName("type")]
     public string Type { get; set; } = "ordered";
 
+    /// <summary>v0.4.0 §1.2 F3。未知の値は ordered として扱う。</summary>
+    [JsonIgnore]
+    public string ResolvedType => Type is "ordered" or "random_hold" ? Type : "ordered";
+
     [JsonPropertyName("frames")]
     public List<string> Frames { get; set; } = new();
 }
@@ -126,6 +163,14 @@ public sealed class EmgTrigger
     // "auto_loop" | "random_interval" | "external"
     [JsonPropertyName("type")]
     public string Type { get; set; } = "external";
+
+    /// <summary>
+    /// v0.4.0 §1.2 F4。未知の値は external（自律発火しない）として扱う。
+    /// 未知のトリガーで勝手に animation が走るより、静止するほうが安全。
+    /// </summary>
+    [JsonIgnore]
+    public string ResolvedType =>
+        Type is "auto_loop" or "random_interval" or "external" ? Type : "external";
 
     [JsonPropertyName("intervalMin")]
     public double? IntervalMin { get; set; }

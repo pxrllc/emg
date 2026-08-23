@@ -113,7 +113,7 @@ public sealed class EmgLayerEditor : UserControl
     /// <summary>パーツごとに1行（「変更しない」＋そのパーツのレイヤー）。</summary>
     private void BuildDisplayRows(EmgData data, IReadOnlyList<EmgLayerChoice> allChoices, ImmutableList<string> current)
     {
-        var switchParts = data.Parts.Where(p => p.Type == "switch").ToList();
+        var switchParts = data.Parts.Where(p => p.ResolvedType == "switch").ToList();
         if (switchParts.Count == 0)
         {
             rootPanel.Children.Add(new TextBlock

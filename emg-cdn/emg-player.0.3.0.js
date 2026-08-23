@@ -72,6 +72,9 @@
 
             console.log(`EMG Version: ${window.emgVersion}`);
 
+            // v0.4.0 §2.2: mapping やテクスチャの展開より前に判定する
+            checkRequiredExtensions(window.jsonData);
+
             // mapping.json (任意のコンパニオンファイル。無ければ無視する)
             const mappingFile = Object.keys(zipContent.files).find(name => name.endsWith("mapping.json"));
             if (mappingFile) {
@@ -126,6 +129,48 @@
         }
     }
 
+    // ------------------------------------------------------------------
+    // v0.4.0 互換性規則（emg-json-spec-0.4.0.md 1〜2 章）
+    // ------------------------------------------------------------------
+
+    // この実装が理解する機能識別子（emg-extensions-registry.md）。
+    // v0.4.0 の範囲では 1 つも実装していないため空。
+    const SUPPORTED_EXTENSIONS = new Set();
+
+    // F5: 未知の識別子が 1 つでもあれば読み込みを拒否する。
+    // 理解できない拡張を黙って無視すると誤った絵になるため、明示的に失敗させる。
+    function checkRequiredExtensions(jsonData) {
+        const required = Array.isArray(jsonData.requiredExtensions) ? jsonData.requiredExtensions : [];
+        const unknown = required.filter(e => !SUPPORTED_EXTENSIONS.has(e));
+        if (unknown.length > 0) {
+            throw new Error(
+                `この .emg は未対応の機能を要求しています: ${unknown.join(', ')}。プレイヤーの更新が必要です。`);
+        }
+    }
+
+    // F2: 未知の type は default を持つなら switch、持たないなら static として扱う。
+    // 生の type で分岐すると、未知の値でパーツが消えるか全レイヤーが重なる。
+    function resolvePartType(part) {
+        if (part.type === 'static' || part.type === 'switch') return part.type;
+        return part.default != null ? 'switch' : 'static';
+    }
+
+    // F3 / F4: 未知の値は既定へ倒す。trigger は「自律発火しない」側が安全。
+    function resolveSequenceType(sequence) {
+        const t = sequence && sequence.type;
+        return (t === 'ordered' || t === 'random_hold') ? t : 'ordered';
+    }
+
+    function resolveTriggerType(trigger) {
+        const t = trigger && trigger.type;
+        return (t === 'auto_loop' || t === 'random_interval' || t === 'external') ? t : 'external';
+    }
+
+    // 4.2: fps は v0.4.0 で任意になった。不在時は 12。
+    function resolveFps(sprite) {
+        return (typeof sprite.fps === 'number' && sprite.fps > 0) ? sprite.fps : 12;
+    }
+
     function applyLayerStyles(element) {
         element.style.position = "absolute";
         element.style.backgroundRepeat = "no-repeat";
@@ -160,13 +205,14 @@
         if (jsonData.parts) {
             // v0.2.2+ render logic
             jsonData.parts.forEach(part => {
+                const partType = resolvePartType(part);   // v0.4.0 F2
                 // パーツコンテナを作成（必要に応じて）
                 // レイヤーを展開
                 part.layers.forEach(layer => {
                     const div = document.createElement('div');
                     div.classList.add('layer');
                     div.dataset.partId = part.partID;
-                    div.dataset.type = part.type;
+                    div.dataset.type = partType;
                     div.id = layer.textureID; // 後方互換のため維持
                     // textureID はパーツ間で重複しうる（senti では "01" が Mouth/Eyes/Eyebrows に存在）ため、
                     // 切り替えの一致判定には id ではなく data 属性を使う。
@@ -214,7 +260,7 @@
                     div.style.opacity = String(baseOpacity);
 
                     // type: switch の場合、default でないものは非表示
-                    setLayerVisible(div, part.type !== 'switch' || layer.textureID === part.default);
+                    setLayerVisible(div, partType !== 'switch' || layer.textureID === part.default);
 
                     container.appendChild(div);
                 });
@@ -256,7 +302,7 @@
 
     function findPartByKeyword(parts, keywords) {
         return parts.find(part =>
-            part.type === 'switch' &&
+            resolvePartType(part) === 'switch' &&
             keywords.some(kw => part.partID.toLowerCase().includes(kw.toLowerCase()))
         );
     }
@@ -476,21 +522,23 @@
 
     function handleSprite(sprite) {
         // v0.2.2 structured sprite
-        const { spriteID, targetPartID, sequence, trigger, fps } = sprite;
+        const { spriteID, targetPartID, sequence, trigger } = sprite;
         if (!sequence) return; // v0.1.0 format not supported in this block for now
 
         // Target Parts
         // partIDに属する全レイヤーのElementを取得しておく
         if (!targetPartID) return;
 
-        // animation step function
-        const frameMs = 1000 / (fps || 12);
+        // v0.4.0: 未知の列挙値と fps 不在をここで正規化してから使う（F3 / F4 / 4.2）
+        const sequenceType = resolveSequenceType(sequence);
+        const triggerType = trigger ? resolveTriggerType(trigger) : null;
+        const frameMs = 1000 / resolveFps(sprite);
 
         const runSequence = () => {
             // sequence.type: "ordered", "random_hold"
-            if (sequence.type === 'ordered') {
-                playOrderedSequence(targetPartID, sequence.frames, frameMs, trigger ? trigger.type === 'auto_loop' : false);
-            } else if (sequence.type === 'random_hold') {
+            if (sequenceType === 'ordered') {
+                playOrderedSequence(targetPartID, sequence.frames, frameMs, triggerType === 'auto_loop');
+            } else if (sequenceType === 'random_hold') {
                 const pick = sequence.frames[Math.floor(Math.random() * sequence.frames.length)];
                 switchTexture(targetPartID, pick);
             }
@@ -499,15 +547,15 @@
         // Trigger logic
         if (!trigger) return; // External only
 
-        if (trigger.type === 'auto_loop') {
+        if (triggerType === 'auto_loop') {
             // すぐに開始してループ
-            if (sequence.type === 'ordered') {
+            if (sequenceType === 'ordered') {
                 playOrderedSequence(targetPartID, sequence.frames, frameMs, true);
             } else {
                 // random_hold loop? not meaningful usually, basically static random
                 runSequence();
             }
-        } else if (trigger.type === 'random_interval') {
+        } else if (triggerType === 'random_interval') {
             const scheduleNext = () => {
                 if (!window.isAnimationRunning) return;
                 const min = trigger.intervalMin || 1.0;

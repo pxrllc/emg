@@ -108,7 +108,7 @@ public static class EmgStateResolver
 
     private static EmgPart? FindPartByKeyword(List<EmgPart> parts, string[] keywords) =>
         parts.FirstOrDefault(p =>
-            p.Type == "switch" &&
+            p.ResolvedType == "switch" &&
             keywords.Any(kw => p.PartID.Contains(kw, StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>
@@ -122,7 +122,7 @@ public static class EmgStateResolver
         var result = new Dictionary<string, string>();
 
         // 1. 各 switch パーツを default で初期化
-        foreach (var part in data.Parts.Where(p => p.Type == "switch"))
+        foreach (var part in data.Parts.Where(p => p.ResolvedType == "switch"))
         {
             if (part.Default is not null) result[part.PartID] = part.Default;
         }

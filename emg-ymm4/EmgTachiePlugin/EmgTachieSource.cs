@@ -534,7 +534,7 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
 
         foreach (var part in data.Parts)
         {
-            if (part.Type == "static")
+            if (part.ResolvedType == "static")
             {
                 layersToDraw.AddRange(part.Layers);
                 continue;
