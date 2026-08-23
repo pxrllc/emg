@@ -85,7 +85,7 @@ EMG はすべてのパーツを 1 枚のテクスチャアトラスへパッキ�
 
 2 の冪であることは v0.3.0 では要求していません。既存の書き出し実装がそうしているというだけであり、消費側は `textures[]` が宣言する任意の寸法を受け入れるべきです。
 
-> **参考:** `emg-packer` の `TexturePacker` は 2048px から開始し、収まらなければ 2 倍にして再試行します。**現状の実装は 8192px で分割せず例外を投げます**（`Failed to pack items: Exceeded max atlas size 8192`）。本節の分割要件は未実装であり、8192px を超える素材は変換できません。10.3 を参照してください。
+> **参考:** `emg-packer` の `TexturePacker` は 2048px から開始し、収まらなければ 2 倍にして再試行します。8192px でも収まらない場合に限り複数枚へ分割します。**1 枚に収まる場合のファイル名は `texture.png` のまま**で、分割時のみ `texture_0.png` 以降になります（既存ファイルとの互換のため）。単体で 8192px を超えるレイヤーは分割しても救えないため、例外になります。
 
 ---
 
@@ -412,7 +412,7 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 
 | 事項 | 内容 |
 |---|---|
-| **アトラスの分割（1.3）** | 仕様は 8192px を超える場合の分割を要求しているが、`emg-packer` / `emg-web-packer` は**分割せず例外で失敗する**。`emg-ymm4` は**単一アトラスしか保持しない**ため、分割されたファイルを描画できない |
+| **アトラスの分割（1.3）** | 書き出し側（`emg-packer` / `emg-web-packer`）は分割に対応済み。**`emg-ymm4` は単一アトラスしか保持しない**ため、分割されたファイルを描画できない |
 
 ### 10.3 前方互換の規定が存在しない
 
@@ -456,7 +456,7 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 | `emg-web-runtime` | 後方一致 ✅ | 未確認 | 適用 ✅ | 重複する `textureID` のみ `partID` で修飾 ✅ |
 | `emg-renpy` | 後方一致 ✅ | `tex_map` 辞書 ✅ | 適用 ✅ | Ren'Py の `tag attribute` が本来 2 階層 ✅ |
 
-書き出し側は `emg-packer` / `emg-web-packer` とも**分割未実装**です（1.3 / 10.2）。
+書き出し側は `emg-packer` / `emg-web-packer` とも分割に対応済みです（1.3）。
 
 エントリ探索は実ファイル 6 件（`data.json` / `model.json` / フォルダ配下の
 `zunda/assigned_texture_data.json` / `room/room_texture.model.json`）で解決を確認しています。

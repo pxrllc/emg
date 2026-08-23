@@ -8,38 +8,100 @@ export interface PackItem {
 export interface PackedItem extends PackItem {
     x: number;
     y: number;
+    /** このアイテムが載っているアトラスの番号（PackResult.atlases のインデックス）。 */
+    atlasIndex: number;
+}
+
+export interface PackedAtlas {
+    canvas: HTMLCanvasElement;
+    width: number;
+    height: number;
+    /** `textures[].textureFile` および ZIP のエントリ名になる。 */
+    textureFile: string;
 }
 
 export interface PackResult {
-    canvas: HTMLCanvasElement;
+    atlases: PackedAtlas[];
     items: PackedItem[];
-    width: number;
-    height: number;
 }
 
 export class TexturePacker {
+    /**
+     * 全アイテムを 1 枚のアトラスへ詰める。収まらない場合は複数枚に分割する
+     * （emg-json-spec.md 1.3）。
+     *
+     * 1 枚に収まる場合の出力は分割対応前と同一（`texture.png` 1 枚、2048 から倍々に拡大）。
+     * 既存ファイルとのバイト互換を保つため、単一時はファイル名に連番を付けない。
+     */
     static async pack(items: PackItem[], startSize = 2048, maxSize = 8192): Promise<PackResult> {
-        let currentSize = startSize;
-
         // Sort items by height (descending) for better packing
         const sortedItems = [...items].sort((a, b) => b.height - a.height);
 
-        while (currentSize <= maxSize) {
+        const oversized = sortedItems.find(i => i.width > maxSize || i.height > maxSize);
+        if (oversized) {
+            // 1 枚に載らないアイテムは分割しても救えない。
+            throw new Error(
+                `Item ${oversized.id} (${oversized.width}x${oversized.height}) is larger than the maximum atlas size ${maxSize}`
+            );
+        }
+
+        // 1. まず単一アトラスを試す（2048 → 4096 → 8192）
+        for (let size = startSize; size <= maxSize; size *= 2) {
             try {
-                return await TexturePacker.tryPack(sortedItems, currentSize, currentSize);
-            } catch (e) {
-                console.warn(`Packing failed at ${currentSize}x${currentSize}, retrying...`);
-                if (currentSize >= maxSize) {
-                    throw new Error(`Failed to pack items: Exceeded max atlas size ${maxSize}`);
-                }
-                currentSize *= 2;
+                const single = await TexturePacker.tryPack(sortedItems, size, size);
+                return {
+                    atlases: [{ ...single.atlas, textureFile: 'texture.png' }],
+                    items: single.items.map(i => ({ ...i, atlasIndex: 0 })),
+                };
+            } catch {
+                // 次のサイズで再試行
             }
         }
-        throw new Error('Unexpected packing failure');
+
+        // 2. 収まらないので maxSize のアトラスへ順に詰めていく
+        const atlases: PackedAtlas[] = [];
+        const packed: PackedItem[] = [];
+        let remaining = sortedItems;
+
+        while (remaining.length > 0) {
+            const { atlas, items: fitted, rest } =
+                await TexturePacker.packUpTo(remaining, maxSize, maxSize);
+
+            if (fitted.length === 0) {
+                // 上の oversized チェックを通っている以上ここには来ないが、
+                // 無限ループを避けるため保険を置く。
+                throw new Error('Failed to pack items: no progress');
+            }
+
+            const atlasIndex = atlases.length;
+            atlases.push({ ...atlas, textureFile: `texture_${atlasIndex}.png` });
+            packed.push(...fitted.map(i => ({ ...i, atlasIndex })));
+            remaining = rest;
+        }
+
+        console.warn(`Atlas split into ${atlases.length} textures (${maxSize}px limit)`);
+        return { atlases, items: packed };
     }
 
-    private static async tryPack(sortedItems: PackItem[], mapWidth: number, mapHeight: number): Promise<PackResult> {
-        const packedItems: PackedItem[] = [];
+    /** 全アイテムが収まらなければ例外。単一アトラスの試行に使う。 */
+    private static async tryPack(
+        sortedItems: PackItem[], mapWidth: number, mapHeight: number
+    ): Promise<{ atlas: Omit<PackedAtlas, 'textureFile'>; items: Omit<PackedItem, 'atlasIndex'>[] }> {
+        const r = await TexturePacker.packUpTo(sortedItems, mapWidth, mapHeight);
+        if (r.rest.length > 0) throw new Error('Cannot fit');
+        return { atlas: r.atlas, items: r.items };
+    }
+
+    /**
+     * 収まる分だけ詰め、入らなかったアイテムを rest として返す。
+     * シェルフ packing のため、1 つ入らなくても後続の小さいものは入りうるが、
+     * z 順とは無関係な並び替え済みの配列なので、順序は結果に影響しない。
+     */
+    private static async packUpTo(
+        sortedItems: PackItem[], mapWidth: number, mapHeight: number
+    ): Promise<{ atlas: Omit<PackedAtlas, 'textureFile'>; items: Omit<PackedItem, 'atlasIndex'>[]; rest: PackItem[] }> {
+        const packedItems: Omit<PackedItem, 'atlasIndex'>[] = [];
+        const rest: PackItem[] = [];
         let currentX = 0;
         let currentY = 0;
         let rowHeight = 0;
@@ -49,7 +111,8 @@ export class TexturePacker {
 
         for (const item of sortedItems) {
             if (item.width > mapWidth || item.height > mapHeight) {
-                throw new Error(`Item ${item.id} is larger than atlas size`);
+                rest.push(item);
+                continue;
             }
 
             if (currentX + item.width > mapWidth) {
@@ -60,8 +123,9 @@ export class TexturePacker {
             }
 
             if (currentY + item.height > mapHeight) {
-                // Cannot fit - Throw to trigger retry
-                throw new Error('Cannot fit');
+                // このアトラスにはもう入らない
+                rest.push(item);
+                continue;
             }
 
             packedItems.push({
@@ -91,10 +155,9 @@ export class TexturePacker {
         }
 
         return {
-            canvas,
+            atlas: { canvas, width: canvas.width, height: canvas.height },
             items: packedItems,
-            width: canvas.width,
-            height: canvas.height
+            rest
         };
     }
 }

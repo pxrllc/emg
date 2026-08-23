@@ -123,7 +123,8 @@ export function useEmgPacker() {
                     console.log(`Packing ${packItems.length} items...`);
                     const res = await TexturePacker.pack(packItems);
                     setPackResult(res);
-                    setPackedTextureUrl(res.canvas.toDataURL());
+                    // プレビューは 1 枚目のみ。分割された場合の 2 枚目以降は表示しない。
+                    setPackedTextureUrl(res.atlases[0]?.canvas.toDataURL() ?? null);
                 } catch (e) {
                     console.error("Packing failed", e);
                     setPackResult(null);

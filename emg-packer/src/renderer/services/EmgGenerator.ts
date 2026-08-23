@@ -65,7 +65,8 @@ export class EmgGenerator {
         // TexturePacker が items を高さ順に並べ替えるため、ここに届いた時点の配列順からは
         // 元の重なり順を復元できない。呼び出し側（useEmgPacker）がレイヤーツリーを
         // 上から走査した際の index を使って zIndex を計算している。
-        const textureFile = 'texture.png';
+        // アトラスが複数枚に分割されている場合、レイヤーごとに参照先が異なる
+        // （emg-json-spec.md 1.3）。単一枚なら従来どおり 'texture.png' の 1 種類。
 
         // packed.id（パッキング用の内部ID）→ 出力する textureID の対応。
         const packedIdToTextureId = new Map<string, string>();
@@ -128,7 +129,7 @@ export class EmgGenerator {
 
             part.layers.push({
                 textureID: textureId,
-                textureFile: textureFile,
+                textureFile: packResult.atlases[item.packed.atlasIndex].textureFile,
                 x: item.packed.x,
                 y: item.packed.y,
                 width: item.packed.width,
@@ -217,11 +218,11 @@ export class EmgGenerator {
             version: '0.3.0',
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
-            textures: [{
-                textureFile: textureFile,
-                width: packResult.width,
-                height: packResult.height
-            }],
+            textures: packResult.atlases.map(a => ({
+                textureFile: a.textureFile,
+                width: a.width,
+                height: a.height
+            })),
             parts: emgParts,
             sprites: []
         };
@@ -235,13 +236,16 @@ export class EmgGenerator {
     ): Promise<Blob> {
         const zip = new JSZip();
 
-        // 1. Save Texture
-        const textureName = 'texture.png'; // matches data.json
-        const textureBlob = await new Promise<Blob | null>(resolve =>
-            packResult.canvas.toBlob(resolve, 'image/png')
-        );
-        if (!textureBlob) throw new Error('Failed to generate texture blob');
-        zip.file(textureName, textureBlob);
+        // 1. Save Textures
+        // アトラスは複数枚になりうる（emg-json-spec.md 1.3）。エントリ名は
+        // createData が textures[] に書くものと一致させる必要がある。
+        for (const atlas of packResult.atlases) {
+            const textureBlob = await new Promise<Blob | null>(resolve =>
+                atlas.canvas.toBlob(resolve, 'image/png')
+            );
+            if (!textureBlob) throw new Error(`Failed to generate texture blob: ${atlas.textureFile}`);
+            zip.file(atlas.textureFile, textureBlob);
+        }
 
         // 2. Generate JSON
         const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight);
