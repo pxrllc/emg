@@ -2,3 +2,6 @@ bin/
 obj/
 Directory.Build.props
 dist/
+
+# 動作デモの録画。数百MB規模になるためリポジトリには入れない。
+demo/
