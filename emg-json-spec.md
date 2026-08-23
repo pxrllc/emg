@@ -63,9 +63,29 @@ v0.3.0 は Draft です。v0.2.2 からの変更は `mapping.json` の追加の�
 
 > **参考:** `emg-packer` の `EmgGenerator` は `zip.generateAsync({ type: 'blob' })` を圧縮オプション無しで呼んでおり、JSZip の既定である STORE が適用されます。手作業で `.emg` を組み立てる場合もこれに合わせてください。
 
-### 1.3 テクスチャの分割
+### 1.3 テクスチャアトラスの分割（規範的）
 
-アトラスが複数枚になる場合は `texture_0.png`, `texture_1.png` のように連番で持つことができます。ファイル名は `textures[]` で宣言されるため、命名規則そのものは規範ではありません。
+EMG はすべてのパーツを 1 枚のテクスチャアトラスへパッキングします。1 枚に収まらない場合は**複数枚に分割します**。
+
+#### 消費側の要件
+
+**読み込み実装は複数枚のアトラスを扱えなければなりません。** `textures[]` は配列であり、各レイヤーは `Layer.textureFile` により**どのアトラスを参照するかを個別に指定します**。1 枚のみを保持する実装は、分割されたファイルを正しく描画できません。
+
+#### 書き出し側の要件
+
+- 1 枚あたりの寸法は、**幅・高さとも 8192px を超えてはなりません**
+- 8192px に収まらない場合、**書き出しを失敗させるのではなく複数枚に分割しなければなりません**
+- 各アトラスのファイル名は `textures[]` で宣言します。命名は `texture_0.png`, `texture_1.png` のような連番と**すべきです**が、規範ではありません（単一の場合は `texture.png`）
+
+> **8192px の根拠:** GPU のテクスチャサイズ上限に由来します。Direct3D 11 の機能レベル 11 以上は 16384px を扱えますが、機能レベル 10 の世代、モバイル GPU、および一部の WebGL 実装では 8192px が上限です。より広い環境で追加のリサンプルなしに読めることを優先しています。
+
+#### 寸法の制約
+
+アトラスは**正方形である必要も、両辺が同一である必要もありません**。各辺は独立に 2 の冪へ切り上げられます（実例: `senti` のアトラスは 8192×4096）。
+
+2 の冪であることは v0.3.0 では要求していません。既存の書き出し実装がそうしているというだけであり、消費側は `textures[]` が宣言する任意の寸法を受け入れるべきです。
+
+> **参考:** `emg-packer` の `TexturePacker` は 2048px から開始し、収まらなければ 2 倍にして再試行します。**現状の実装は 8192px で分割せず例外を投げます**（`Failed to pack items: Exceeded max atlas size 8192`）。本節の分割要件は未実装であり、8192px を超える素材は変換できません。10.3 を参照してください。
 
 ---
 
@@ -388,7 +408,13 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 | `textureZIndex` が同値の場合の順序 | 未定義 |
 | キャンバス外へはみ出すレイヤーの扱い | 未定義（クリップするか否か） |
 
-### 10.2 前方互換の規定が存在しない
+### 10.2 仕様と実装が乖離している箇所
+
+| 事項 | 内容 |
+|---|---|
+| **アトラスの分割（1.3）** | 仕様は 8192px を超える場合の分割を要求しているが、`emg-packer` / `emg-web-packer` は**分割せず例外で失敗する**。`emg-ymm4` は**単一アトラスしか保持しない**ため、分割されたファイルを描画できない |
+
+### 10.3 前方互換の規定が存在しない
 
 **v0.3.0 は、未知のフィールド・未知の列挙値に遭遇した実装がどう振る舞うべきかを規定していません。**
 
@@ -421,14 +447,16 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 
 本リポジトリ内の消費側実装が、本仕様のうち検証済みの項目にどう対応しているかです。2026-08-23 時点。
 
-| 実装 | JSON 探索（1.1） | `opacity`（5.3） | `(partID, textureID)`（6章） |
-|---|---|---|---|
-| `emg-cdn/emg-player.0.3.0.js` | 後方一致 ✅ | 適用 ✅ | `data-part-id` + `data-texture-id` ✅ |
-| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | 適用 ✅ | 保存形式が `partID<TAB>textureID` ✅ |
-| `emg-unity-importer` | 後方一致 ✅ | 適用 ✅ | キーが `{partID}_{textureID}` ✅ |
-| `emg-godot` | 後方一致 ✅ | 適用 ✅ | キーが `partID<TAB>textureID` ✅ |
-| `emg-web-runtime` | 後方一致 ✅ | 適用 ✅ | 重複する `textureID` のみ `partID` で修飾 ✅ |
-| `emg-renpy` | 後方一致 ✅ | 適用 ✅ | Ren'Py の `tag attribute` が本来 2 階層 ✅ |
+| 実装 | JSON 探索（1.1） | 複数アトラス（1.3） | `opacity`（5.3） | `(partID, textureID)`（6章） |
+|---|---|---|---|---|
+| `emg-cdn/emg-player.0.3.0.js` | 後方一致 ✅ | `textureFile` でキー管理 ✅ | 適用 ✅ | `data-part-id` + `data-texture-id` ✅ |
+| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | **単一のみ** ❌ | 適用 ✅ | 保存形式が `partID<TAB>textureID` ✅ |
+| `emg-unity-importer` | 後方一致 ✅ | `Dictionary<string, Texture2D>` ✅ | 適用 ✅ | キーが `{partID}_{textureID}` ✅ |
+| `emg-godot` | 後方一致 ✅ | `textureFile -> ImageTexture` ✅ | 適用 ✅ | キーが `partID<TAB>textureID` ✅ |
+| `emg-web-runtime` | 後方一致 ✅ | 未確認 | 適用 ✅ | 重複する `textureID` のみ `partID` で修飾 ✅ |
+| `emg-renpy` | 後方一致 ✅ | `tex_map` 辞書 ✅ | 適用 ✅ | Ren'Py の `tag attribute` が本来 2 階層 ✅ |
+
+書き出し側は `emg-packer` / `emg-web-packer` とも**分割未実装**です（1.3 / 10.2）。
 
 エントリ探索は実ファイル 6 件（`data.json` / `model.json` / フォルダ配下の
 `zunda/assigned_texture_data.json` / `room/room_texture.model.json`）で解決を確認しています。
@@ -558,4 +586,4 @@ PSD では差分グループのうち 1 枚だけが表示され、残りは非�
 | 0.2.1 (Draft) | `Sprite` を全面刷新。`loop` / `useTex` を廃止し、`targetPartID` / `sequence`（`type` + `frames`）/ `trigger`（任意）に変更 |
 | 0.2.2 (Draft) | ルートに `textures[]` を追加。テクスチャのファイル名・サイズを一元管理 |
 | 0.3.0 (Draft) | `mapping.json` を追加（`emg-mapping-spec.md`）。`data.json` のルートスキーマに破壊的変更なし |
-| 0.3.0 (2026-08-23 改訂) | **スキーマ変更なし。** 記載漏れの明文化: `Layer.opacity` / `blendMode`、コンテナ仕様（1章）、座標系（5.1）、`textureZIndex` の向きと解決（5.2 / 8章）、識別子の一意性（6章）、アルファ形式（3.1）、未定義事項の列挙（10章）、実データの既知の逸脱（11章） |
+| 0.3.0 (2026-08-23 改訂) | **スキーマ変更なし。** 記載漏れの明文化: `Layer.opacity` / `blendMode`、コンテナ仕様（1章）、**アトラスの分割規則と 8192px 上限（1.3）**、座標系（5.1）、`textureZIndex` の向きと解決（5.2 / 8章）、識別子の一意性（6章）、アルファ形式（3.1）、未定義事項と仕様・実装の乖離（10章）、実データの既知の逸脱（11章） |
