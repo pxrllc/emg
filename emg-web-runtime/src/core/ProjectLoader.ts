@@ -16,19 +16,29 @@ class ProjectLoader {
             const content = await zip.loadAsync(file);
             const fileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
 
-            // 1. Load avatar.json
-            const avatarFile = content.file('avatar.json') || content.file('data.json'); // Support both for now? data.json is v0.2.2 standard in packer.
-            // Let's assume standard is data.json for now based on Packer implementation, or check both.
-            // Requirement says "avatar.json", but Packer output "data.json". 
-            // We should support "data.json" as primary if coming from Packer.
+            // 1. Load the main JSON.
+            // emg-json-spec.md 1.1 matches the entry by suffix rather than by exact
+            // name, because shipped files store it as "model.json" (samples/senti.emg)
+            // or nested in a folder ("zunda/assigned_texture_data.json"). Matching
+            // exactly meant those files could not be opened at all.
+            // This app's own "avatar.json" keeps priority, and the generic fallback
+            // skips the companion files this project writes alongside it.
+            const findMainJson = () => {
+                const own = content.file('avatar.json');
+                if (own) return own;
 
-            let avatarJsonStr: string | undefined;
-            if (avatarFile) {
-                avatarJsonStr = await avatarFile.async('string');
-            } else {
-                const dataFile = content.file('data.json');
-                if (dataFile) avatarJsonStr = await dataFile.async('string');
-            }
+                const byData = content.file(/data\.json$/i);
+                if (byData.length > 0) return byData[0];
+
+                const others = content.file(/\.json$/i).filter(f =>
+                    !/mapping\.json$/i.test(f.name) &&
+                    !/states\.json$/i.test(f.name)
+                );
+                return others.length > 0 ? others[0] : null;
+            };
+
+            const avatarFile = findMainJson();
+            const avatarJsonStr = avatarFile ? await avatarFile.async('string') : undefined;
 
             if (!avatarJsonStr) throw new Error('avatar.json (or data.json) not found in ZIP.');
             const avatar: EmgAvatar = JSON.parse(avatarJsonStr);
@@ -40,6 +50,21 @@ class ProjectLoader {
 
             // 1.5. Polyfill / Migration for v0.2.2 (Parts-based structure)
             if (!avatar.layers || avatar.layers.length === 0) {
+                // emg-json-spec.md 6: textureID is unique only within its part. senti has
+                // "01" in Mouth, Eyes and Eyebrows, so using the bare textureID as the
+                // flat layerID makes lookups such as
+                // `avatar.layers.find(l => l.layerID === id)` resolve to whichever part
+                // was enumerated first. Qualify with the partID, but only for the IDs
+                // that actually collide, so projects saved against non-colliding files
+                // keep the layerIDs already stored in their states.json overrides.
+                const textureIdCounts = new Map<string, number>();
+                avatar.parts?.forEach(part =>
+                    part.layers?.forEach((l: any) => {
+                        if (!l.textureID) return;
+                        textureIdCounts.set(l.textureID, (textureIdCounts.get(l.textureID) ?? 0) + 1);
+                    })
+                );
+
                 // Flatten layers from parts
                 const flattenedLayers: any[] = [];
                 if (avatar.parts) {
@@ -50,7 +75,10 @@ class ProjectLoader {
                                 l.partID = l.partID || part.partID;
                                 // Ensure layerID exists (for React keys and selection)
                                 if (!l.layerID) {
-                                    l.layerID = l.textureID || `${part.partID}_${l.zIndex || 0}`;
+                                    const collides = !!l.textureID && (textureIdCounts.get(l.textureID) ?? 0) > 1;
+                                    l.layerID = l.textureID
+                                        ? (collides ? `${part.partID}/${l.textureID}` : l.textureID)
+                                        : `${part.partID}_${l.zIndex || 0}`;
                                 }
                                 // Map textureZIndex -> zIndex if missing
                                 if (l.zIndex === undefined && l.textureZIndex !== undefined) {

@@ -5,7 +5,11 @@ init python:
 
     def load_emg(emg_path, base_name=None):
         """
-        Loads an EMG file (v0.2.2) and registers images in Ren'Py.
+        Loads an EMG file (v0.3.0) and registers images in Ren'Py.
+
+        Note: EMG's textureZIndex is a single ordering across all parts, but each
+        part is registered as its own Ren'Py image, so the caller controls the
+        stacking order when showing them. Within a part the order is honoured.
         
         Args:
             emg_path (str): Path to the .emg file (relative to game/ folder).
@@ -17,13 +21,16 @@ init python:
         file_handle = renpy.loader.load(emg_path)
         
         with zipfile.ZipFile(file_handle) as archive:
-            # 1. Parse data.json
-            try:
-                with archive.open("data.json") as f:
-                    data = json.loads(f.read().decode("utf-8"))
-            except KeyError:
-                renpy.error(f"EMG Loader: 'data.json' not found in {emg_path}")
+            # 1. Parse the main JSON.
+            # Per emg-json-spec.md 1.1 the entry is matched by suffix, not by exact
+            # name: shipped files store it as "model.json" (samples/senti.emg) or
+            # nested in a folder ("zunda/assigned_texture_data.json").
+            entry_name = _find_data_entry(archive)
+            if entry_name is None:
+                renpy.error(f"EMG Loader: main JSON not found in {emg_path}")
                 return
+            with archive.open(entry_name) as f:
+                data = json.loads(f.read().decode("utf-8"))
 
             canvas_w = data.get("baseCanvasWidth", 0)
             canvas_h = data.get("baseCanvasHeight", 0)
@@ -44,6 +51,29 @@ init python:
         if config.developer:
             print(f"EMG Loaded: {emg_path}")
 
+    def _find_entry(archive, predicate):
+        """Returns the first entry name satisfying predicate, or None."""
+        for name in archive.namelist():
+            if name.endswith("/"):
+                continue
+            if predicate(name):
+                return name
+        return None
+
+    def _find_data_entry(archive):
+        """
+        Locates the main JSON. emg-json-spec.md 1.1:
+          1. an entry whose name ends with "data.json"
+          2. otherwise any ".json" that does not end with "mapping.json"
+        """
+        found = _find_entry(archive, lambda n: n.lower().endswith("data.json"))
+        if found is not None:
+            return found
+        return _find_entry(
+            archive,
+            lambda n: n.lower().endswith(".json") and not n.lower().endswith("mapping.json"),
+        )
+
     def _load_textures(archive, textures_meta):
         """
         Extracts textures from ZIP and creates im.Data objects.
@@ -51,14 +81,27 @@ init python:
         tex_map = {}
         for tex in textures_meta:
             fname = tex["textureFile"]
-            try:
-                with archive.open(fname) as entry:
-                    data = entry.read()
-                    # im.Data creates a displayable from bytes
-                    tex_map[fname] = im.Data(data, fname)
-            except KeyError:
+            # Suffix match, for the same reason as _find_data_entry: the atlas may
+            # sit inside a folder within the archive.
+            entry_name = _find_entry(archive, lambda n, f=fname: n.endswith(f))
+            if entry_name is None:
                 renpy.error(f"EMG Loader: Texture '{fname}' not found in ZIP.")
+                continue
+            with archive.open(entry_name) as entry:
+                data = entry.read()
+                # im.Data creates a displayable from bytes
+                tex_map[fname] = im.Data(data, fname)
         return tex_map
+
+    def _apply_opacity(displayable, layer):
+        """
+        Applies the layer's own opacity (emg-json-spec.md 5.3). Visibility is a
+        separate concern — opacity carries only data.json's layer.opacity.
+        """
+        op = layer.get("opacity", 1.0)
+        if op is None or op >= 1.0:
+            return displayable
+        return im.MatrixColor(displayable, im.matrix.opacity(op))
 
     def _register_static_part(part, tex_map, canvas_w, canvas_h, base_name=None):
         """
@@ -91,7 +134,8 @@ init python:
                 layer["x"], layer["y"],
                 layer["width"], layer["height"]
             )
-            
+            cropped = _apply_opacity(cropped, layer)
+
             # Position on canvas
             pos = (layer.get("basePosition_x", 0), layer.get("basePosition_y", 0))
             
@@ -177,7 +221,8 @@ init python:
                 layer["x"], layer["y"],
                 layer["width"], layer["height"]
             )
-            
+            cropped = _apply_opacity(cropped, layer)
+
             pos = (layer.get("basePosition_x", 0), layer.get("basePosition_y", 0))
             args.append(pos)
             args.append(cropped)

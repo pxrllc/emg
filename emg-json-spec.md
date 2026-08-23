@@ -423,14 +423,22 @@ for layer in sorted(draw, key=lambda l: l.textureZIndex):
 
 | 実装 | JSON 探索（1.1） | `opacity`（5.3） | `(partID, textureID)`（6章） |
 |---|---|---|---|
-| `emg-cdn/emg-player.0.3.0.js` | 後方一致 ✅ | 適用 ✅ | 対応 ✅ |
-| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | 適用 ✅ | 対応 ✅ |
-| `emg-unity-importer` | 後方一致 ✅ | 適用 ✅ | 未確認 |
-| `emg-godot` | 後方一致 ✅ | 適用 ✅ | 対応 ✅ |
-| `emg-web-runtime` | **`avatar.json` / `data.json` の完全一致のみ** ❌ | 未確認 | 未確認 |
-| `emg-renpy` | **`data.json` の完全一致のみ** ❌ | **未適用** ❌ | 未確認 |
+| `emg-cdn/emg-player.0.3.0.js` | 後方一致 ✅ | 適用 ✅ | `data-part-id` + `data-texture-id` ✅ |
+| `emg-ymm4`（`Emg.Core`） | 後方一致 ✅ | 適用 ✅ | 保存形式が `partID<TAB>textureID` ✅ |
+| `emg-unity-importer` | 後方一致 ✅ | 適用 ✅ | キーが `{partID}_{textureID}` ✅ |
+| `emg-godot` | 後方一致 ✅ | 適用 ✅ | キーが `partID<TAB>textureID` ✅ |
+| `emg-web-runtime` | 後方一致 ✅ | 適用 ✅ | 重複する `textureID` のみ `partID` で修飾 ✅ |
+| `emg-renpy` | 後方一致 ✅ | 適用 ✅ | Ren'Py の `tag attribute` が本来 2 階層 ✅ |
 
-`emg-web-runtime` と `emg-renpy` は `samples/senti.emg`（`model.json`）を読み込めません。
+エントリ探索は実ファイル 6 件（`data.json` / `model.json` / フォルダ配下の
+`zunda/assigned_texture_data.json` / `room/room_texture.model.json`）で解決を確認しています。
+
+### 12.1 実装ごとの既知の制限（参考）
+
+| 実装 | 制限 |
+|---|---|
+| `emg-renpy` | パーツごとに独立した Ren'Py イメージとして登録するため、**パーツを横断した `textureZIndex` の順序は保持されない**。パーツ内の順序は保持される。表示順は呼び出し側が制御する |
+| `emg-web-runtime` | `layerID` は `textureID` が他パーツと重複する場合のみ `partID/textureID` の形になる。重複しないファイルでは従来どおり `textureID` のままで、保存済みプロジェクトの互換を保つ |
 
 ---
 
