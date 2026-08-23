@@ -2,7 +2,11 @@
 /**
  * emg-json-spec-0.4.0.md §9.2 の異常系フィクスチャを生成する。
  *
- *   node tools/make-compat-fixtures.js [出力先ディレクトリ]
+ *   node tools/make-compat-fixtures.js [出力先ディレクトリ] [基準 .emg]
+ *
+ * 基準ファイルを差し替えられるのは、ブラウザで実測する際に軽いファイル
+ * （emg-cdn/assets/senti-demo.emg = 0.63MB）を使うため。パーツ構成は同一なので
+ * 互換性の挙動は変わらない。
  *
  * samples/senti.emg を基に、未知フィールド・未知の列挙値などを仕込んだ .emg を作る。
  * 各実装へ流して挙動を記録し、v0.4.0 §1.2 の規定文を実測に基づいて確定させるためのもの。
@@ -14,8 +18,8 @@ const fs = require('fs');
 const path = require('path');
 const JSZip = require('../emg-packer/node_modules/jszip');
 
-const SRC = path.join(__dirname, '..', 'samples', 'senti.emg');
 const OUT = process.argv[2] || path.join(__dirname, '..', 'test-fixtures', 'compat');
+const SRC = process.argv[3] || path.join(__dirname, '..', 'samples', 'senti.emg');
 
 /** 検証対象の sprite。D/E/F はこれを改変する。 */
 function baseSprite() {
