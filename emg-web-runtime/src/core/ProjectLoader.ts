@@ -1,6 +1,7 @@
 
 import JSZip from 'jszip';
 import type { EmgAvatar, EmgStates, EmgSemanticMapping } from '../types/schema';
+import { checkRequiredExtensions } from './EmgCompat';
 
 export interface LoadedProject {
     avatar: EmgAvatar;
@@ -42,6 +43,9 @@ class ProjectLoader {
 
             if (!avatarJsonStr) throw new Error('avatar.json (or data.json) not found in ZIP.');
             const avatar: EmgAvatar = JSON.parse(avatarJsonStr);
+
+            // v0.4.0 §2.2: テクスチャ等を読む前に、未対応の要求機能を検出して失敗させる。
+            checkRequiredExtensions(avatar as { requiredExtensions?: string[] });
 
             // Set Name if missing (from filename)
             if (!avatar.name) {

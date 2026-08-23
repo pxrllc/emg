@@ -49,6 +49,13 @@ func load_from_path(path: String) -> bool:
 		return false
 	_data = data_parsed
 
+	# v0.4.0 F5: refuse before loading textures or mapping.json.
+	var ext_error := _check_required_extensions(_data)
+	if ext_error != "":
+		push_error("EmgAvatar: %s" % ext_error)
+		reader.close()
+		return false
+
 	_mapping = null
 	var mapping_file := ""
 	for f in files:
@@ -113,7 +120,7 @@ func _build_parts() -> void:
 
 	for part in _data.get("parts", []):
 		var part_id: String = part.get("partID", "")
-		var part_type: String = part.get("type", "static")
+		var part_type: String = _resolve_part_type(part)
 		var default_id: String = part.get("default", "")
 		_part_type[part_id] = part_type
 
@@ -218,9 +225,9 @@ func _handle_sprite(sprite: Dictionary) -> void:
 	if typeof(trigger) != TYPE_DICTIONARY:
 		return # external / no trigger: only playable via play_sprite()
 
-	var trigger_type: String = trigger.get("type", "")
+	var trigger_type: String = _resolve_trigger_type(trigger)
 	if trigger_type == "auto_loop":
-		var seq_type: String = sequence.get("type", "ordered")
+		var seq_type: String = _resolve_sequence_type(sequence)
 		if seq_type == "ordered":
 			_play_ordered_sequence(target_part_id, sequence.get("frames", []), frame_ms, true)
 		else:
@@ -234,7 +241,7 @@ func _handle_sprite(sprite: Dictionary) -> void:
 
 
 func _run_sequence_once(target_part_id: String, sequence: Dictionary, frame_ms: float) -> void:
-	var seq_type: String = sequence.get("type", "ordered")
+	var seq_type: String = _resolve_sequence_type(sequence)
 	var frames: Array = sequence.get("frames", [])
 	if frames.is_empty():
 		return
@@ -315,7 +322,7 @@ func _part_exists(part_id: String) -> bool:
 
 func _find_part_by_keyword(keywords: Array[String]) -> String:
 	for part in _data.get("parts", []):
-		if part.get("type", "") != "switch":
+		if _resolve_part_type(part) != "switch":
 			continue
 		var pid: String = part.get("partID", "")
 		var pid_lower := pid.to_lower()
@@ -506,3 +513,54 @@ func set_expression(name: String) -> void:
 	var overrides: Dictionary = expr.get("overrides", {})
 	_active_blink_override = overrides.get("blink", null)
 	_active_lipsync_override = overrides.get("lipSync", null)
+
+
+# ---------------------------------------------------------------------------
+# v0.4.0 compatibility rules (emg-json-spec-0.4.0.md 1-2)
+# ---------------------------------------------------------------------------
+
+## Feature identifiers this implementation understands (emg-extensions-registry.md).
+## Empty for v0.4.0: none of its additions change what gets drawn.
+const SUPPORTED_EXTENSIONS: Array[String] = []
+
+
+## F5: refuse the file when it requires something we do not implement. Silently
+## ignoring such a file draws a wrong picture, which is worse than failing.
+## Returns an error string, or "" when the file is acceptable.
+func _check_required_extensions(data: Dictionary) -> String:
+	var required = data.get("requiredExtensions", [])
+	var unknown: Array[String] = []
+	for e in required:
+		if not SUPPORTED_EXTENSIONS.has(e):
+			unknown.append(str(e))
+	if unknown.is_empty():
+		return ""
+	return "This .emg requires unsupported features: %s" % ", ".join(unknown)
+
+
+## F2: an unknown type resolves by whether the part carries a default —
+## switch if it does, static if it does not. Branching on the raw value made
+## unknown types show every layer at once.
+func _resolve_part_type(part: Dictionary) -> String:
+	var t: String = part.get("type", "static")
+	if t == "static" or t == "switch":
+		return t
+	return "switch" if part.has("default") else "static"
+
+
+## F3 / F4: unknown enum values fall back to the safe default. For triggers that
+## is "external" — nothing fires on its own.
+func _resolve_sequence_type(sequence: Dictionary) -> String:
+	var t: String = sequence.get("type", "ordered")
+	return t if (t == "ordered" or t == "random_hold") else "ordered"
+
+
+func _resolve_trigger_type(trigger: Dictionary) -> String:
+	var t: String = trigger.get("type", "external")
+	return t if (t == "auto_loop" or t == "random_interval" or t == "external") else "external"
+
+
+## 4.2: fps became optional in v0.4.0; absent means 12.
+func _resolve_fps(sprite: Dictionary) -> float:
+	var f = sprite.get("fps", 0.0)
+	return float(f) if float(f) > 0.0 else 12.0

@@ -1,5 +1,6 @@
 
 import type { EmgStates, EmgState, EmgVariant, EmgSemanticMapping, EmgPart } from '../types/schema';
+import { resolvePartType } from './EmgCompat';
 
 interface StateContext {
     currentStateName: string;
@@ -121,7 +122,7 @@ export class EmgStateMachine {
 
     private findPartByKeyword(keywords: string[]): EmgPart | undefined {
         return this.parts.find(part =>
-            part.type === 'switch' &&
+            resolvePartType(part) === 'switch' &&
             keywords.some(kw => part.partID.toLowerCase().includes(kw.toLowerCase()))
         );
     }

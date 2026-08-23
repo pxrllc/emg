@@ -8,6 +8,11 @@ namespace Emg.Runtime
     public class EmgData
     {
         public string version;
+
+        /// <summary>
+        /// v0.4.0 §2。理解できない識別子が含まれる .emg は読み込みを拒否する。
+        /// </summary>
+        public string[] requiredExtensions;
         public int baseCanvasWidth;
         public int baseCanvasHeight;
         public List<EmgTexture> textures;
@@ -26,6 +31,15 @@ namespace Emg.Runtime
     [Serializable]
     public class EmgPart
     {
+        /// <summary>
+        /// v0.4.0 §1.2 F2。未知の type は default を持つなら switch、持たないなら static。
+        /// 生の type で分岐すると、未知の値で全レイヤーが重なって表示される。
+        /// </summary>
+        public string ResolvedType =>
+            type == "static" || type == "switch"
+                ? type
+                : (!string.IsNullOrEmpty(@default) ? "switch" : "static");
+
         public string partID;
         public string type; // "static" or "switch"
         public string @default; // default textureID (for switch)

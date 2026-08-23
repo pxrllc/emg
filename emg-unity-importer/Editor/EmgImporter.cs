@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -53,6 +54,16 @@ namespace Emg.Editor
                     return;
                 }
 
+                // v0.4.0 §2.2: mapping.json やテクスチャより前に、未対応の要求機能を検出する。
+                // 理解できない拡張を黙って無視すると誤った絵になるため、明示的に失敗させる。
+                var unknownExt = (emgData.requiredExtensions ?? new string[0])
+                    .Where(e => !SupportedExtensions.Contains(e)).ToArray();
+                if (unknownExt.Length > 0)
+                {
+                    Debug.LogError($"[EmgImporter] この .emg は未対応の機能を要求しています: {string.Join(", ", unknownExt)}。インポーターの更新が必要です。({ctx.assetPath})");
+                    return;
+                }
+
                 // 1.5 Parse mapping.json (optional companion file, v0.3.0+)
                 EmgMapping emgMapping = null;
                 var mappingEntry = FindEntry(archive, n => n.EndsWith("mapping.json", StringComparison.OrdinalIgnoreCase));
@@ -104,6 +115,12 @@ namespace Emg.Editor
         // -------------------------
         // Texture Loading
         // -------------------------
+
+        /// <summary>
+        /// このインポーターが理解する機能識別子（emg-extensions-registry.md）。
+        /// v0.4.0 の追加はいずれも無視しても表示が成立するため空。
+        /// </summary>
+        private static readonly HashSet<string> SupportedExtensions = new HashSet<string>();
 
         /// <summary>
         /// Finds the main JSON entry. Mirrors emg-cdn/emg-player.0.3.0.js and Emg.Core:
@@ -233,7 +250,7 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    layerGo.SetActive(part.type == "switch"
+                    layerGo.SetActive(part.ResolvedType == "switch"
                         ? layer.textureID == part.@default
                         : true);
 
@@ -297,7 +314,7 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    layerGo.SetActive(part.type == "switch"
+                    layerGo.SetActive(part.ResolvedType == "switch"
                         ? layer.textureID == part.@default
                         : true);
 

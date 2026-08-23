@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { EmgAvatar } from '../../types/schema';
 import { EmgStateMachine } from '../../core/EmgStateMachine';
+import { resolvePartType } from '../../core/EmgCompat';
 
 interface EmgCanvasProps {
     avatar: EmgAvatar;
@@ -107,7 +108,7 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                 if (!isVisible) continue;
 
                 const part = avatar.parts.find(p => p.partID === layer.partID);
-                if (part && part.type === 'switch') {
+                if (part && resolvePartType(part) === 'switch') {
                     let activeLayerID = part.default;
                     if (currentVariant && currentVariant.overrides && currentVariant.overrides[layer.partID]) {
                         activeLayerID = currentVariant.overrides[layer.partID];
@@ -234,7 +235,7 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                 if (!isVisible) return; // Basic visibility
 
                 // Texture Selection Logic (Switch Parts)
-                if (part.type === 'switch') {
+                if (resolvePartType(part) === 'switch') {
                     // Check if this layer is the "active" texture for this part
                     // 1. Check Variant Override
                     let activeLayerID = part.default;

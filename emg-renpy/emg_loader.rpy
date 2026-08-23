@@ -32,6 +32,13 @@ init python:
             with archive.open(entry_name) as f:
                 data = json.loads(f.read().decode("utf-8"))
 
+            # v0.4.0 F5: テクスチャ展開より前に、未対応の要求機能があれば失敗させる。
+            unknown = [e for e in data.get("requiredExtensions", []) if e not in SUPPORTED_EXTENSIONS]
+            if unknown:
+                renpy.error(
+                    "EMG Loader: this .emg requires unsupported features: %s" % ", ".join(unknown))
+                return
+
             canvas_w = data.get("baseCanvasWidth", 0)
             canvas_h = data.get("baseCanvasHeight", 0)
 
@@ -40,8 +47,8 @@ init python:
 
             # 3. Register Parts
             for part in data.get("parts", []):
-                part_type = part.get("type", "static")
-                
+                part_type = _resolve_part_type(part)
+
                 if part_type == "static":
                     _register_static_part(part, tex_map, canvas_w, canvas_h, base_name)
                 elif part_type == "switch":
@@ -50,6 +57,24 @@ init python:
         # Notify development mode
         if config.developer:
             print(f"EMG Loaded: {emg_path}")
+
+    # ---------------------------------------------------------------
+    # v0.4.0 互換性規則（emg-json-spec-0.4.0.md 1〜2 章）
+    # ---------------------------------------------------------------
+
+    # この実装が理解する機能識別子（emg-extensions-registry.md）。
+    # v0.4.0 の追加はいずれも無視しても表示が成立するため空。
+    SUPPORTED_EXTENSIONS = frozenset()
+
+    def _resolve_part_type(part):
+        """
+        F2: 未知の type は default を持つなら switch、持たないなら static。
+        生の type で分岐すると、未知の値のパーツが登録されず消える。
+        """
+        t = part.get("type", "static")
+        if t in ("static", "switch"):
+            return t
+        return "switch" if part.get("default") is not None else "static"
 
     def _find_entry(archive, predicate):
         """Returns the first entry name satisfying predicate, or None."""
