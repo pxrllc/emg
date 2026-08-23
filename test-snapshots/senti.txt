@@ -1,0 +1,37 @@
+# EMG 描画スナップショット
+# 生成: tools/emg-snapshot.js  対象: senti.emg
+# 仕様: emg-json-spec.md 8 章（描画モデル）
+
+version=0.3.0
+canvas=2894x4093
+texture=texture.png 8192x4096
+requiredExtensions=[]
+
+parts=7 sprites=0
+  part Body type=static default=- layers=10
+  part arms type=static default=- layers=3
+  part Mouth type=switch default=03 layers=6
+  part Blushs type=switch default=cheek layers=5
+  part Eyes type=switch default=01 layers=6
+  part Eyebrows type=switch default=01 layers=5
+  part Character type=switch default=Front_hair layers=1
+
+draw=18  # 奥から手前
+  z=   0 Body/Cap tex=texture.png src=(6673,0,1243x597) dst=(959,237) opacity=1 blend=normal
+  z=   1 Body/Back_hair tex=texture.png src=(0,0,1474x1398) dst=(710,638) opacity=1 blend=normal
+  z=   2 Body/Back_ collar tex=texture.png src=(5394,1989,400x175) dst=(1239,1971) opacity=1 blend=normal
+  z=   3 Body/neck tex=texture.png src=(5042,1989,352x265) dst=(1271,1897) opacity=1 blend=normal
+  z=   4 Body/Head tex=texture.png src=(1474,0,1352x1253) dst=(771,732) opacity=1 blend=normal
+  z=   5 Body/leg tex=texture.png src=(4067,0,700x1053) dst=(1097,2788) opacity=1 blend=normal
+  z=   6 Body/skirt tex=texture.png src=(1746,1398,884x465) dst=(1005,2600) opacity=1 blend=normal
+  z=   7 arms/back_sleeve tex=texture.png src=(6794,1398,1074x408) dst=(910,2140) opacity=1 blend=normal
+  z=   8 arms/ arm tex=texture.png src=(0,1398,1746x591) dst=(574,2372) opacity=1 blend=normal
+  z=   9 arms/sleeve tex=texture.png src=(3622,1398,1074x459) dst=(910,2089) opacity=1 blend=normal
+  z=  10 Body/top tex=texture.png src=(5947,0,726x668) dst=(1091,2085) opacity=1 blend=normal
+  z=  11 Body/collar tex=texture.png src=(0,1989,776x396) dst=(1072,1979) opacity=1 blend=normal
+  z=  12 Body/ribbon tex=texture.png src=(3639,1989,428x305) dst=(1380,2027) opacity=1 blend=normal
+  z=  15 Mouth/03 tex=texture.png src=(3525,2385,214x76) dst=(1340,1778) opacity=1 blend=normal
+  z=  19 Blushs/cheek tex=texture.png src=(4696,1398,1138x432) dst=(878,1532) opacity=1 blend=normal
+  z=  24 Eyes/01 tex=texture.png src=(776,1989,953x328) dst=(974,1369) opacity=1 blend=normal
+  z=  30 Eyebrows/01 tex=texture.png src=(3909,2385,856x51) dst=(1023,1241) opacity=1 blend=normal
+  z=  35 Character/Front_hair tex=texture.png src=(2826,0,1241x1185) dst=(818,703) opacity=1 blend=normal

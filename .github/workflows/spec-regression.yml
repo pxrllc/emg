@@ -1,0 +1,44 @@
+name: Spec regression
+
+# emg-json-spec.md 8 章（描画モデル）の解決結果が変化していないことを確認する。
+#
+# 固定するのはピクセルではなく「1 フレーム分の描画リスト」。パーツ解決・重ね順・
+# アトラス座標・キャンバス座標・不透明度・合成モードがすべてこの段階で決まるため、
+# 画像デコードのための依存を持ち込まずに退行を検出できる。
+#
+# スナップショットが意図して変わる場合（仕様変更・アセット更新）は
+#   node tools/emg-snapshot.js samples/senti.emg > test-snapshots/senti.txt
+# で更新し、差分をレビュー対象に含めること。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'samples/**'
+      - 'tools/emg-snapshot.js'
+      - 'test-snapshots/**'
+      - '.github/workflows/spec-regression.yml'
+  pull_request:
+    paths:
+      - 'samples/**'
+      - 'tools/emg-snapshot.js'
+      - 'test-snapshots/**'
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # tools/ は emg-packer の node_modules にある jszip を参照する
+      - name: Install jszip
+        working-directory: emg-packer
+        run: npm ci
+
+      - name: Check draw-list snapshot
+        run: node tools/emg-snapshot.js samples/senti.emg --check test-snapshots/senti.txt
