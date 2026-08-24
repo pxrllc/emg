@@ -181,6 +181,106 @@
         return (typeof sprite.fps === 'number' && sprite.fps > 0) ? sprite.fps : 12;
     }
 
+    // ------------------------------------------------------------------
+    // v0.5.0 §7: トランスフォーム
+    // ------------------------------------------------------------------
+
+    // 実行中のトランスフォーム sprite。requestAnimationFrame で毎フレーム評価する。
+    let transformSprites = [];
+    let transformRafId = null;
+    let transformStart = 0;
+
+    /** §7.5: cubic は Catmull-Rom に固定（制御点を持たない）。 */
+    function catmullRom(p0, p1, p2, p3, u) {
+        const u2 = u * u, u3 = u2 * u;
+        return 0.5 * (2 * p1 + (-p0 + p2) * u
+            + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2
+            + (-p0 + 3 * p1 - 3 * p2 + p3) * u3);
+    }
+
+    /** §7.2: トラックの時刻 t（秒）における値。範囲外は端の値を保持する。 */
+    function trackValueAt(track, t) {
+        const keys = track.keys ?? [];
+        if (keys.length === 0) return 0;
+        if (keys.length === 1 || t <= keys[0].t) return keys[0].v;
+        if (t >= keys[keys.length - 1].t) return keys[keys.length - 1].v;
+
+        let i = 0;
+        while (i < keys.length - 2 && keys[i + 1].t <= t) i++;
+        const k0 = keys[i], k1 = keys[i + 1];
+        const span = k1.t - k0.t;
+        const u = span <= 0 ? 0 : (t - k0.t) / span;
+
+        const interp = ['step', 'linear', 'cubic'].includes(track.interpolation)
+            ? track.interpolation : 'linear';
+        if (interp === 'step') return k0.v;
+        if (interp === 'cubic') {
+            return catmullRom(
+                keys[Math.max(i - 1, 0)].v, k0.v, k1.v,
+                keys[Math.min(i + 2, keys.length - 1)].v, u);
+        }
+        return k0.v + (k1.v - k0.v) * u;
+    }
+
+    /** §7.6 / §7.7: loop / pingpong / phaseOffset を解決して変換を求める。 */
+    function resolveTransformAt(sprite, time) {
+        const tracks = sprite.tracks ?? [];
+        const r = { translate_x: 0, translate_y: 0, rotation: 0, scale_x: 1, scale_y: 1, opacity: 1 };
+        if (tracks.length === 0) return r;
+
+        const duration = sprite.duration > 0 ? sprite.duration
+            : Math.max(0, ...tracks.flatMap(tr => (tr.keys ?? []).map(k => k.t)));
+        let local = Math.max(0, time - (sprite.phaseOffset ?? 0));
+
+        let t = 0;
+        if (duration > 0) {
+            const loop = ['once', 'loop', 'pingpong'].includes(sprite.loop) ? sprite.loop : 'loop';
+            if (loop === 'once') t = Math.min(local, duration);
+            else if (loop === 'pingpong') {
+                const cycle = local % (2 * duration);
+                t = cycle <= duration ? cycle : 2 * duration - cycle;
+            } else t = local % duration;
+        }
+
+        for (const track of tracks) {
+            if (track.path in r) r[track.path] = trackValueAt(track, t);
+        }
+        return r;
+    }
+
+    /**
+     * §7.4: アンカーを原点へ移動 → scale → rotate → 戻す → translate、最後に opacity。
+     * CSS の transform は右から左に適用されるため、記述順は逆にする。
+     * transform-origin をアンカー（キャンバス座標）からレイヤー相対へ直して渡す。
+     */
+    function applyTransformToPart(partID, tf) {
+        const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
+        layers.forEach(el => {
+            const ax = parseFloat(el.dataset.anchorX ?? '0') - parseFloat(el.dataset.baseX ?? '0');
+            const ay = parseFloat(el.dataset.anchorY ?? '0') - parseFloat(el.dataset.baseY ?? '0');
+            el.style.transformOrigin = `${ax}px ${ay}px`;
+            el.style.transform =
+                `translate(${tf.translate_x}px, ${tf.translate_y}px) ` +
+                `rotate(${tf.rotation}deg) scale(${tf.scale_x}, ${tf.scale_y})`;
+            const base = parseFloat(el.dataset.baseOpacity ?? '1');
+            el.style.opacity = String(base * tf.opacity);
+        });
+    }
+
+    function startTransformLoop() {
+        if (transformSprites.length === 0) return;
+        transformStart = performance.now();
+        const tick = () => {
+            if (!window.isAnimationRunning) { transformRafId = null; return; }
+            const time = (performance.now() - transformStart) / 1000;
+            for (const sp of transformSprites) {
+                applyTransformToPart(sp.targetPartID, resolveTransformAt(sp, time));
+            }
+            transformRafId = requestAnimationFrame(tick);
+        };
+        transformRafId = requestAnimationFrame(tick);
+    }
+
     function applyLayerStyles(element) {
         element.style.position = "absolute";
         element.style.backgroundRepeat = "no-repeat";
@@ -232,6 +332,12 @@
                     div.dataset.textureId = layer.textureID;
                     // v0.5.0: 切り替えの単位はフレーム識別子（frameName ?? textureID）
                     div.dataset.frameId = frameId(layer);
+                    // v0.5.0 §7.4: transform-origin を求めるためアンカーと基準位置を持つ。
+                    // anchor は不在時 basePosition と同値（v0.4.0 §3.1）。
+                    div.dataset.baseX = String(layer.basePosition_x);
+                    div.dataset.baseY = String(layer.basePosition_y);
+                    div.dataset.anchorX = String(layer.anchor_x ?? layer.basePosition_x);
+                    div.dataset.anchorY = String(layer.anchor_y ?? layer.basePosition_y);
 
                     applyLayerStyles(div);
 
@@ -548,6 +654,13 @@
         window.animationIntervals = [];
         window.timeouts = [];
 
+        // v0.5.0 §7: tracks を持つ sprite は毎フレーム評価する経路へ回す。
+        transformSprites = (window.jsonData.sprites ?? [])
+            .filter(sp => Array.isArray(sp.tracks) && sp.tracks.length > 0)
+            .filter(sp => !isPartHidden(sp.targetPartID));
+        if (transformRafId !== null) { cancelAnimationFrame(transformRafId); transformRafId = null; }
+        startTransformLoop();
+
         if (window.jsonData.sprites) {
             window.jsonData.sprites.forEach(sprite => {
                 // mapping.json との共存ルール: 明示的に blink/lipSync 対象指定されたパーツは
@@ -572,7 +685,8 @@
     function handleSprite(sprite) {
         // v0.2.2 structured sprite
         const { spriteID, targetPartID, sequence, trigger } = sprite;
-        if (!sequence) return; // v0.1.0 format not supported in this block for now
+        // tracks のみを持つ sprite はトランスフォーム経路が扱う（§7.8 で併用は許容）
+        if (!sequence) return;
 
         // Target Parts
         // partIDに属する全レイヤーのElementを取得しておく

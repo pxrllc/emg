@@ -17,6 +17,10 @@ var _texture_to_part: Dictionary = {}   # textureID -> partID
 var _texture_to_sprite: Dictionary = {} # textureID -> Sprite2D (flat lookup)
 var _part_type: Dictionary = {}      # partID -> "static" | "switch"
 var _part_visible: Dictionary = {}   # partID -> bool（v0.5.0 §4）
+var _sprite_base_pos: Dictionary = {}    # Sprite2D -> 変換前の position（v0.5.0 §7）
+var _sprite_anchor: Dictionary = {}      # Sprite2D -> anchor（キャンバス座標）
+var _sprite_base_alpha: Dictionary = {}  # Sprite2D -> layer.opacity
+var _transform_start: float = 0.0
 
 var _blink_part_id: String = ""
 var _blink_explicit: bool = false
@@ -119,6 +123,9 @@ func _build_parts() -> void:
 	_texture_to_sprite.clear()
 	_part_type.clear()
 	_part_visible.clear()
+	_sprite_base_pos.clear()
+	_sprite_anchor.clear()
+	_sprite_base_alpha.clear()
 
 	for part in _data.get("parts", []):
 		var part_id: String = part.get("partID", "")
@@ -163,6 +170,13 @@ func _build_parts() -> void:
 			if not layer_map.has(fid):
 				layer_map[fid] = []
 			layer_map[fid].append(sprite)
+
+			# v0.5.0 §7: 変換は毎フレーム基準値から作り直すため、元の値を控える
+			_sprite_base_pos[sprite] = sprite.position
+			_sprite_anchor[sprite] = Vector2(
+				float(layer.get("anchor_x", layer.get("basePosition_x", 0))),
+				float(layer.get("anchor_y", layer.get("basePosition_y", 0))))
+			_sprite_base_alpha[sprite] = sprite.modulate.a
 			# textureID repeats across parts (senti has "01" in Mouth, Eyes and Eyebrows),
 			# so a layer is only uniquely identified by (partID, textureID). Keying these
 			# flat maps on textureID alone made a lookup resolve to whichever part was
@@ -231,6 +245,14 @@ func get_sprite_for_texture(texture_id: String, part_id: String = "") -> Sprite2
 # ---------------------------------------------------------------------------
 
 func _start_animation() -> void:
+	# v0.5.0 §7: tracks を持つ sprite は _process() で毎フレーム評価する
+	_transform_sprites.clear()
+	_transform_start = float(Time.get_ticks_msec()) / 1000.0
+	for sprite in _data.get("sprites", []):
+		if (sprite as Dictionary).has("tracks") and _part_visible.get(
+				String((sprite as Dictionary).get("targetPartID", "")), true):
+			_transform_sprites.append(sprite)
+
 	for sprite in _data.get("sprites", []):
 		var target_part_id: String = sprite.get("targetPartID", "")
 		# mapping.json coexistence rule: parts explicitly claimed by blink/lipSync
@@ -636,3 +658,115 @@ func _resolve_trigger_type(trigger: Dictionary) -> String:
 func _resolve_fps(sprite: Dictionary) -> float:
 	var f = sprite.get("fps", 0.0)
 	return float(f) if float(f) > 0.0 else 12.0
+
+
+# ---------------------------------------------------------------------------
+# v0.5.0 §7: transforms
+# ---------------------------------------------------------------------------
+
+## Sprites carrying tracks, evaluated every frame in _process().
+var _transform_sprites: Array = []
+
+
+## §7.5: cubic is fixed to Catmull-Rom — no control points, so no extra data and
+## one result across implementations.
+func _catmull_rom(p0: float, p1: float, p2: float, p3: float, u: float) -> float:
+	var u2 := u * u
+	var u3 := u2 * u
+	return 0.5 * (2.0 * p1 + (-p0 + p2) * u 		+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u2 		+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u3)
+
+
+## §7.2: value of a track at time t (seconds). Outside the range the end keys hold.
+func _track_value_at(track: Dictionary, t: float) -> float:
+	var keys: Array = track.get("keys", [])
+	if keys.is_empty():
+		return 0.0
+	if keys.size() == 1 or t <= float((keys[0] as Dictionary).get("t", 0.0)):
+		return float((keys[0] as Dictionary).get("v", 0.0))
+	var last: Dictionary = keys[keys.size() - 1]
+	if t >= float(last.get("t", 0.0)):
+		return float(last.get("v", 0.0))
+
+	var i := 0
+	while i < keys.size() - 2 and float((keys[i + 1] as Dictionary).get("t", 0.0)) <= t:
+		i += 1
+	var k0: Dictionary = keys[i]
+	var k1: Dictionary = keys[i + 1]
+	var span := float(k1.get("t", 0.0)) - float(k0.get("t", 0.0))
+	var u := 0.0 if span <= 0.0 else (t - float(k0.get("t", 0.0))) / span
+
+	var interp: String = track.get("interpolation", "linear")
+	if interp != "step" and interp != "linear" and interp != "cubic":
+		interp = "linear"
+
+	if interp == "step":
+		return float(k0.get("v", 0.0))
+	if interp == "cubic":
+		var pm: Dictionary = keys[max(i - 1, 0)]
+		var pp: Dictionary = keys[min(i + 2, keys.size() - 1)]
+		return _catmull_rom(float(pm.get("v", 0.0)), float(k0.get("v", 0.0)),
+			float(k1.get("v", 0.0)), float(pp.get("v", 0.0)), u)
+	return float(k0.get("v", 0.0)) + (float(k1.get("v", 0.0)) - float(k0.get("v", 0.0))) * u
+
+
+## §7.6 / §7.7: resolve loop / pingpong / phaseOffset, then evaluate every track.
+func _resolve_transform_at(sprite: Dictionary, time: float) -> Dictionary:
+	var r := {"translate_x": 0.0, "translate_y": 0.0, "rotation": 0.0,
+		"scale_x": 1.0, "scale_y": 1.0, "opacity": 1.0}
+	var tracks: Array = sprite.get("tracks", [])
+	if tracks.is_empty():
+		return r
+
+	var duration := float(sprite.get("duration", 0.0))
+	if duration <= 0.0:
+		for tr in tracks:
+			for k in (tr as Dictionary).get("keys", []):
+				duration = max(duration, float((k as Dictionary).get("t", 0.0)))
+
+	var local := max(0.0, time - float(sprite.get("phaseOffset", 0.0)))
+	var t := 0.0
+	if duration > 0.0:
+		var loop: String = sprite.get("loop", "loop")
+		if loop == "once":
+			t = min(local, duration)
+		elif loop == "pingpong":
+			var cycle := fmod(local, 2.0 * duration)
+			t = cycle if cycle <= duration else 2.0 * duration - cycle
+		else:
+			t = fmod(local, duration)
+
+	for tr in tracks:
+		var track: Dictionary = tr
+		var path: String = track.get("path", "")
+		if r.has(path):
+			r[path] = _track_value_at(track, t)
+	return r
+
+
+## §7.4: anchor to origin -> scale -> rotate -> back -> translate, then opacity.
+## Sprite2D applies its own transform about its position, so the anchor offset is
+## folded in by hand.
+func _apply_transform_to_part(part_id: String, tf: Dictionary) -> void:
+	var layer_map: Dictionary = _part_layers.get(part_id, {})
+	for fid in layer_map.keys():
+		for sprite in layer_map[fid]:
+			var s: Sprite2D = sprite
+			var base: Vector2 = _sprite_base_pos.get(s, s.position)
+			var anchor: Vector2 = _sprite_anchor.get(s, base)
+			var local := base - anchor
+			var scaled := Vector2(local.x * float(tf["scale_x"]), local.y * float(tf["scale_y"]))
+			var rotated := scaled.rotated(deg_to_rad(float(tf["rotation"])))
+			s.position = anchor + rotated 				+ Vector2(float(tf["translate_x"]), float(tf["translate_y"]))
+			s.rotation = deg_to_rad(float(tf["rotation"]))
+			s.scale = Vector2(float(tf["scale_x"]), float(tf["scale_y"]))
+			s.modulate.a = _sprite_base_alpha.get(s, 1.0) * float(tf["opacity"])
+
+
+func _process(_delta: float) -> void:
+	if _transform_sprites.is_empty():
+		return
+	var time := float(Time.get_ticks_msec()) / 1000.0 - _transform_start
+	for sp in _transform_sprites:
+		var sprite: Dictionary = sp
+		_apply_transform_to_part(String(sprite.get("targetPartID", "")),
+			_resolve_transform_at(sprite, time))

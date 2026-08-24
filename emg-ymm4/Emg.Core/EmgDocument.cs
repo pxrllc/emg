@@ -179,6 +179,92 @@ public sealed class EmgSprite
 
     [JsonPropertyName("trigger")]
     public EmgTrigger? Trigger { get; set; }
+
+    // ---- v0.5.0 §7: トランスフォーム ----
+
+    /// <summary>v0.5.0 §7.2。座標変換のキーフレーム列。</summary>
+    [JsonPropertyName("tracks")]
+    public List<EmgTrack>? Tracks { get; set; }
+
+    /// <summary>v0.5.0 §7.2。尺（秒）。tracks を持つ場合は必須。</summary>
+    [JsonPropertyName("duration")]
+    public double? Duration { get; set; }
+
+    /// <summary>once | loop | pingpong。不在時は loop。</summary>
+    [JsonPropertyName("loop")]
+    public string? Loop { get; set; }
+
+    /// <summary>v0.5.0 §7.7。再生開始位置のずれ（秒）。不在時 0。</summary>
+    [JsonPropertyName("phaseOffset")]
+    public double? PhaseOffset { get; set; }
+
+    [JsonIgnore]
+    public string ResolvedLoop =>
+        Loop is "once" or "loop" or "pingpong" ? Loop : "loop";
+
+    /// <summary>tracks の尺。明示が無ければ最後のキーの t から求める。</summary>
+    [JsonIgnore]
+    public double ResolvedTrackDuration
+    {
+        get
+        {
+            if (Duration is { } d && d > 0) return d;
+            var last = Tracks?.SelectMany(tr => tr.Keys).Select(k => k.T).DefaultIfEmpty(0).Max() ?? 0;
+            return last;
+        }
+    }
+
+    /// <summary>
+    /// v0.5.0 §7.6 / §7.7。時刻 time（秒・アイテム内相対）における変換を求める。
+    /// loop / pingpong / phaseOffset をここで解決するため、呼び出し側は生の時刻を渡せばよい。
+    /// </summary>
+    public EmgTransform ResolveTransformAt(double time)
+    {
+        if (Tracks is not { Count: > 0 }) return EmgTransform.Identity;
+
+        var duration = ResolvedTrackDuration;
+        var local = time - (PhaseOffset ?? 0);
+        if (local < 0) local = 0;
+
+        double t;
+        if (duration <= 0)
+        {
+            t = 0;
+        }
+        else
+        {
+            switch (ResolvedLoop)
+            {
+                case "once":
+                    t = Math.Min(local, duration);
+                    break;
+                case "pingpong":
+                    var cycle = local % (2 * duration);
+                    t = cycle <= duration ? cycle : 2 * duration - cycle;
+                    break;
+                default:   // loop
+                    t = local % duration;
+                    break;
+            }
+        }
+
+        var r = EmgTransform.Identity;
+        foreach (var track in Tracks)
+        {
+            var v = track.ValueAt(t);
+            r = track.Path switch
+            {
+                "translate_x" => r with { TranslateX = v },
+                "translate_y" => r with { TranslateY = v },
+                "rotation" => r with { Rotation = v },
+                "scale_x" => r with { ScaleX = v },
+                "scale_y" => r with { ScaleY = v },
+                "opacity" => r with { Opacity = v },
+                _ => r,   // 未知の path は無視する（v0.4.0 F1）
+            };
+        }
+        return r;
+    }
 }
 
 public sealed class EmgSequence

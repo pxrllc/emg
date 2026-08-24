@@ -95,7 +95,13 @@ namespace Emg.Runtime
         public string targetPartID;
         public float fps;
         public EmgSequence sequence;
-        public EmgTrigger trigger; // nullable: null means external-only control
+        public EmgTrigger trigger;
+
+        // ---- v0.5.0 §7: トランスフォーム ----
+        public EmgTrack[] tracks;
+        public float duration;
+        public string loop;
+        public float phaseOffset;
     }
 
     [Serializable]
@@ -116,6 +122,24 @@ namespace Emg.Runtime
 
 namespace Emg.Runtime
 {
+    /// <summary>v0.5.0 §7.2。トラックの 1 キー。</summary>
+    [System.Serializable]
+    public class EmgTrackKey
+    {
+        public float t;
+        public float v;
+    }
+
+    /// <summary>v0.5.0 §7.2。1 プロパティ分のキーフレーム列。</summary>
+    [System.Serializable]
+    public class EmgTrack
+    {
+        /// <summary>translate_x | translate_y | rotation | scale_x | scale_y | opacity</summary>
+        public string path;
+        public EmgTrackKey[] keys;
+        public string interpolation;
+    }
+
     /// <summary>v0.5.0 §5.1。複数パーツの状態をまとめて指定する。</summary>
     [System.Serializable]
     public class EmgPreset

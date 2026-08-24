@@ -491,6 +491,32 @@ v0.5.0 が定義する機能識別子は **`EMG_frame_name` のみ**です（`em
 
 ---
 
+## 9.1 実装状況（2026-08-24）
+
+| 実装 | 1〜2 frameName | 3〜5 | 6 keys | 7 tracks |
+|---|---|---|---|---|
+| `emg-ymm4`（`Emg.Core`） | ✅ | ✅ | ✅ | ✅ 評価器 |
+| `emg-cdn` プレイヤー | ✅ | ✅ | ✅ | ✅ CSS transform |
+| `emg-godot` | ✅ | ✅ | ✅ | ✅ `_process()` |
+| `emg-unity-importer` | ✅ | 一部 | — | ✅ 評価器 |
+| `emg-web-runtime` | ✅ | 一部 | — | ✅ 評価器 |
+| **`emg-renpy`** | ✅ | 一部 | — | **非対応（方針）** |
+
+- **`emg-renpy` の 7 章は対応しません。** `im.*` は静的画像の合成であり、
+  トランスフォームには ATL / Transform への作り替えという設計変更を要します。
+  0.3 のとおり 2〜6 章のみの実装でも v0.5.0 として整合します。
+- `emg-unity-importer` / `emg-web-runtime` / `emg-renpy` の「一部」は、
+  `presets` を実装していないことを指します（`sprites[]` 再生を持たないため
+  6 章も対象外）。
+- 「評価器」は §7 の値解決（`ResolveAt` 相当）まで実装済みで、
+  実際の描画への適用は各ホスト側に委ねている状態を指します。
+
+検証は `emg-ymm4` と `emg-cdn` プレイヤーが実測、`emg-renpy` がロジック実行、
+`emg-unity-importer` が構文検査、`emg-web-runtime` が型検査、
+`emg-godot` は括弧・字下げの整合のみです（GDScript パーサが利用できないため）。
+
+---
+
 ## 10. 適合実装のチェックリスト
 
 v0.4.0 のチェックリストに加えて、次を満たさなければなりません。
