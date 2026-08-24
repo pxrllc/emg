@@ -21,16 +21,42 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
     const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
     const [mode, setMode] = useState<'texture' | 'composition'>('composition');
     const [scale, setScale] = useState(1.0);
+    // ズームを手で触ったか。触るまでは自動でフィットさせ続ける。
+    const userZoomedRef = useRef(false);
 
     const handleFit = useCallback(() => {
         const container = scrollContainerRef.current;
         if (!container || imgSize.w === 0 || imgSize.h === 0) return;
         const s = Math.min(
-            container.clientWidth / imgSize.w,
-            container.clientHeight / imgSize.h
+            (container.clientWidth - 24) / imgSize.w,
+            (container.clientHeight - 24) / imgSize.h
         );
-        setScale(Math.max(0.1, Math.min(4.0, +s.toFixed(2))));
+        setScale(Math.max(0.05, Math.min(4.0, +s.toFixed(2))));
     }, [imgSize]);
+
+    const setScaleManually = useCallback((next: number | ((s: number) => number)) => {
+        userZoomedRef.current = true;
+        setScale(next);
+    }, []);
+
+    /*
+     * 読み込み直後にフィットさせる。
+     * 以前は常に 100% 固定だったため、2000px 級の PSD を開くとキャンバスの左上隅しか
+     * 見えず、「Fit を押すまでキャラクターが画面に存在しない」状態だった。
+     * 一度でも手でズームしたらそれを尊重する。
+     */
+    useEffect(() => {
+        if (userZoomedRef.current) return;
+        if (imgSize.w === 0 || imgSize.h === 0) return;
+        handleFit();
+    }, [imgSize, mode, handleFit]);
+
+    // モードを変えたら「自動フィット」に戻す。合成とアトラスでは寸法が大きく違うので、
+    // 片方に合わせたズームをもう片方に持ち越しても意味がない。
+    const changeMode = useCallback((next: 'texture' | 'composition') => {
+        userZoomedRef.current = false;
+        setMode(next);
+    }, []);
 
     const displayStyle = useMemo(() => ({
         width: imgSize.w > 0 ? imgSize.w * scale + 'px' : undefined,
@@ -141,44 +167,49 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-            {/* Toolbar */}
-            <div className="flex gap-2 p-2 bg-gray-800 border-b border-gray-700" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
-                <button
-                    className={`px-3 py-1 text-xs rounded ${mode === 'composition' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                    onClick={() => setMode('composition')}
-                >
-                    Composition
-                </button>
-                <button
-                    className={`px-3 py-1 text-xs rounded ${mode === 'texture' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                    onClick={() => setMode('texture')}
-                >
-                    Texture Atlas
-                </button>
+            {/* Toolbar
+                このプロジェクトに Tailwind は入っていないため、以前ここで使われていた
+                `bg-gray-800` / `px-3 py-1` などのクラスは 1 つも効いておらず、
+                ツールバー全体が素のブラウザ既定のボタンで表示されていた。 */}
+            <div className="preview-toolbar">
+                <div className="seg">
+                    <button
+                        className={`seg-item ${mode === 'composition' ? 'active' : ''}`}
+                        onClick={() => changeMode('composition')}
+                        title="書き出したときの見た目"
+                    >
+                        合成
+                    </button>
+                    <button
+                        className={`seg-item ${mode === 'texture' ? 'active' : ''}`}
+                        onClick={() => changeMode('texture')}
+                        title="パッキング後のテクスチャアトラス"
+                    >
+                        アトラス
+                    </button>
+                </div>
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button
-                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
-                        onClick={() => setScale(s => Math.max(0.1, +(s - 0.25).toFixed(2)))}
-                        title="Zoom Out"
+                        className="btn btn-sm"
+                        onClick={() => setScaleManually(s => Math.max(0.05, +(s - 0.1).toFixed(2)))}
+                        title="縮小"
                     >－</button>
-                    <span style={{ minWidth: '44px', textAlign: 'center', fontSize: '12px', color: '#ccc' }}>
-                        {Math.round(scale * 100)}%
-                    </span>
+                    <span className="zoom-readout">{Math.round(scale * 100)}%</span>
                     <button
-                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
-                        onClick={() => setScale(s => Math.min(4.0, +(s + 0.25).toFixed(2)))}
-                        title="Zoom In"
+                        className="btn btn-sm"
+                        onClick={() => setScaleManually(s => Math.min(4.0, +(s + 0.1).toFixed(2)))}
+                        title="拡大"
                     >＋</button>
                     <button
-                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
-                        onClick={() => setScale(1.0)}
-                        title="Reset to 100%"
+                        className="btn btn-sm"
+                        onClick={() => setScaleManually(1.0)}
+                        title="等倍"
                     >100%</button>
                     <button
-                        className="px-2 py-1 text-xs rounded bg-gray-700 text-gray-300"
-                        onClick={handleFit}
-                        title="Fit to panel"
-                    >Fit</button>
+                        className="btn btn-sm"
+                        onClick={() => { userZoomedRef.current = false; handleFit(); }}
+                        title="パネルに合わせる"
+                    >全体</button>
                 </div>
             </div>
 
@@ -193,6 +224,14 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                         <canvas ref={canvasRef} style={{ display: 'block', maxWidth: 'none', background: 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHElEQVQYlWNgYGD4z8AARwyyD46kAqJhCg0QAABD1AIG7K6OBAAAAABJRU5ErkJggg==) repeat', ...displayStyle }} />
                     </div>
                 </div>
+
+                {imgSize.w === 0 && (
+                    <div className="empty-state" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                        {mode === 'composition'
+                            ? 'PSD を読み込むと、書き出したときの見た目がここに出ます。'
+                            : 'パッキング後のテクスチャアトラスがここに出ます。'}
+                    </div>
+                )}
 
                 {/* Minimap */}
                 {imgSize.w > 0 && (

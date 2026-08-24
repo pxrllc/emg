@@ -6,7 +6,7 @@ export type PartType = 'static' | 'switch';
 export interface PartInfo {
     /** 生成される .emg の partID。 */
     partId: string;
-    /** 自動判定の既定値（ルート直下が単独レイヤーなら static、グループなら switch）。 */
+    /** 自動判定の既定値（単独レイヤーは static、グループは中身の可視状態から推定）。 */
     defaultType: PartType;
     /** このパーツに属する、実際に書き出されるレイヤー数（画像を持つもの）。 */
     layerCount: number;
@@ -59,6 +59,24 @@ export function analyzePsd(root: Psd): { parts: PartInfo[]; layers: AnalyzedLaye
     //       スカート
     const FRAME_GROUP_PREFIX = '@';
 
+    /**
+     * グループが差分パーツ（switch）か、重ねて使うパーツ（static）かを推定する。
+     * emg-packer の useEmgPacker.inferGroupType と同一の規則。両者が食い違うと、
+     * 同じ PSD から違う .emg が出てしまう。
+     *
+     * 以前は「グループなら常に switch」だったため、`Body`（体・脚・スカート…を
+     * 重ねて 1 つの体にするグループ）まで差分扱いになり、書き出した .emg では
+     * 10 枚のうち 1 枚しか描かれなかった。差分グループは PSD 上で「1 つだけ表示
+     * して残りは非表示」にしてある、という慣習を判定に使う。
+     */
+    const inferGroupType = (layer: Layer): PartType => {
+        const leaves = (layer.children ?? []).filter(c => !c.children || c.children.length === 0);
+        if (leaves.length === 0) return 'static';
+        const hidden = leaves.filter(c => c.hidden).length;
+        const visible = leaves.length - hidden;
+        return hidden > 0 && hidden >= visible ? 'switch' : 'static';
+    };
+
     const traverse = (
         layer: Layer,
         inheritedPartId: string,
@@ -77,7 +95,7 @@ export function analyzePsd(root: Psd): { parts: PartInfo[]; layers: AnalyzedLaye
                 type = 'switch';   // フレームを持つ以上、親は排他パーツ
             } else {
                 partId = name;
-                type = 'switch';
+                type = inferGroupType(layer);
                 frameName = undefined;
             }
         }
@@ -104,7 +122,7 @@ export function analyzePsd(root: Psd): { parts: PartInfo[]; layers: AnalyzedLaye
 
     root.children?.forEach(child => {
         const isGroup = !!child.children && child.children.length > 0;
-        traverse(child, child.name || `Root_${child.id}`, isGroup ? 'switch' : 'static');
+        traverse(child, child.name || `Root_${child.id}`, isGroup ? inferGroupType(child) : 'static');
     });
 
     // レイヤーを1枚も持たない partID は UI に出しても選びようがないので除外する。

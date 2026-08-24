@@ -6,6 +6,7 @@ import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
 import type { LayerMeta } from '../types';
 import type { ToastMessage } from '../components/Toast';
+import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 
 // ag-psd returns opacity as 0-255; normalize to 0.0-1.0
 const normalizeOpacity = (v?: number): number => {
@@ -29,6 +30,26 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
     //       スカート
     const FRAME_GROUP_PREFIX = '@';
 
+    /**
+     * グループが差分パーツ（switch）か、重ねて使うパーツ（static）かを推定する。
+     *
+     * 以前は「グループなら常に switch」だった。`Body`（体・首・脚・スカート…を重ねて
+     * 1 つの体にするグループ）まで差分扱いになるため、書き出した .emg では体の
+     * 10 枚のうち 1 枚しか描かれない。プレビューが全レイヤーを重ねて描いていたので
+     * 画面上は正常に見えていたが、出力は最初から壊れていた。
+     *
+     * 判定は PSD の慣習に従う。差分グループは「1 つだけ表示して残りは非表示」に
+     * してあるので、非表示が可視と同数以上あれば差分群とみなす。逆に全部（または
+     * ほとんど）が同時に見えているなら、それは重ねて使うパーツ。
+     */
+    const inferGroupType = (layer: PsdLayer): 'static' | 'switch' => {
+        const leaves = (layer.children ?? []).filter(c => !c.children || c.children.length === 0);
+        if (leaves.length === 0) return 'static';   // 直属のレイヤーが無いので実質どちらでもよい
+        const hidden = leaves.filter(c => c.hidden).length;
+        const visible = leaves.length - hidden;
+        return hidden > 0 && hidden >= visible ? 'switch' : 'static';
+    };
+
     const traverse = (
         layer: PsdLayer,
         defaultPartId: string,
@@ -48,7 +69,7 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
                 currentType = 'switch';   // フレームを持つ以上、親は排他パーツ
             } else {
                 currentPartId = name;
-                currentType = 'switch';
+                currentType = inferGroupType(layer);
                 currentFrameName = undefined;
             }
         }
@@ -89,8 +110,8 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
     root.children?.forEach(child => {
         const isGroup = child.children && child.children.length > 0;
         const pid = child.name || `Root_${child.id}`;
-        const ptype = isGroup ? 'switch' : 'static';
-        
+        const ptype = isGroup ? inferGroupType(child) : 'static';
+
         traverse(child, pid, ptype);
     });
 
@@ -121,9 +142,15 @@ export function useEmgPacker() {
     const [packedTextureUrl, setPackedTextureUrl] = useState<string | null>(null);
     const [selectedLayer, setSelectedLayer] = useState<PsdLayer | null>(null);
     const [layerMeta, setLayerMeta] = useState<Record<number, LayerMeta>>({});
-    const [compositionItems, setCompositionItems] = useState<PreviewItem[]>([]);
     const [packResult, setPackResult] = useState<PackResult | null>(null);
     const [toast, setToast] = useState<ToastMessage | null>(null);
+
+    // プレビュー専用の状態。書き出し結果には一切影響しない。
+    //   previewFrame : switch パーツで今どの差分を見ているか（既定は part.default）
+    //   previewOff   : プレビュー上で伏せているパーツ（顔の確認で髪を退かす等）
+    const [previewFrame, setPreviewFrame] = useState<Record<string, string>>({});
+    const [previewOff, setPreviewOff] = useState<Record<string, boolean>>({});
+    const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
 
     const handlePsdLoad = async (file: File) => {
         try {
@@ -143,11 +170,55 @@ export function useEmgPacker() {
         setPsdRoot(newRoot);
     };
 
+    /** psdRoot + layerMeta から導出したパーツ一覧（parts.ts）。 */
+    const parts = useMemo<PartInfo[]>(() => buildParts(psdRoot, layerMeta), [psdRoot, layerMeta]);
+
+    const partById = useMemo(() => {
+        const m = new Map<string, PartInfo>();
+        for (const p of parts) m.set(p.partId, p);
+        return m;
+    }, [parts]);
+
+    /**
+     * プレビューの合成。**書き出される .emg と同じ規則で描く**。
+     *
+     * 以前は「visible なレイヤーを全部重ねる」だけだったため、switch パーツの差分が
+     * 全部同時に描かれていた（目 6 枚が重なって潰れる）。実際の再生時とは似ても
+     * 似つかない絵で、差分の確認ができなかった。
+     *   - switch : プレビュー中のフレーム 1 つだけを描く（既定は part.default）
+     *   - static : defaultVisible が false のパーツは初期状態で描かない（v0.5.0 §4）
+     */
+    const compositionItems = useMemo<PreviewItem[]>(() => {
+        const items: PreviewItem[] = [];
+        for (const layer of flattenLayers(psdRoot)) {
+            const meta = layerMeta[layer.id!];
+            if (!meta || !meta.visible) continue;
+
+            const part = partById.get(meta.partId);
+            if (!part) continue;
+
+            const off = previewOff[part.partId] ?? (part.type === 'static' && !part.defaultVisible);
+            if (off) continue;
+
+            if (part.type === 'switch') {
+                const active = previewFrame[part.partId] ?? part.defaultFrameId;
+                if (frameIdOf(layer, meta) !== active) continue;
+            }
+
+            items.push({
+                id: layer.id!,
+                image: layer.canvas!,
+                left: layer.left || 0,
+                top: layer.top || 0,
+            });
+        }
+        return items;
+    }, [psdRoot, layerMeta, partById, previewFrame, previewOff]);
+
     useEffect(() => {
         if (!psdRoot) return;
 
         const packItems: PackItem[] = [];
-        const previewItems: PreviewItem[] = [];
 
         const traverse = (layer: PsdLayer) => {
             if (layer.id === undefined) {
@@ -162,18 +233,10 @@ export function useEmgPacker() {
                     height: layer.canvas.height,
                     image: layer.canvas
                 });
-                previewItems.push({
-                    id: layer.id,
-                    image: layer.canvas,
-                    left: layer.left || 0,
-                    top: layer.top || 0
-                });
             }
             layer.children?.forEach(traverse);
         };
         traverse(psdRoot);
-
-        setCompositionItems(previewItems);
 
         const runPack = async () => {
             if (packItems.length > 0) {
@@ -214,6 +277,119 @@ export function useEmgPacker() {
             }
             return next;
         });
+    };
+
+    // ---- パーツ単位の操作 --------------------------------------------------
+    // partID は複数レイヤーにまたがるため、1 枚ずつ直させると必ず取りこぼす
+    // （目 6 枚のうち 1 枚だけ static、のような壊れた状態が作れてしまう）。
+    // パーツを単位にすることで、その状態自体が表現できなくなる。
+
+    /** パーツの type を切り替える。所属レイヤー全部に反映する。 */
+    const handlePartTypeChange = (partId: string, type: 'static' | 'switch') => {
+        const part = partById.get(partId);
+        if (!part) return;
+
+        // 全レイヤーが PSD で非表示だった static パーツは、捨てずにパーツごと
+        // 「初期非表示のトグル」として書き出す（v0.5.0 §4）。recalculateMeta と同じ判定。
+        const allHidden = part.layerIds.every(id => layerMeta[id]?.defaultVisible === false);
+
+        setLayerMeta(prev => {
+            const next = { ...prev };
+            for (const id of part.layerIds) {
+                const m = next[id];
+                if (!m) continue;
+
+                // switch → static のとき、defaultVisible はまだ無い（switch では
+                // isDefault の方が意味を持つ側だったため）。ここで ?? true に倒すと
+                // 差分 6 枚が全部「常時表示」になり、目が 6 枚重なった絵が書き出される。
+                // 引き継ぐべきは「既定だったフレームだけが見える」という状態。
+                const keepVisible = type !== 'static'
+                    ? true
+                    : allHidden || (m.type === 'switch' ? !!m.isDefault : (m.defaultVisible ?? true));
+
+                next[id] = {
+                    ...m,
+                    type,
+                    // switch では isDefault が、static では defaultVisible が意味を持つ。
+                    // 切り替え時に反対側を消しておかないと、書き出しに前の型の
+                    // 判断が残って混ざる。
+                    isDefault: type === 'switch' ? m.isDefault : undefined,
+                    defaultVisible: type === 'static' ? keepVisible : undefined,
+                    visible: keepVisible,
+                };
+            }
+
+            // switch にしたのに既定が 1 つも立っていない状態を作らない。
+            if (type === 'switch' && !part.layerIds.some(id => next[id]?.isDefault)) {
+                const firstId = part.frames[0]?.layerIds ?? [];
+                for (const id of firstId) {
+                    if (next[id]) next[id] = { ...next[id], isDefault: true };
+                }
+            }
+            return next;
+        });
+    };
+
+    /** switch パーツの既定フレーム（.emg の part.default）を決める。 */
+    const handlePartDefaultFrameChange = (partId: string, frameId: string) => {
+        const part = partById.get(partId);
+        if (!part) return;
+        const layers = flattenLayers(psdRoot);
+        setLayerMeta(prev => {
+            const next = { ...prev };
+            for (const id of part.layerIds) {
+                const m = next[id];
+                if (!m) continue;
+                const layer = layers.find(l => l.id === id);
+                if (!layer) continue;
+                next[id] = { ...m, isDefault: frameIdOf(layer, m) === frameId };
+            }
+            return next;
+        });
+    };
+
+    /** パーツごと書き出しに含めるか。static の「初期非表示トグル」もこれで表す。 */
+    const handlePartExportChange = (partId: string, include: boolean) => {
+        const part = partById.get(partId);
+        if (!part) return;
+        setLayerMeta(prev => {
+            const next = { ...prev };
+            for (const id of part.layerIds) {
+                if (next[id]) next[id] = { ...next[id], visible: include };
+            }
+            return next;
+        });
+    };
+
+    /** static パーツの初期表示（v0.5.0 §4）。false なら初期非表示のトグルとして書き出す。 */
+    const handlePartDefaultVisibleChange = (partId: string, defaultVisible: boolean) => {
+        const part = partById.get(partId);
+        if (!part) return;
+        setLayerMeta(prev => {
+            const next = { ...prev };
+            for (const id of part.layerIds) {
+                if (next[id]) next[id] = { ...next[id], defaultVisible, visible: true };
+            }
+            return next;
+        });
+        setPreviewOff(prev => ({ ...prev, [partId]: !defaultVisible }));
+    };
+
+    // ---- プレビュー操作（書き出しには影響しない） --------------------------
+    const handlePreviewFrame = (partId: string, frameId: string) => {
+        setPreviewFrame(prev => ({ ...prev, [partId]: frameId }));
+        setPreviewOff(prev => ({ ...prev, [partId]: false }));
+    };
+
+    const handlePreviewToggle = (partId: string) => {
+        const part = partById.get(partId);
+        const current = previewOff[partId] ?? (part?.type === 'static' && !part.defaultVisible);
+        setPreviewOff(prev => ({ ...prev, [partId]: !current }));
+    };
+
+    const handlePreviewReset = () => {
+        setPreviewFrame({});
+        setPreviewOff({});
     };
 
     const handleLayerVisibilityChange = (layer: any, visible: boolean) => {
@@ -360,6 +536,67 @@ export function useEmgPacker() {
         }
     };
 
+    /**
+     * 選択中のレイヤー（またはグループ）を、その場で新しいグループに包む。
+     *
+     * グループ名がそのまま partID になるので、これは「このレイヤーを独立した
+     * パーツにする」操作でもある。空グループをルート末尾に作ってから 1 枚ずつ
+     * ドラッグする、という以前の手順を置き換える。
+     */
+    const handleGroupSelected = (): string | null => {
+        if (!psdRoot || !selectedLayer || selectedLayer.id === undefined) return null;
+
+        const targetId = selectedLayer.id;
+        const groupId = Date.now();
+        const groupName = 'New Part';
+        let wrapped = false;
+
+        const clone = (l: PsdLayer): PsdLayer => ({ ...l, children: l.children?.map(clone) });
+        const rebuild = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => {
+            if (l.id === targetId) {
+                wrapped = true;
+                return { id: groupId, name: groupName, hidden: false, children: [l], canvas: undefined } as PsdLayer;
+            }
+            if (l.children) return { ...l, children: rebuild(l.children) };
+            return l;
+        });
+
+        const newRoot: Psd = { ...psdRoot, children: rebuild((psdRoot.children ?? []).map(clone)) };
+        if (!wrapped) return null;
+
+        handlePsdUpdate(newRoot);
+        return groupName;
+    };
+
+    /**
+     * パーツ名（= PSD グループ名 = partID）を変更する。
+     * recalculateMeta がグループ名から partID を引き直すので、名前を変えれば追従する。
+     */
+    const handleRenamePart = (partId: string, newName: string) => {
+        if (!psdRoot || !newName.trim() || newName === partId) return;
+
+        const rename = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => {
+            const next: PsdLayer = { ...l, children: l.children ? rename(l.children) : undefined };
+            if (l.children && l.name === partId) next.name = newName;
+            return next;
+        });
+
+        handlePsdUpdate({ ...psdRoot, children: rename(psdRoot.children ?? []) });
+
+        // partID をキーにしているプレビュー状態も付け替える
+        setPreviewFrame(prev => {
+            if (!(partId in prev)) return prev;
+            const { [partId]: v, ...rest } = prev;
+            return { ...rest, [newName]: v };
+        });
+        setPreviewOff(prev => {
+            if (!(partId in prev)) return prev;
+            const { [partId]: v, ...rest } = prev;
+            return { ...rest, [newName]: v };
+        });
+        setSelectedPartId(cur => (cur === partId ? newName : cur));
+    };
+
     const handleSaveProject = () => {
         const projectData = {
             version: '1.0',
@@ -405,6 +642,10 @@ export function useEmgPacker() {
         compositionItems,
         packResult,
         emgData,
+        parts,
+        selectedPartId,
+        previewFrame,
+        previewOff,
         handlePsdLoad,
         handlePsdUpdate,
         handleLayerVisibilityChange,
@@ -413,6 +654,16 @@ export function useEmgPacker() {
         handleLoadProject,
         handleVisibilityAll,
         handleTypeAll,
+        handlePartTypeChange,
+        handlePartDefaultFrameChange,
+        handlePartExportChange,
+        handlePartDefaultVisibleChange,
+        handlePreviewFrame,
+        handlePreviewToggle,
+        handlePreviewReset,
+        handleGroupSelected,
+        handleRenamePart,
+        setSelectedPartId,
         setSelectedLayer,
         setLayerMeta,
         toast,

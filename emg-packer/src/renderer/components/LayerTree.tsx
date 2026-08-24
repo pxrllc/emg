@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Layer, Psd } from 'ag-psd';
-import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FolderPlus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FolderPlus, Group } from 'lucide-react';
+import type { LayerMeta } from '../types';
 
 // Module-level variable for reliable drag tracking in Electron
 let _activeDragLayerId: number | null = null;
@@ -8,52 +9,44 @@ let _activeDragLayerId: number | null = null;
 interface LayerTreeProps {
     psd: Psd | null;
     visibility: Record<number, boolean>;
+    layerMeta?: Record<number, LayerMeta>;
     onLayerVisibilityChange: (layer: Layer, visible: boolean) => void;
     onSelectionChange?: (layer: Layer) => void;
     onPsdUpdate?: (psd: Psd) => void;
     selectedLayer?: Layer | null;
     onVisibilityAll?: (visible: boolean) => void;
     onLoadPsd?: () => void;
+    onGroupSelected?: () => void;
 }
 
 export const LayerTree: React.FC<LayerTreeProps> = ({
     psd,
     visibility,
+    layerMeta,
     onLayerVisibilityChange,
     onSelectionChange,
     onPsdUpdate,
     selectedLayer,
     onVisibilityAll,
-    onLoadPsd
+    onLoadPsd,
+    onGroupSelected
 }) => {
     if (!psd || !psd.children) return (
-        <div style={{ padding: '24px 16px', color: '#666', textAlign: 'center', fontSize: '12px', lineHeight: 1.6, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ marginBottom: '8px', fontSize: '48px', color: '#555' }}>📂</div>
-            <div style={{ color: '#999', marginBottom: '24px', fontSize: '14px' }}>No file loaded</div>
-            <button 
-                onClick={onLoadPsd}
-                style={{
-                    background: '#3b82f6', color: 'white', border: 'none', padding: '14px 24px', borderRadius: '6px', fontSize: '16px', cursor: 'pointer', fontWeight: 'bold', width: '100%', maxWidth: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-                }}
-            >
-                <FolderPlus size={20} /> Open PSD / KRA
+        <div className="empty-state">
+            <div style={{ fontSize: '40px', lineHeight: 1 }}>📂</div>
+            <div style={{ color: '#a5a5aa', fontSize: '13px' }}>PSD / KRA を読み込んで始めます</div>
+            <button className="btn btn-primary" onClick={onLoadPsd} style={{ width: '100%', maxWidth: '220px' }}>
+                <FolderPlus size={16} /> PSD / KRA を開く
             </button>
+            <div style={{ fontSize: '11px', color: '#5f5f64', lineHeight: 1.7 }}>
+                トップレベルのグループが 1 パーツになります。<br />
+                「@」で始まるグループは 1 つの差分としてまとまります。
+            </div>
         </div>
     );
 
-    const handleCreateGroup = () => {
-        if (!psd || !onPsdUpdate) return;
-        const newGroup: Layer = {
-            id: Date.now(), // Generate a temp ID
-            name: 'New Group',
-            children: [],
-            hidden: false,
-            canvas: undefined
-        };
-        // Add to root for now
-        const newPsd = { ...psd, children: [...(psd.children || []), newGroup] };
-        onPsdUpdate(newPsd);
-    };
+    /** 選択中のレイヤーを新しいグループ（= 新しいパーツ）に包む。 */
+    const handleGroupSelected = () => onGroupSelected?.();
 
     const handleMove = (draggedId: number, targetId: number | 'root', position: 'before' | 'after' | 'inside') => {
         if (!psd || !onPsdUpdate) return;
@@ -165,44 +158,38 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
 
     return (
         <div className="layer-tree" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div style={{ padding: '12px 8px', borderBottom: '1px solid #333' }}>
-                <button 
-                    onClick={onLoadPsd}
-                    style={{
-                        background: '#3b82f6', color: 'white', border: 'none', padding: '12px', borderRadius: '4px', fontSize: '14px', cursor: 'pointer', fontWeight: 'bold', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'background 0.2s', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                    }}
-                >
-                    <FolderPlus size={18} /> Open PSD / KRA
-                </button>
-            </div>
-            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #444', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #3e3e42', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button
-                    onClick={handleCreateGroup}
-                    style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                    className="btn btn-sm"
+                    onClick={handleGroupSelected}
+                    disabled={!selectedLayer}
+                    title={selectedLayer ? '選択中のレイヤーを新しいパーツにまとめる' : 'まとめたいレイヤーを選んでください'}
                 >
-                    <FolderPlus size={14} /> New Group
+                    <Group size={13} /> パーツにまとめる
                 </button>
                 <button
+                    className="btn btn-sm btn-ghost"
                     onClick={() => onVisibilityAll?.(true)}
-                    title="Show All Layers"
-                    style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                    title="全レイヤーを書き出し対象にする"
                 >
-                    <Eye size={14} /> Show All
+                    <Eye size={13} /> 全選択
                 </button>
                 <button
+                    className="btn btn-sm btn-ghost"
                     onClick={() => onVisibilityAll?.(false)}
-                    title="Hide All Layers"
-                    style={{ background: '#444', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                    title="全レイヤーを書き出し対象から外す"
                 >
-                    <EyeOff size={14} /> Hide All
+                    <EyeOff size={13} /> 全解除
                 </button>
             </div>
-            <div className="tree-content" style={{ padding: '8px' }}>
+            <div className="tree-content" style={{ padding: '6px 4px', flex: 1, overflow: 'auto' }}>
                 {psd.children.slice().reverse().map((layer, index) => (
                     <LayerNode
                         key={layer.id || index}
                         layer={layer}
                         visibility={visibility}
+                        layerMeta={layerMeta}
+                        parentPartId={undefined}
                         onVisibilityChange={onLayerVisibilityChange}
                         onSelectionChange={onSelectionChange}
                         selectedLayer={selectedLayer}
@@ -219,6 +206,9 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
 interface LayerNodeProps {
     layer: Layer;
     visibility: Record<number, boolean>;
+    layerMeta?: Record<number, LayerMeta>;
+    /** 親から引き継いだ partID。これと違えば、このグループが新しいパーツの起点。 */
+    parentPartId?: string;
     onVisibilityChange: (layer: Layer, visible: boolean) => void;
     onSelectionChange?: (layer: Layer) => void;
     selectedLayer?: Layer | null;
@@ -230,6 +220,8 @@ interface LayerNodeProps {
 const LayerNode: React.FC<LayerNodeProps> = ({
     layer,
     visibility,
+    layerMeta,
+    parentPartId,
     onVisibilityChange,
     onSelectionChange,
     selectedLayer,
@@ -245,6 +237,14 @@ const LayerNode: React.FC<LayerNodeProps> = ({
     const isGroup = !!layer.children;
     const isVisible = (layer.id !== undefined && visibility[layer.id] !== undefined) ? visibility[layer.id] : !layer.hidden;
     const isSelected = selectedLayer === layer;
+
+    // どのグループが 1 つの partID になるかは、これまでツリー上で全く見えなかった。
+    // partID の出所はグループ名なので、その境界を線と色で示す。
+    const meta = layer.id !== undefined ? layerMeta?.[layer.id] : undefined;
+    const partId = meta?.partId;
+    const isFrameGroup = isGroup && !!layer.name?.startsWith('@');
+    const isPartRoot = isGroup && !isFrameGroup && !!partId && partId !== parentPartId;
+    const isExcluded = !!meta && !meta.visible;
 
     const handleToggleVisibility = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -340,8 +340,14 @@ const LayerNode: React.FC<LayerNodeProps> = ({
     return (
         <div className="layer-node-container">
             <div
-                className={`tree-item ${isSelected ? 'selected' : ''}`}
-                style={{ paddingLeft: `${depth * 16 + 4}px`, ...indicatorStyle }}
+                className={[
+                    'tree-item',
+                    isSelected ? 'selected' : '',
+                    isPartRoot ? 'part-root' : '',
+                    isPartRoot && meta?.type === 'static' ? 'static-part' : '',
+                    isExcluded ? 'excluded' : '',
+                ].filter(Boolean).join(' ')}
+                style={{ paddingLeft: `${depth * 14 + 4}px`, ...indicatorStyle }}
                 onClick={handleSelect}
                 draggable
                 onDragStart={handleDragStart}
@@ -365,7 +371,9 @@ const LayerNode: React.FC<LayerNodeProps> = ({
                 )}
 
                 <div className="tree-item-content">
-                    {isGroup ? <Folder size={14} fill={isGroup ? "#e8c466" : "none"} color={isGroup ? "#e8c466" : "currentColor"} /> : <File size={14} />}
+                    {isGroup
+                        ? <Folder size={14} fill={isFrameGroup ? '#e3c15b' : '#e8c466'} color={isFrameGroup ? '#e3c15b' : '#e8c466'} />
+                        : <File size={14} />}
                     {isRenaming ? (
                         <input
                             value={renameValue}
@@ -373,12 +381,20 @@ const LayerNode: React.FC<LayerNodeProps> = ({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             autoFocus
-                            style={{ background: '#222', color: '#fff', border: '1px solid #555', padding: '2px 4px', fontSize: '12px' }}
+                            style={{ background: '#1a1a1c', color: '#fff', border: '1px solid #2563eb', borderRadius: '3px', padding: '2px 4px', fontSize: '12px', minWidth: 0, flex: 1 }}
                             onClick={e => e.stopPropagation()}
                         />
                     ) : (
-                        <span className="layer-name" onDoubleClick={handleDoubleClick}>{layer.name}</span>
+                        <span className="layer-name" title="ダブルクリックで名前を変更" onDoubleClick={handleDoubleClick}>
+                            {layer.name}
+                        </span>
                     )}
+                    {isPartRoot && meta && (
+                        <span className={`badge badge-${meta.type}`} title={`partID: ${partId}`}>
+                            {meta.type}
+                        </span>
+                    )}
+                    {isFrameGroup && <span className="badge badge-frame" title="frameName（1 つの差分としてまとまる）">frame</span>}
                 </div>
             </div>
 
@@ -389,6 +405,8 @@ const LayerNode: React.FC<LayerNodeProps> = ({
                             key={child.id || idx}
                             layer={child}
                             visibility={visibility}
+                            layerMeta={layerMeta}
+                            parentPartId={partId ?? parentPartId}
                             onVisibilityChange={onVisibilityChange}
                             onSelectionChange={onSelectionChange}
                             selectedLayer={selectedLayer}

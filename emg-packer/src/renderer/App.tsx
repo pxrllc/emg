@@ -1,20 +1,41 @@
+import { useMemo } from 'react';
 import { useEmgPacker } from './hooks/useEmgPacker';
 import { MainLayout } from './components/MainLayout';
 import { LayerTree } from './components/LayerTree';
 import { PreviewPanel } from './components/PreviewPanel';
-import { PropertiesPanel } from './components/PropertiesPanel';
+import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
 
 function App() {
     const {
         psdRoot, packedTextureUrl, selectedLayer, layerMeta,
         compositionItems, emgData,
+        parts, selectedPartId, previewFrame, previewOff,
         handlePsdLoad, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
-        setSelectedLayer, setLayerMeta,
+        handlePartTypeChange, handlePartDefaultFrameChange,
+        handlePartDefaultVisibleChange,
+        handlePreviewFrame, handlePreviewToggle, handlePreviewReset,
+        handleGroupSelected, handleRenamePart,
+        setSelectedPartId, setSelectedLayer, setLayerMeta,
         toast, setToast,
     } = useEmgPacker();
+
+    const visibility = useMemo(
+        () => Object.fromEntries(Object.values(layerMeta).map(m => [m.id, m.visible])),
+        [layerMeta]
+    );
+
+    // layerMeta はグループにも作られるので、そのまま数えると
+    // グループを 1 つ足しただけで「レイヤーが増えた」ように見える。
+    // parts[] は canvas を持つ葉レイヤーだけを持っているので、そちらから数える。
+    const exportableCount = useMemo(
+        () => parts.reduce((n, p) => n + p.exportedCount, 0),
+        [parts]
+    );
+
+    const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
 
     return (
         <>
@@ -30,16 +51,19 @@ function App() {
                 }}
             />
             <MainLayout
+                hasFile={!!psdRoot}
                 leftPanel={
                     <LayerTree
                         psd={psdRoot}
-                        visibility={Object.fromEntries(Object.values(layerMeta).map(m => [m.id, m.visible]))}
+                        visibility={visibility}
+                        layerMeta={layerMeta}
                         selectedLayer={selectedLayer}
                         onSelectionChange={setSelectedLayer}
                         onLayerVisibilityChange={handleLayerVisibilityChange}
                         onPsdUpdate={handlePsdUpdate}
                         onVisibilityAll={handleVisibilityAll}
-                        onLoadPsd={() => document.getElementById('psd-upload-input')?.click()}
+                        onLoadPsd={openFilePicker}
+                        onGroupSelected={handleGroupSelected}
                     />
                 }
                 centerPanel={
@@ -51,32 +75,38 @@ function App() {
                     />
                 }
                 rightPanel={
-                    <PropertiesPanel
+                    <InspectorPanel
+                        hasFile={!!psdRoot}
+                        exportableCount={exportableCount}
+                        parts={parts}
+                        selectedPartId={selectedPartId}
+                        previewFrame={previewFrame}
+                        previewOff={previewOff}
+                        onSelectPart={setSelectedPartId}
+                        onTypeChange={handlePartTypeChange}
+                        onDefaultFrameChange={handlePartDefaultFrameChange}
+                        onDefaultVisibleChange={handlePartDefaultVisibleChange}
+                        onPreviewFrame={handlePreviewFrame}
+                        onPreviewToggle={handlePreviewToggle}
+                        onPreviewReset={handlePreviewReset}
+                        onRenamePart={handleRenamePart}
+                        onTypeAll={handleTypeAll}
+                        layerName={selectedLayer?.name}
                         layerId={selectedLayer?.id ?? null}
                         meta={selectedLayer?.id !== undefined ? layerMeta[selectedLayer.id] : undefined}
-                        onChange={(newMeta) => selectedLayer?.id !== undefined && setLayerMeta(prev => ({ ...prev, [selectedLayer.id!]: newMeta }))}
+                        onMetaChange={(newMeta) =>
+                            selectedLayer?.id !== undefined &&
+                            setLayerMeta(prev => ({ ...prev, [selectedLayer.id!]: newMeta }))
+                        }
+                        emgData={emgData}
                         onExport={handleExport}
                         onSaveProject={handleSaveProject}
                         onLoadProject={handleLoadProject}
-                        emgData={emgData}
-                        onTypeAll={handleTypeAll}
                     />
                 }
-                onLoadPsd={() => document.getElementById('psd-upload-input')?.click()}
+                onLoadPsd={openFilePicker}
             />
             <Toast message={toast} onClose={() => setToast(null)} />
-            <div style={{
-                position: 'fixed',
-                bottom: '6px',
-                right: '10px',
-                fontSize: '10px',
-                color: '#333',
-                userSelect: 'none',
-                pointerEvents: 'none',
-                letterSpacing: '0.03em',
-            }}>
-                v0.1.5 · pxrllc
-            </div>
         </>
     );
 }

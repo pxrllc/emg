@@ -6,6 +6,8 @@ interface MainLayoutProps {
     centerPanel?: React.ReactNode;
     rightPanel?: React.ReactNode;
     onLoadPsd?: () => void;
+    /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
+    hasFile?: boolean;
 }
 
 function ResizeHandle({ className = "" }: { className?: string }) {
@@ -16,7 +18,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, hasFile }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -26,32 +28,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                         <div className="panel-header" style={{ justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <FolderTree size={16} />
-                                <span>Layers</span>
+                                <span>レイヤー</span>
                             </div>
-                            {onLoadPsd && (
-                                <button
-                                    onClick={onLoadPsd}
-                                    title="Import PSD / KRA"
-                                    style={{
-                                        background: '#3b82f6',
-                                        border: 'none',
-                                        color: 'white',
-                                        padding: '3px 10px',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '5px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                    }}
-                                >
+                            {/* 読み込み済みなら、これはもう主役ではない。青は Export 側に譲る。 */}
+                            {onLoadPsd && hasFile && (
+                                <button className="btn btn-sm btn-ghost" onClick={onLoadPsd} title="別の PSD / KRA を開く">
                                     <FileUp size={13} />
-                                    Import
+                                    開く
                                 </button>
                             )}
                         </div>
-                        <div className="panel-body">
+                        <div className="panel-body no-pad">
                             {leftPanel}
                         </div>
                     </div>
@@ -64,9 +51,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                     <div className="panel-content center-panel">
                         <div className="panel-header">
                             <ImageIcon size={16} />
-                            <span>Preview</span>
+                            <span>プレビュー</span>
                         </div>
-                        <div className="panel-body preview-area">
+                        <div className="panel-body no-pad preview-area">
                             {centerPanel}
                         </div>
                     </div>
@@ -77,11 +64,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                 {/* Right Panel: Properties */}
                 <Panel defaultSize="20" minSize="10" maxSize="40">
                     <div className="panel-content right-panel">
-                        <div className="panel-header">
-                            <Settings size={16} />
-                            <span>Properties</span>
+                        <div className="panel-header" style={{ justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Settings size={16} />
+                                <span>設定</span>
+                            </div>
+                            <span style={{ fontSize: '10px', color: '#5f5f64', fontWeight: 400, letterSpacing: '0.03em' }}>
+                                v0.1.5 · pxrllc
+                            </span>
                         </div>
-                        <div className="panel-body">
+                        <div className="panel-body no-pad">
                             {rightPanel}
                         </div>
                     </div>
