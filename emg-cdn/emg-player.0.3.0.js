@@ -583,12 +583,17 @@
         const triggerType = trigger ? resolveTriggerType(trigger) : null;
         const frameMs = 1000 / resolveFps(sprite);
 
+        // v0.5.0 §6.1: keys と frames は排他。keys があればそちらを使う。
+        const keys = Array.isArray(sequence.keys) && sequence.keys.length > 0 ? sequence.keys : null;
+        const frames = keys ? keys.map(k => k.frame) : (sequence.frames ?? []);
+
         const runSequence = () => {
             // sequence.type: "ordered", "random_hold"
             if (sequenceType === 'ordered') {
-                playOrderedSequence(targetPartID, sequence.frames, frameMs, triggerType === 'auto_loop');
+                if (keys) playKeyedSequence(targetPartID, keys, triggerType === 'auto_loop');
+                else playOrderedSequence(targetPartID, frames, frameMs, triggerType === 'auto_loop');
             } else if (sequenceType === 'random_hold') {
-                const pick = sequence.frames[Math.floor(Math.random() * sequence.frames.length)];
+                const pick = frames[Math.floor(Math.random() * frames.length)];
                 switchTexture(targetPartID, pick);
             }
         };
@@ -599,7 +604,8 @@
         if (triggerType === 'auto_loop') {
             // すぐに開始してループ
             if (sequenceType === 'ordered') {
-                playOrderedSequence(targetPartID, sequence.frames, frameMs, true);
+                if (keys) playKeyedSequence(targetPartID, keys, true);
+                else playOrderedSequence(targetPartID, frames, frameMs, true);
             } else {
                 // random_hold loop? not meaningful usually, basically static random
                 runSequence();
@@ -629,6 +635,32 @@
         layers.forEach(el => {
             setLayerVisible(el, el.dataset.frameId === textureID);
         });
+    }
+
+    /**
+     * v0.5.0 §6: 不等間隔のキー列を再生する。
+     * 各キーの t（秒・再生開始からの絶対時刻）でフレームを切り替える。
+     * 尺は最後のキーの t（§6.4）。
+     */
+    function playKeyedSequence(partID, keys, loop) {
+        if (!Array.isArray(keys) || keys.length === 0) return;
+
+        const start = () => {
+            if (!window.isAnimationRunning) return;
+            for (const k of keys) {
+                const tm = setTimeout(() => {
+                    if (!window.isAnimationRunning) return;
+                    switchTexture(partID, k.frame);
+                }, k.t * 1000);
+                window.timeouts.push(tm);
+            }
+            if (loop) {
+                const duration = keys[keys.length - 1].t * 1000;
+                const tm = setTimeout(start, duration);
+                window.timeouts.push(tm);
+            }
+        };
+        start();
     }
 
     function playOrderedSequence(partID, frames, frameInterval, loop) {

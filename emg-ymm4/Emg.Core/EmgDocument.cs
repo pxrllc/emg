@@ -193,6 +193,60 @@ public sealed class EmgSequence
 
     [JsonPropertyName("frames")]
     public List<string> Frames { get; set; } = new();
+
+    /// <summary>
+    /// v0.5.0 §6。不等間隔のフレーム列。<see cref="Frames"/> と排他。
+    /// これを使う場合 fps は不要（尺は最後のキーの t）。
+    /// </summary>
+    [JsonPropertyName("keys")]
+    public List<EmgSequenceKey>? Keys { get; set; }
+
+    /// <summary>
+    /// v0.5.0 §6.2。時刻 t（秒）に表示すべきフレーム識別子。
+    /// 規則は「key.t &lt;= t を満たす最後のキー」。step 補間として一意に定まる。
+    ///
+    /// keys が無い場合は fps + frames による等間隔として解決するため、
+    /// 呼び出し側は両形式を区別せずに扱える。
+    /// </summary>
+    public string? ResolveFrameAt(double t, double fps)
+    {
+        if (Keys is { Count: > 0 })
+        {
+            string? found = null;
+            foreach (var k in Keys)
+            {
+                if (k.T <= t) found = k.Frame;
+                else break;   // キーは t の昇順であることが要件
+            }
+            // 最初のキーより前の時刻は先頭のフレームとして扱う
+            return found ?? Keys[0].Frame;
+        }
+
+        if (Frames.Count == 0) return null;
+        if (fps <= 0) fps = 12;
+        var index = (int)Math.Floor(t * fps);
+        return Frames[Math.Clamp(index, 0, Frames.Count - 1)];
+    }
+
+    /// <summary>v0.5.0 §6.4。この sequence の尺（秒）。</summary>
+    public double ResolveDuration(double fps)
+    {
+        if (Keys is { Count: > 0 }) return Keys[^1].T;
+        if (Frames.Count == 0) return 0;
+        return Frames.Count / (fps <= 0 ? 12 : fps);
+    }
+}
+
+/// <summary>v0.5.0 §6.1。不等間隔シーケンスの 1 キー。</summary>
+public sealed class EmgSequenceKey
+{
+    /// <summary>再生開始からの秒数。</summary>
+    [JsonPropertyName("t")]
+    public double T { get; set; }
+
+    /// <summary>表示するフレーム識別子。</summary>
+    [JsonPropertyName("frame")]
+    public string Frame { get; set; } = "";
 }
 
 public sealed class EmgTrigger

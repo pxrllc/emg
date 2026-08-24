@@ -151,6 +151,35 @@ const CASES = [
         },
     },
     {
+        // sequence_keys と同じキー列だが auto_loop。読み込み直後から再生されるため
+        // 実装の再生経路をそのまま観測できる（random_interval だと最初の発火まで数秒待つ）。
+        //
+        // 対象は Blushs。Eyes / Mouth は mapping.json の blink / lipSync 管轄であり、
+        // 共存ルール（v0.3.0 仕様 7.3）により sprites[] の自律発火が抑制されるため、
+        // 再生経路の検証には使えない。
+        id: 'sequence_keys_autoloop',
+        spec: '6 章',
+        desc: 'sequence_keys の auto_loop 版（検証用・mapping 非管轄の Blushs が対象）',
+        note: '読み込み直後から不等間隔で再生される',
+        apply: d => {
+            d.sprites.push({
+                spriteID: 'blush_loop',
+                targetPartID: 'Blushs',
+                sequence: {
+                    type: 'ordered',
+                    keys: [
+                        { t: 0.00, frame: 'cheek' },
+                        { t: 0.20, frame: '01' },
+                        { t: 0.40, frame: '02' },
+                        { t: 0.60, frame: '03' },
+                        { t: 0.80, frame: 'cheek' },
+                    ],
+                },
+                trigger: { type: 'auto_loop' },
+            });
+        },
+    },
+    {
         id: 'tracks',
         spec: '7 章',
         desc: 'static パーツ（Body）への回転。targetPartID の switch 限定を外した先の形（7.1）',
