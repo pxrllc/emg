@@ -10,10 +10,9 @@ public static class EmgCompat
 {
     /// <summary>
     /// この実装が理解する機能識別子（emg-extensions-registry.md）。
-    /// v0.4.0 の範囲では 1 つも実装していないため空。v0.5.0 の機能を実装した時点で
-    /// 対応する識別子をここへ追加する。
+    /// EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
     /// </summary>
-    public static readonly IReadOnlySet<string> SupportedExtensions = new HashSet<string>();
+    public static readonly IReadOnlySet<string> SupportedExtensions = new HashSet<string> { "EMG_frame_name" };
 
     /// <summary>
     /// v0.4.0 §2.2。未知の識別子が 1 つでもあれば例外を投げる。

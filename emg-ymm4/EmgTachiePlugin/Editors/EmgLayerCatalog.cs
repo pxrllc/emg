@@ -86,12 +86,17 @@ public static class EmgLayerCatalog
             // static パーツは常に全レイヤーが描画されるので、選択肢に出しても意味がない。
             if (part.ResolvedType != "switch") continue;
 
+            // v0.5.0 §2: 切り替えの単位はレイヤーではなくフレーム識別子。
+            // 同じフレームに属する複数レイヤーは 1 つの選択肢にまとめ、
+            // サムネイルは先頭のレイヤーのものを使う。
+            var seen = new HashSet<string>();
             foreach (var layer in part.Layers)
             {
+                if (!seen.Add(layer.FrameID)) continue;
                 choices.Add(new EmgLayerChoice
                 {
                     PartID = part.PartID,
-                    TextureID = layer.TextureID,
+                    TextureID = layer.FrameID,
                     Thumbnail = CreateThumbnail(atlases, loaded.Data, layer),
                 });
             }

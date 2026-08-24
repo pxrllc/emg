@@ -38,10 +38,24 @@ const CASES = [
         spec: '2 章',
         desc: 'frameName が別名として使われるだけ（1 フレーム = 1 レイヤー）',
         note: 'requiredExtensions の宣言は不要。未対応実装も textureID で解決できる',
-        apply: d => {
+        apply: (d, mapping) => {
             const eyes = d.parts.find(p => p.partID === 'Eyes');
-            for (const l of eyes.layers) l.frameName = `eye_${l.textureID}`;
-            eyes.default = 'eye_01';
+            const rename = tid => `eye_${tid}`;
+            for (const l of eyes.layers) l.frameName = rename(l.textureID);
+            eyes.default = rename(eyes.default);
+
+            // v0.5.0 §1.2: mapping.json の参照もフレーム識別子で解決される。
+            // frameName を付けた以上、こちらも合わせないと解決できなくなる
+            // （合わせ忘れると、そのパーツが一切描画されない）。
+            if (mapping) {
+                const b = mapping.baseMapping?.blink;
+                if (b) for (const k of Object.keys(b)) if (b[k]) b[k] = rename(b[k]);
+                for (const e of Object.values(mapping.expressions ?? {})) {
+                    if (e.parts?.Eyes) e.parts.Eyes = e.parts.Eyes.map(rename);
+                    const ob = e.overrides?.blink;
+                    if (ob) for (const k of Object.keys(ob)) if (ob[k]) ob[k] = rename(ob[k]);
+                }
+            }
         },
     },
     {

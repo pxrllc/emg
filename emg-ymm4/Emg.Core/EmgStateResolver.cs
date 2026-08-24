@@ -181,7 +181,7 @@ public static class EmgStateResolver
         {
             foreach (var layerID in other)
             {
-                var owner = data.Parts.FirstOrDefault(p => p.Layers.Any(l => l.TextureID == layerID));
+                var owner = data.Parts.FirstOrDefault(p => p.Layers.Any(l => l.FrameID == layerID));
                 if (owner is not null) result[owner.PartID] = layerID;
             }
         }

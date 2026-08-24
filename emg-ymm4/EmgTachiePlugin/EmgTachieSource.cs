@@ -544,14 +544,15 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
             // 無ければ activeTextures で解決された単一レイヤーのみ表示する。
             if (expr?.Parts is not null && expr.Parts.TryGetValue(part.PartID, out var visibleIDs))
             {
-                layersToDraw.AddRange(part.Layers.Where(l => visibleIDs.Contains(l.TextureID)));
+                layersToDraw.AddRange(part.Layers.Where(l => visibleIDs.Contains(l.FrameID)));
                 continue;
             }
 
             if (activeTextures.TryGetValue(part.PartID, out var activeID))
             {
-                var layer = part.Layers.FirstOrDefault(l => l.TextureID == activeID);
-                if (layer is not null) layersToDraw.Add(layer);
+                // v0.5.0 §2.2: 選ばれたフレーム識別子を持つレイヤーを *すべて* 描く。
+                // frameName の無いファイルでは従来どおり 1 枚しか一致しない。
+                layersToDraw.AddRange(part.Layers.Where(l => l.FrameID == activeID));
             }
         }
 

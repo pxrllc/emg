@@ -275,7 +275,7 @@ public static class EmgAnimation
         if (ids.Count == 0) return null;
 
         return data.Parts
-            .Select(p => (p.PartID, Hits: p.Layers.Count(l => ids.Contains(l.TextureID))))
+            .Select(p => (p.PartID, Hits: p.Layers.Count(l => ids.Contains(l.FrameID))))
             .Where(x => x.Hits > 0)
             .OrderByDescending(x => x.Hits)
             .Select(x => x.PartID)
@@ -287,7 +287,7 @@ public static class EmgAnimation
     {
         if (overrides?.BlinkLayers is not { Count: > 0 } layers || blinkPart is null) return null;
 
-        var valid = layers.Where(id => blinkPart.Layers.Any(l => l.TextureID == id)).ToList();
+        var valid = layers.Where(id => blinkPart.Layers.Any(l => l.FrameID == id)).ToList();
         if (valid.Count < 2) return null;
 
         notes.Add("blink: UI の設定を使用");
@@ -300,7 +300,7 @@ public static class EmgAnimation
         if (overrides?.VowelLayers is not { Count: > 0 } vowels || mouthPart is null) return null;
 
         var valid = vowels
-            .Where(kv => !string.IsNullOrEmpty(kv.Value) && mouthPart.Layers.Any(l => l.TextureID == kv.Value))
+            .Where(kv => !string.IsNullOrEmpty(kv.Value) && mouthPart.Layers.Any(l => l.FrameID == kv.Value))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
         if (valid.Count < 2) return null;
 
@@ -326,7 +326,7 @@ public static class EmgAnimation
             var fromMapping = new[] { blink.Open, blink.Half, blink.Closed }
                 .Where(v => !string.IsNullOrEmpty(v))
                 .Select(v => v!)
-                .Where(v => blinkPart.Layers.Any(l => l.TextureID == v))
+                .Where(v => blinkPart.Layers.Any(l => l.FrameID == v))
                 .ToList();
             if (fromMapping.Count >= 2)
             {
@@ -409,7 +409,7 @@ public static class EmgAnimation
         Dictionary<EmgMouthShape, string> map, EmgMouthShape shape, string? textureID, EmgPart part)
     {
         if (string.IsNullOrEmpty(textureID)) return;
-        if (!part.Layers.Any(l => l.TextureID == textureID)) return;
+        if (!part.Layers.Any(l => l.FrameID == textureID)) return;
         map[shape] = textureID!;
     }
 
@@ -466,5 +466,5 @@ public static class EmgAnimation
 
     private static string? FindLayerByKeywords(EmgPart part, string[] keywords) =>
         part.Layers.FirstOrDefault(l =>
-            keywords.Any(kw => l.TextureID.Contains(kw, StringComparison.OrdinalIgnoreCase)))?.TextureID;
+            keywords.Any(kw => l.FrameID.Contains(kw, StringComparison.OrdinalIgnoreCase)))?.FrameID;
 }

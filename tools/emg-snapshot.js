@@ -23,10 +23,19 @@ function findMainJson(zip) {
         || names.find(n => /\.json$/i.test(n) && !/mapping\.json$/i.test(n));
 }
 
-/** emg-json-spec.md 4.2: switch パーツの表示レイヤーを決める（外部制御なしの状態） */
+/** emg-json-spec-0.5.0.md 1.1: レイヤーのフレーム識別子 */
+const frameId = layer => layer.frameName ?? layer.textureID;
+
+/**
+ * emg-json-spec.md 4.2 + v0.5.0 2.2:
+ * switch パーツで表示するフレームを決め、そのフレームに属する *すべての* レイヤーを返す。
+ * frameName の無いファイルでは 1 枚しか一致しないため、従来の結果と変わらない。
+ */
 function resolveSwitch(part) {
-    const byDefault = part.layers.find(l => l.textureID === part.default);
-    return byDefault || part.layers[0] || null;
+    const target = part.layers.some(l => frameId(l) === part.default)
+        ? part.default
+        : (part.layers.length > 0 ? frameId(part.layers[0]) : null);
+    return part.layers.filter(l => frameId(l) === target);
 }
 
 /** emg-json-spec.md 8 章の手順 1〜2 */
@@ -36,8 +45,7 @@ function buildDrawList(data) {
         if (part.type === 'static') {
             for (const l of part.layers || []) draw.push({ part: part.partID, layer: l });
         } else {
-            const l = resolveSwitch(part);
-            if (l) draw.push({ part: part.partID, layer: l });
+            for (const l of resolveSwitch(part)) draw.push({ part: part.partID, layer: l });
         }
     }
     // textureZIndex 昇順 = 奥から手前。同値の順序は仕様上未定義なので、
@@ -70,6 +78,7 @@ function render(data, label) {
         const l = d.layer;
         out.push(
             `  z=${String(l.textureZIndex).padStart(4)} ${d.part}/${l.textureID}` +
+            (l.frameName ? ` frame=${l.frameName}` : '') +
             ` tex=${l.textureFile}` +
             ` src=(${l.x},${l.y},${l.width}x${l.height})` +
             ` dst=(${l.basePosition_x},${l.basePosition_y})` +

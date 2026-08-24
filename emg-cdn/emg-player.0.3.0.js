@@ -135,7 +135,15 @@
 
     // この実装が理解する機能識別子（emg-extensions-registry.md）。
     // v0.4.0 の範囲では 1 つも実装していないため空。
-    const SUPPORTED_EXTENSIONS = new Set();
+    // EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
+    const SUPPORTED_EXTENSIONS = new Set(['EMG_frame_name']);
+
+    // v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一なので、
+    // 従来のファイルでは解決結果が変わらない。
+    // 参照の突き合わせは textureID ではなく必ずこちらで行う。
+    function frameId(layer) {
+        return layer.frameName != null ? layer.frameName : layer.textureID;
+    }
 
     // F5: 未知の識別子が 1 つでもあれば読み込みを拒否する。
     // 理解できない拡張を黙って無視すると誤った絵になるため、明示的に失敗させる。
@@ -217,6 +225,8 @@
                     // textureID はパーツ間で重複しうる（senti では "01" が Mouth/Eyes/Eyebrows に存在）ため、
                     // 切り替えの一致判定には id ではなく data 属性を使う。
                     div.dataset.textureId = layer.textureID;
+                    // v0.5.0: 切り替えの単位はフレーム識別子（frameName ?? textureID）
+                    div.dataset.frameId = frameId(layer);
 
                     applyLayerStyles(div);
 
@@ -260,7 +270,7 @@
                     div.style.opacity = String(baseOpacity);
 
                     // type: switch の場合、default でないものは非表示
-                    setLayerVisible(div, partType !== 'switch' || layer.textureID === part.default);
+                    setLayerVisible(div, partType !== 'switch' || frameId(layer) === part.default);
 
                     container.appendChild(div);
                 });
@@ -462,7 +472,7 @@
                 if (!Array.isArray(layerIDs) || layerIDs.length === 0) return;
                 const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
                 layers.forEach(el => {
-                    setLayerVisible(el, layerIDs.includes(el.dataset.textureId));
+                    setLayerVisible(el, layerIDs.includes(el.dataset.frameId));
                 });
             });
         }
@@ -475,7 +485,7 @@
         // other: 個々のレイヤーIDを直接表示（同じパーツの他レイヤーは非表示にする）
         if (Array.isArray(expr.other)) {
             expr.other.forEach(layerID => {
-                const el = document.getElementById(layerID);
+                const el = document.querySelector(`div.layer[data-frame-id="${layerID}"]`);
                 if (el && el.dataset.partId) {
                     switchTexture(el.dataset.partId, layerID);
                 }
@@ -574,9 +584,11 @@
 
     function switchTexture(partID, textureID) {
         // partIDを持つ全レイヤーを探し、textureIDに一致するものだけ表示
+        // v0.5.0 §2.2: 選ばれたフレーム識別子を持つレイヤーを *すべて* 表示する。
+        // frameName の無いファイルでは 1 枚しか一致しないため従来と同じ挙動になる。
         const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
         layers.forEach(el => {
-            setLayerVisible(el, el.dataset.textureId === textureID);
+            setLayerVisible(el, el.dataset.frameId === textureID);
         });
     }
 

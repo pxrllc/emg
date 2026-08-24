@@ -73,6 +73,21 @@ public sealed class EmgPart
 
 public sealed class EmgLayer
 {
+    /// <summary>
+    /// v0.5.0 §2。このレイヤーが属するフレームの名前。不在時は TextureID と同値。
+    /// 参照の突き合わせには TextureID ではなく <see cref="FrameID"/> を使うこと。
+    /// </summary>
+    [JsonPropertyName("frameName")]
+    public string? FrameName { get; set; }
+
+    /// <summary>
+    /// v0.5.0 §1.1 フレーム識別子。switch パーツの表示単位はレイヤー 1 枚ではなく
+    /// この識別子 1 つで、同じ識別子を持つレイヤーはすべて同時に表示される。
+    /// frameName を持たないファイルでは TextureID と同一なので、解決結果は変わらない。
+    /// </summary>
+    [JsonIgnore]
+    public string FrameID => FrameName ?? TextureID;
+
     [JsonPropertyName("textureID")]
     public string TextureID { get; set; } = "";
 
