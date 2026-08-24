@@ -32,6 +32,10 @@ public sealed class EmgData
     /// </summary>
     [JsonPropertyName("requiredExtensions")]
     public List<string> RequiredExtensions { get; set; } = new();
+
+    /// <summary>v0.5.0 §5。パーツ状態の組み合わせ。</summary>
+    [JsonPropertyName("presets")]
+    public List<EmgPreset> Presets { get; set; } = new();
 }
 
 public sealed class EmgTexture
@@ -57,6 +61,24 @@ public sealed class EmgPart
 
     [JsonPropertyName("default")]
     public string? Default { get; set; }
+
+    /// <summary>
+    /// v0.5.0 §3。このパーツを切り替える主体。"animated"（既定）| "user"。
+    /// **制約ではなくヒント**であり、実装は無視してよい（§3.2）。主な用途は UI の出し分け。
+    /// </summary>
+    [JsonPropertyName("control")]
+    public string? Control { get; set; }
+
+    /// <summary>
+    /// v0.5.0 §4。初期状態で表示するか。不在時は true。
+    /// static パーツにのみ意味を持ち、switch パーツでは無視する（§4.1）。
+    /// </summary>
+    [JsonPropertyName("defaultVisible")]
+    public bool? DefaultVisible { get; set; }
+
+    /// <summary>不在時の既定を解決した初期可視性。switch パーツは常に true。</summary>
+    [JsonIgnore]
+    public bool ResolvedDefaultVisible => ResolvedType != "static" || (DefaultVisible ?? true);
 
     [JsonPropertyName("layers")]
     public List<EmgLayer> Layers { get; set; } = new();
@@ -192,4 +214,22 @@ public sealed class EmgTrigger
 
     [JsonPropertyName("intervalMax")]
     public double? IntervalMax { get; set; }
+}
+
+/// <summary>v0.5.0 §5.1。複数パーツの状態をまとめて指定する。</summary>
+public sealed class EmgPreset
+{
+    [JsonPropertyName("presetID")]
+    public string PresetID { get; set; } = "";
+
+    [JsonPropertyName("label")]
+    public string? Label { get; set; }
+
+    /// <summary>partID -> フレーム識別子。対象は switch パーツ。</summary>
+    [JsonPropertyName("parts")]
+    public Dictionary<string, string>? Parts { get; set; }
+
+    /// <summary>partID -> 表示するか。対象は defaultVisible を持つ static パーツ。</summary>
+    [JsonPropertyName("toggles")]
+    public Dictionary<string, bool>? Toggles { get; set; }
 }

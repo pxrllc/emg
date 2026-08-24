@@ -135,6 +135,8 @@ public static class EmgStateResolver
         EmgLipSyncTextures? lipSyncOverride = null;
         if (expr is not null)
         {
+            // v0.5.0 §5.3: presetID を先に適用する。expr.Parts は後から上書きするため優先される。
+            ApplyPresetParts(data, expr.PresetID, result);
             ApplyExpressionParts(data, expr, result);
             blinkOverride = expr.Overrides?.Blink;
             lipSyncOverride = expr.Overrides?.LipSync;
@@ -147,6 +149,54 @@ public static class EmgStateResolver
         ApplyLipSync(setup, state, lipSyncOverride, result);
 
         return result;
+    }
+
+    /// <summary>
+    /// v0.5.0 §5。プリセットの parts を適用する。指定されていない partID は変更しない（§5.2）。
+    /// </summary>
+    private static void ApplyPresetParts(EmgData data, string? presetID, Dictionary<string, string> result)
+    {
+        if (string.IsNullOrEmpty(presetID)) return;
+        var preset = data.Presets.FirstOrDefault(p => p.PresetID == presetID);
+        if (preset?.Parts is null) return;
+
+        foreach (var (partID, frameID) in preset.Parts)
+        {
+            var part = data.Parts.FirstOrDefault(p => p.PartID == partID);
+            if (part is null || !part.Layers.Any(l => l.FrameID == frameID)) continue;
+            result[partID] = frameID;
+        }
+    }
+
+    /// <summary>
+    /// v0.5.0 §4。このフレームで非表示にすべき partID を返す。
+    ///
+    /// 起点は parts[].defaultVisible。表情が presetID を持つ場合、そのプリセットの
+    /// toggles が上書きする。プリセットに現れない partID は変更しない（§5.2）。
+    /// </summary>
+    public static HashSet<string> ResolveHiddenParts(EmgData data, EmgMapping? mapping, ResolverState state)
+    {
+        var hidden = new HashSet<string>();
+        foreach (var part in data.Parts)
+        {
+            if (!part.ResolvedDefaultVisible) hidden.Add(part.PartID);
+        }
+
+        var expr = ResolveExpression(mapping, state.ExpressionName);
+        if (expr?.PresetID is { } pid)
+        {
+            var preset = data.Presets.FirstOrDefault(p => p.PresetID == pid);
+            if (preset?.Toggles is not null)
+            {
+                foreach (var (partID, visible) in preset.Toggles)
+                {
+                    if (!data.Parts.Any(p => p.PartID == partID)) continue;
+                    if (visible) hidden.Remove(partID);
+                    else hidden.Add(partID);
+                }
+            }
+        }
+        return hidden;
     }
 
     public static EmgExpression? ResolveExpression(EmgMapping? mapping, string? expressionName)

@@ -92,6 +92,13 @@ public sealed class EmgLipSyncTextures
 
 public sealed class EmgExpression
 {
+    /// <summary>
+    /// v0.5.0 §5.3。data.json の presets[] を参照する。
+    /// parts と併記された場合は parts が優先する。
+    /// </summary>
+    [JsonPropertyName("presetID")]
+    public string? PresetID { get; set; }
+
     // partID（または mappingKey） -> 有効化するレイヤーIDの配列
     [JsonPropertyName("parts")]
     public Dictionary<string, List<string>>? Parts { get; set; }

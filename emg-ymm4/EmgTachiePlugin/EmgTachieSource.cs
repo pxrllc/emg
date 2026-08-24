@@ -287,7 +287,7 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
         lastStateKey = stateKey;
 
         // 5. Direct2D合成
-        Composite(data, activeTextures, expr, item);
+        Composite(data, mapping, state, activeTextures, expr, item);
 
         // compositeTarget を毎回作り直すのに合わせ、エフェクトの入力も一度 null にしてから
         // 新しいビットマップを設定することで、古い入力を確実に無効化する。
@@ -492,7 +492,7 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
         return primaryAtlas;
     }
 
-    private void Composite(EmgData data, Dictionary<string, string> activeTextures, EmgExpression? expr, EmgItemParameter item)
+    private void Composite(EmgData data, EmgMapping? mapping, ResolverState resolverState, Dictionary<string, string> activeTextures, EmgExpression? expr, EmgItemParameter item)
     {
         if (primaryAtlas is null)
         {
@@ -532,8 +532,13 @@ public sealed class EmgTachieSource : ITachieSource, ITachieSource2
         // textureZIndex でソートした1本のリストとして描画する。
         var layersToDraw = new List<EmgLayer>();
 
+        // v0.5.0 §4: defaultVisible / プリセットの toggles により非表示となるパーツ
+        var hiddenParts = EmgStateResolver.ResolveHiddenParts(data, mapping, resolverState);
+
         foreach (var part in data.Parts)
         {
+            if (hiddenParts.Contains(part.PartID)) continue;
+
             if (part.ResolvedType == "static")
             {
                 layersToDraw.AddRange(part.Layers);

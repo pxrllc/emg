@@ -43,7 +43,9 @@
             // v0.3.0: mapping.json による外部制御API
             setBlinkState: applyBlinkState,
             setViseme: applyViseme,
-            setExpression: applyExpression
+            setExpression: applyExpression,
+            // v0.5.0: プリセット適用
+            setPreset: applyPreset
         };
     }
 
@@ -214,6 +216,9 @@
             // v0.2.2+ render logic
             jsonData.parts.forEach(part => {
                 const partType = resolvePartType(part);   // v0.4.0 F2
+                // v0.5.0 §4: static パーツは defaultVisible で初期状態が決まる。
+                // switch パーツでは無視する（§4.1）。
+                const partVisible = partType !== 'static' || (part.defaultVisible !== false);
                 // パーツコンテナを作成（必要に応じて）
                 // レイヤーを展開
                 part.layers.forEach(layer => {
@@ -270,7 +275,8 @@
                     div.style.opacity = String(baseOpacity);
 
                     // type: switch の場合、default でないものは非表示
-                    setLayerVisible(div, partType !== 'switch' || frameId(layer) === part.default);
+                    setLayerVisible(div,
+                        partVisible && (partType !== 'switch' || frameId(layer) === part.default));
 
                     container.appendChild(div);
                 });
@@ -466,6 +472,9 @@
         const expr = expressions[name] || expressions['default'] || {};
         mappingState.currentExpression = expressions[name] ? name : 'default';
 
+        // v0.5.0 §5.3: presetID を先に適用する。expr.parts が後から上書きするため優先される。
+        if (expr.presetID) applyPreset(expr.presetID);
+
         // parts: partID -> 表示するレイヤーIDの配列
         if (expr.parts) {
             Object.entries(expr.parts).forEach(([partID, layerIDs]) => {
@@ -497,6 +506,31 @@
         mappingState.activeLipSyncOverride = expr.overrides?.lipSync || null;
     }
 
+    // v0.5.0 §4: パーツ全体が非表示か（レイヤーが 1 枚も表示されていない状態）
+    function isPartHidden(partID) {
+        const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
+        if (layers.length === 0) return false;
+        return [...layers].every(el => el.style.display === 'none');
+    }
+
+    /**
+     * v0.5.0 §5.2: プリセットを適用する。
+     * parts / toggles に現れない partID の状態は変更しない。
+     */
+    function applyPreset(presetID) {
+        const preset = (window.jsonData?.presets ?? []).find(p => p.presetID === presetID);
+        if (!preset) {
+            console.warn(`preset '${presetID}' が見つかりません`);
+            return;
+        }
+        for (const [partID, frame] of Object.entries(preset.parts ?? {})) {
+            switchTexture(partID, frame);
+        }
+        for (const [partID, visible] of Object.entries(preset.toggles ?? {})) {
+            setPartVisible(partID, visible);
+        }
+    }
+
     function setPartVisible(partID, visible) {
         const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
         layers.forEach(el => {
@@ -518,6 +552,11 @@
             window.jsonData.sprites.forEach(sprite => {
                 // mapping.json との共存ルール: 明示的に blink/lipSync 対象指定されたパーツは
                 // sprites[] 側の自律発火を行ってはならない (MUST NOT trigger)
+                // v0.5.0 §4.5: 非表示のパーツを対象とする sprite は発火してはならない
+                if (isPartHidden(sprite.targetPartID)) {
+                    console.log(`Sprite '${sprite.spriteID}' suppressed: part '${sprite.targetPartID}' is hidden`);
+                    return;
+                }
                 if (
                     (sprite.targetPartID === mappingState.blinkPartID && mappingState.blinkExplicit) ||
                     (sprite.targetPartID === mappingState.mouthPartID && mappingState.mouthExplicit)
