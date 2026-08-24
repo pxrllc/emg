@@ -16,6 +16,7 @@ var _part_layers: Dictionary = {}    # partID -> { textureID -> Sprite2D }
 var _texture_to_part: Dictionary = {}   # textureID -> partID
 var _texture_to_sprite: Dictionary = {} # textureID -> Sprite2D (flat lookup)
 var _part_type: Dictionary = {}      # partID -> "static" | "switch"
+var _part_visible: Dictionary = {}   # partID -> bool（v0.5.0 §4）
 
 var _blink_part_id: String = ""
 var _blink_explicit: bool = false
@@ -117,12 +118,16 @@ func _build_parts() -> void:
 	_texture_to_part.clear()
 	_texture_to_sprite.clear()
 	_part_type.clear()
+	_part_visible.clear()
 
 	for part in _data.get("parts", []):
 		var part_id: String = part.get("partID", "")
 		var part_type: String = _resolve_part_type(part)
 		var default_id: String = part.get("default", "")
 		_part_type[part_id] = part_type
+		# v0.5.0 §4: static パーツは defaultVisible で初期状態が決まる（switch では無視）
+		var part_visible: bool = part_type != "static" or part.get("defaultVisible", true)
+		_part_visible[part_id] = part_visible
 
 		var layer_map: Dictionary = {}
 
@@ -149,37 +154,62 @@ func _build_parts() -> void:
 			# Per-layer opacity from data.json. Visibility is a separate channel
 			# (sprite.visible), so modulate carries only the layer's own opacity.
 			sprite.modulate.a = float(layer.get("opacity", 1.0))
-			sprite.visible = true if part_type != "switch" else (texture_id == default_id)
+			# v0.5.0 §2.2: switch の表示単位はフレーム識別子。同じ識別子のレイヤーは
+			# すべて同時に表示される。frameName の無いファイルでは 1 枚しか一致しない。
+			var fid := _frame_id(layer)
+			sprite.visible = part_visible and (part_type != "switch" or fid == default_id)
 			add_child(sprite)
 
-			layer_map[texture_id] = sprite
+			if not layer_map.has(fid):
+				layer_map[fid] = []
+			layer_map[fid].append(sprite)
 			# textureID repeats across parts (senti has "01" in Mouth, Eyes and Eyebrows),
 			# so a layer is only uniquely identified by (partID, textureID). Keying these
 			# flat maps on textureID alone made a lookup resolve to whichever part was
 			# enumerated first — that is how "the eyebrows blink" bugs happen.
-			var key := _layer_key(part_id, texture_id)
+			# A layer is only unique as (partID, frame identifier); see the note in
+			# switch_texture(). Keyed on the frame identifier so v0.5.0 files resolve.
+			var key := _layer_key(part_id, fid)
 			_texture_to_part[key] = part_id
 			_texture_to_sprite[key] = sprite
-			# Keep a bare-textureID entry as a fallback for callers that only know the
-			# textureID, but never let it overwrite an earlier part's entry.
-			if not _texture_to_part.has(texture_id):
-				_texture_to_part[texture_id] = part_id
-				_texture_to_sprite[texture_id] = sprite
+			# Bare-identifier fallback for callers that only know the frame name,
+			# never overwriting an earlier part's entry.
+			if not _texture_to_part.has(fid):
+				_texture_to_part[fid] = part_id
+				_texture_to_sprite[fid] = sprite
 
 		_part_layers[part_id] = layer_map
 
 
 ## Shows only the layer matching texture_id within part_id's layer group, hides the rest.
-func switch_texture(part_id: String, texture_id: String) -> void:
+func switch_texture(part_id: String, frame_id: String) -> void:
+	if not _part_visible.get(part_id, true):
+		return  # 非表示のパーツは切り替えても出さない（v0.5.0 §4）
 	var layer_map: Dictionary = _part_layers.get(part_id, {})
-	for tid in layer_map.keys():
-		(layer_map[tid] as Sprite2D).visible = (tid == texture_id)
+	for fid in layer_map.keys():
+		for sprite in layer_map[fid]:
+			(sprite as Sprite2D).visible = (fid == frame_id)
 
 
 func _set_part_visible(part_id: String, visible: bool) -> void:
+	_part_visible[part_id] = visible
 	var layer_map: Dictionary = _part_layers.get(part_id, {})
-	for tid in layer_map.keys():
-		(layer_map[tid] as Sprite2D).visible = visible
+	for fid in layer_map.keys():
+		for sprite in layer_map[fid]:
+			(sprite as Sprite2D).visible = visible
+
+
+## v0.5.0 §5.2: プリセットを適用する。指定されていない partID は変更しない。
+func apply_preset(preset_id: String) -> void:
+	for preset in _data.get("presets", []):
+		if preset.get("presetID", "") != preset_id:
+			continue
+		for part_id in preset.get("parts", {}).keys():
+			switch_texture(part_id, str(preset["parts"][part_id]))
+		for part_id in preset.get("toggles", {}).keys():
+			_set_part_visible(part_id, bool(preset["toggles"][part_id]))
+		return
+	push_warning("EmgAvatar: preset '%s' not found" % preset_id)
 
 
 ## Builds the key used by the flat layer lookups. A layer is only unique as
@@ -229,7 +259,10 @@ func _handle_sprite(sprite: Dictionary) -> void:
 	if trigger_type == "auto_loop":
 		var seq_type: String = _resolve_sequence_type(sequence)
 		if seq_type == "ordered":
-			_play_ordered_sequence(target_part_id, sequence.get("frames", []), frame_ms, true)
+			if sequence.has("keys"):
+				_play_keyed_sequence(target_part_id, sequence["keys"], true)
+			else:
+				_play_ordered_sequence(target_part_id, sequence.get("frames", []), frame_ms, true)
 		else:
 			# random_hold looped is effectively static: pick once, no repeat needed.
 			_run_sequence_once(target_part_id, sequence, frame_ms)
@@ -242,6 +275,16 @@ func _handle_sprite(sprite: Dictionary) -> void:
 
 func _run_sequence_once(target_part_id: String, sequence: Dictionary, frame_ms: float) -> void:
 	var seq_type: String = _resolve_sequence_type(sequence)
+	# v0.5.0 §6.1: keys と frames は排他。keys があればそちらを使う。
+	if sequence.has("keys"):
+		if seq_type == "ordered":
+			_play_keyed_sequence(target_part_id, sequence["keys"], false)
+		else:
+			var ks: Array = sequence["keys"]
+			if not ks.is_empty():
+				switch_texture(target_part_id, String((ks[randi() % ks.size()] as Dictionary).get("frame", "")))
+		return
+
 	var frames: Array = sequence.get("frames", [])
 	if frames.is_empty():
 		return
@@ -249,6 +292,23 @@ func _run_sequence_once(target_part_id: String, sequence: Dictionary, frame_ms: 
 		_play_ordered_sequence(target_part_id, frames, frame_ms, false)
 	elif seq_type == "random_hold":
 		switch_texture(target_part_id, String(frames[randi() % frames.size()]))
+
+
+## v0.5.0 §6: 不等間隔のキー列を再生する。各キーの t（秒・再生開始からの絶対時刻）で
+## フレームを切り替える。尺は最後のキーの t（§6.4）。
+func _play_keyed_sequence(target_part_id: String, keys: Array, loop: bool) -> void:
+	if keys.is_empty():
+		return
+	for k in keys:
+		var key: Dictionary = k
+		var t: float = float(key.get("t", 0.0))
+		var frame: String = String(key.get("frame", ""))
+		get_tree().create_timer(t).timeout.connect(
+			func(): switch_texture(target_part_id, frame))
+	if loop:
+		var duration: float = float((keys[keys.size() - 1] as Dictionary).get("t", 0.0))
+		get_tree().create_timer(duration).timeout.connect(
+			func(): _play_keyed_sequence(target_part_id, keys, true))
 
 
 func _play_ordered_sequence(target_part_id: String, frames: Array, frame_ms: float, loop: bool) -> void:
@@ -460,7 +520,7 @@ func set_viseme(vowel: String) -> void:
 
 	if texture_id == "" and not part.is_empty():
 		for layer in (part.get("layers", []) as Array):
-			var tid: String = (layer as Dictionary).get("textureID", "")
+			var tid: String = _frame_id(layer as Dictionary)
 			if tid.to_lower().find(vowel.to_lower()) != -1:
 				texture_id = tid
 				break
@@ -470,7 +530,7 @@ func set_viseme(vowel: String) -> void:
 		if texture_id == "":
 			var layers: Array = part.get("layers", [])
 			if not layers.is_empty():
-				texture_id = (layers[0] as Dictionary).get("textureID", "")
+				texture_id = _frame_id(layers[0] as Dictionary)
 
 	if texture_id != "":
 		switch_texture(_mouth_part_id, texture_id)
@@ -490,6 +550,10 @@ func set_expression(name: String) -> void:
 		_current_expression = "default"
 	else:
 		_current_expression = "default"
+
+	# v0.5.0 §5.3: presetID を先に適用する。expr.parts が後から上書きするため優先される。
+	if expr.has("presetID"):
+		apply_preset(String(expr["presetID"]))
 
 	if expr.has("parts"):
 		var parts_map: Dictionary = expr["parts"]
@@ -521,7 +585,15 @@ func set_expression(name: String) -> void:
 
 ## Feature identifiers this implementation understands (emg-extensions-registry.md).
 ## Empty for v0.4.0: none of its additions change what gets drawn.
-const SUPPORTED_EXTENSIONS: Array[String] = []
+## EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
+const SUPPORTED_EXTENSIONS: Array[String] = ["EMG_frame_name"]
+
+
+## v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一。
+## 参照の突き合わせは textureID ではなく必ずこちらで行う。
+func _frame_id(layer: Dictionary) -> String:
+	var fn = layer.get("frameName", null)
+	return str(fn) if fn != null else str(layer.get("textureID", ""))
 
 
 ## F5: refuse the file when it requires something we do not implement. Silently

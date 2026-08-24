@@ -1,7 +1,7 @@
 
 import JSZip from 'jszip';
 import type { EmgAvatar, EmgStates, EmgSemanticMapping } from '../types/schema';
-import { checkRequiredExtensions } from './EmgCompat';
+import { checkRequiredExtensions, frameId, isPartInitiallyVisible } from './EmgCompat';
 
 export interface LoadedProject {
     avatar: EmgAvatar;
@@ -77,6 +77,12 @@ class ProjectLoader {
                             part.layers.forEach((l: any) => {
                                 // Ensure standard properties
                                 l.partID = l.partID || part.partID;
+                                // v0.5.0 §1.1: 参照の突き合わせに使うフレーム識別子。
+                                // layerID はレイヤーごとに一意である必要がある（React キー・
+                                // 選択状態）ため、別のフィールドとして持つ。
+                                l.frameID = frameId(l);
+                                // v0.5.0 §4: static パーツの初期可視性
+                                if (l.visible === undefined) l.visible = isPartInitiallyVisible(part);
                                 // Ensure layerID exists (for React keys and selection)
                                 if (!l.layerID) {
                                     const collides = !!l.textureID && (textureIdCounts.get(l.textureID) ?? 0) > 1;

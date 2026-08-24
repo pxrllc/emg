@@ -120,7 +120,7 @@ namespace Emg.Editor
         /// このインポーターが理解する機能識別子（emg-extensions-registry.md）。
         /// v0.4.0 の追加はいずれも無視しても表示が成立するため空。
         /// </summary>
-        private static readonly HashSet<string> SupportedExtensions = new HashSet<string>();
+        private static readonly HashSet<string> SupportedExtensions = new HashSet<string> { "EMG_frame_name" };
 
         /// <summary>
         /// Finds the main JSON entry. Mirrors emg-cdn/emg-player.0.3.0.js and Emg.Core:
@@ -250,9 +250,10 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    layerGo.SetActive(part.ResolvedType == "switch"
-                        ? layer.textureID == part.@default
-                        : true);
+                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。static は defaultVisible。
+                    layerGo.SetActive(part.defaultVisible && (part.ResolvedType == "switch"
+                        ? layer.FrameID == part.@default
+                        : true));
 
                     // Position
                     float cx = layer.basePosition_x + layer.width / 2f;
@@ -314,9 +315,10 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    layerGo.SetActive(part.ResolvedType == "switch"
-                        ? layer.textureID == part.@default
-                        : true);
+                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。static は defaultVisible。
+                    layerGo.SetActive(part.defaultVisible && (part.ResolvedType == "switch"
+                        ? layer.FrameID == part.@default
+                        : true));
 
                     // RectTransform: anchor center, position/size in pixels
                     var rt = layerGo.AddComponent<RectTransform>();

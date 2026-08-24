@@ -116,7 +116,9 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                     // Check for Hidden
                     if (activeLayerID === '__HIDDEN__') continue;
 
-                    if (layer.layerID !== activeLayerID) continue;
+                    // v0.5.0 §2.2: 一致はフレーム識別子で見る。同じフレームの
+                    // レイヤーはすべて表示される（frameName の無いファイルでは 1 枚）。
+                    if ((layer.frameID ?? layer.textureID) !== activeLayerID) continue;
                 } else { // Normal part
                     // Check for Hidden override
                     if (currentVariant && currentVariant.overrides && currentVariant.overrides[layer.partID] === '__HIDDEN__') {
@@ -246,7 +248,8 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                     // Hidden Logic
                     if (activeLayerID === '__HIDDEN__') return; // Do not draw
 
-                    if (layer.layerID !== activeLayerID) {
+                    // v0.5.0 §2.2: 一致はフレーム識別子で見る。
+                    if ((layer.frameID ?? layer.textureID) !== activeLayerID) {
                         return; // Skip inactive layers in switch part
                     }
                 } else {

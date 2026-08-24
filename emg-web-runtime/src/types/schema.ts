@@ -15,13 +15,19 @@ export interface EmgAvatar {
 export interface EmgPart {
     partID: string;
     type: 'static' | 'switch';
-    default?: string; // textureID for initial state
+    default?: string; // v0.5.0 以降はフレーム識別子
     layers?: EmgPartLayer[]; // v0.2.2 Nested Layers
+    /** v0.5.0 §3。切り替える主体のヒント。制約ではない。 */
+    control?: 'animated' | 'user';
+    /** v0.5.0 §4。static パーツの初期可視性。不在時 true。 */
+    defaultVisible?: boolean;
 }
 
 export interface EmgPartLayer {
     layerID?: string; // might be missing or optional in sub-layer?
     textureID: string;
+    /** v0.5.0 §2。このレイヤーが属するフレームの名前。 */
+    frameName?: string;
     textureFile?: string;
     x: number;
     y: number;
@@ -49,6 +55,10 @@ export interface EmgLayer {
     layerID: string;
     partID: string;
     textureID: string;
+    /** v0.5.0 §2。このレイヤーが属するフレームの名前。 */
+    frameName?: string;
+    /** v0.5.0 §1.1。frameName ?? textureID。ProjectLoader が補完する。 */
+    frameID?: string;
     x: number; // Atlas X
     y: number; // Atlas Y
     width: number;

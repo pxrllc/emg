@@ -1,6 +1,6 @@
 
 import type { EmgStates, EmgState, EmgVariant, EmgSemanticMapping, EmgPart } from '../types/schema';
-import { resolvePartType } from './EmgCompat';
+import { resolvePartType, frameId } from './EmgCompat';
 
 interface StateContext {
     currentStateName: string;
@@ -131,12 +131,17 @@ export class EmgStateMachine {
         return this.parts.find(p => p.partID === partID);
     }
 
-    // Resolves a blink/lipSync/expression id (which may be a textureID or a layerID depending on
-    // the calling context) to the canonical layerID that EmgCanvas expects in overrides[partID].
+    // Resolves a blink/lipSync/expression id to the frame identifier that EmgCanvas
+    // expects in overrides[partID].
+    //
+    // v0.5.0 §1.2: mapping.json の参照はフレーム識別子で解決される。frameName を
+    // 持たないファイルでは textureID と同一なので、従来の値もそのまま通る。
+    // layerID での一致も許すのは、UI が保存した値が渡ってくる経路があるため。
     private resolveLayerId(partID: string, idValue: string): string {
         const part = this.findPart(partID);
-        const layer = part?.layers?.find(l => l.layerID === idValue || l.textureID === idValue);
-        return layer?.layerID || idValue;
+        const layer = part?.layers?.find(l =>
+            frameId(l) === idValue || l.layerID === idValue || l.textureID === idValue);
+        return layer ? frameId(layer) : idValue;
     }
 
     private resolvePartRoles() {

@@ -49,8 +49,12 @@ init python:
             for part in data.get("parts", []):
                 part_type = _resolve_part_type(part)
 
+                # v0.5.0 §4: defaultVisible が false の static パーツは登録しない。
+                # Ren'Py にはランタイムの可視性状態が無いため、初期非表示 =
+                # イメージを作らない、という扱いにする（必要なら呼び出し側が show する）。
                 if part_type == "static":
-                    _register_static_part(part, tex_map, canvas_w, canvas_h, base_name)
+                    if part.get("defaultVisible", True):
+                        _register_static_part(part, tex_map, canvas_w, canvas_h, base_name)
                 elif part_type == "switch":
                     _register_switch_part(part, tex_map, canvas_w, canvas_h, base_name)
 
@@ -64,7 +68,15 @@ init python:
 
     # この実装が理解する機能識別子（emg-extensions-registry.md）。
     # v0.4.0 の追加はいずれも無視しても表示が成立するため空。
-    SUPPORTED_EXTENSIONS = frozenset()
+    SUPPORTED_EXTENSIONS = frozenset(["EMG_frame_name"])
+
+    def _frame_id(layer):
+        """
+        v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一。
+        参照の突き合わせは textureID ではなく必ずこちらで行う。
+        """
+        fn = layer.get("frameName")
+        return fn if fn is not None else layer.get("textureID", "")
 
     def _resolve_part_type(part):
         """
@@ -174,11 +186,11 @@ init python:
             
             # Register aliases
             # 1. TextureID alias: "body 私服" or "hinano body 私服"
-            image_name = f"{image_tag} {layer['textureID']}"
+            image_name = f"{image_tag} {_frame_id(layer)}"
             renpy.image(image_name, composite)
 
             # 2. PartID_TextureID alias: "body body_私服" or "hinano body body_私服"
-            image_name_alias = f"{image_tag} {part_id}_{layer['textureID']}"
+            image_name_alias = f"{image_tag} {part_id}_{_frame_id(layer)}"
             renpy.image(image_name_alias, composite)
         
         else:
@@ -209,12 +221,15 @@ init python:
         
         # We assume 1 layer per textureID for now, or we group them.
         # Let's group by textureID to be safe.
+        # v0.5.0 §2.2: 表示単位はフレーム識別子。同じ識別子のレイヤーは同時に表示される
+        # ため、1 つの合成イメージにまとめる。frameName の無いファイルでは
+        # textureID と同一なので、従来と同じ 1 レイヤー 1 イメージになる。
         layers_by_id = {}
         for layer in part.get("layers", []):
-            tid = layer["textureID"]
-            if tid not in layers_by_id:
-                layers_by_id[tid] = []
-            layers_by_id[tid].append(layer)
+            fid = _frame_id(layer)
+            if fid not in layers_by_id:
+                layers_by_id[fid] = []
+            layers_by_id[fid].append(layer)
             
         for tid, layers in layers_by_id.items():
             layers = sorted(layers, key=lambda l: l.get("textureZIndex", 0))
