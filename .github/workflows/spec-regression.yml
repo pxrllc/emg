@@ -16,12 +16,16 @@ on:
     paths:
       - 'samples/**'
       - 'tools/emg-snapshot.js'
+      - 'tools/emg-validate.js'
+      - 'emg-cdn/assets/**'
       - 'test-snapshots/**'
       - '.github/workflows/spec-regression.yml'
   pull_request:
     paths:
       - 'samples/**'
       - 'tools/emg-snapshot.js'
+      - 'tools/emg-validate.js'
+      - 'emg-cdn/assets/**'
       - 'test-snapshots/**'
   workflow_dispatch:
 
@@ -42,3 +46,9 @@ jobs:
 
       - name: Check draw-list snapshot
         run: node tools/emg-snapshot.js samples/senti.emg --check test-snapshots/senti.txt
+
+      # 配布アセットが仕様の規範的な要件を満たしているか。
+      # とくに frameName の requiredExtensions 宣言漏れは、未対応実装が
+      # 「何も描画しないが失敗として検知もできない」状態を生むため必ず検出する。
+      - name: Validate shipped assets
+        run: node tools/emg-validate.js samples/senti.emg emg-cdn/assets/senti-demo.emg
