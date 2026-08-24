@@ -9,6 +9,7 @@ interface PartsPanelProps {
     previewOff: Record<string, boolean>;
     onSelectPart: (partId: string) => void;
     onTypeChange: (partId: string, type: 'static' | 'switch') => void;
+    onExportChange: (partId: string, include: boolean) => void;
     onDefaultFrameChange: (partId: string, frameId: string) => void;
     onDefaultVisibleChange: (partId: string, defaultVisible: boolean) => void;
     onPreviewFrame: (partId: string, frameId: string) => void;
@@ -31,7 +32,7 @@ interface PartsPanelProps {
  */
 export const PartsPanel: React.FC<PartsPanelProps> = ({
     parts, selectedPartId, previewFrame, previewOff,
-    onSelectPart, onTypeChange, onDefaultFrameChange, onDefaultVisibleChange,
+    onSelectPart, onTypeChange, onExportChange, onDefaultFrameChange, onDefaultVisibleChange,
     onPreviewFrame, onPreviewToggle, onPreviewReset, onRenamePart, onTypeAll,
 }) => {
     const [renaming, setRenaming] = useState<string | null>(null);
@@ -83,22 +84,27 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
             </div>
 
             {parts.map(part => {
+                // 書き出すレイヤーが 1 枚も無いパーツ = 「使用しない」。
+                // type とは別の状態ではなく、type の選択肢の 1 つとして扱う
+                // （static / switch / 使用しない は同時に 1 つしか成り立たない）。
+                const unused = part.exportedCount === 0;
                 const hidden = previewOff[part.partId] ?? (part.type === 'static' && !part.defaultVisible);
                 const activeFrame = previewFrame[part.partId] ?? part.defaultFrameId;
 
                 return (
                     <div
                         key={part.partId}
-                        className={`part-card ${selectedPartId === part.partId ? 'selected' : ''}`}
+                        className={`part-card ${selectedPartId === part.partId ? 'selected' : ''} ${unused ? 'unused' : ''}`}
                         onClick={() => onSelectPart(part.partId)}
                     >
                         <div className="part-card-head">
                             <button
                                 className="icon-btn"
-                                title={hidden ? 'プレビューに表示' : 'プレビューで伏せる'}
+                                title={unused ? '使用しないパーツです' : hidden ? 'プレビューに表示' : 'プレビューで伏せる'}
+                                disabled={unused}
                                 onClick={e => { e.stopPropagation(); onPreviewToggle(part.partId); }}
                             >
-                                {hidden ? <EyeOff size={14} color="#666" /> : <Eye size={14} />}
+                                {unused || hidden ? <EyeOff size={14} color="#666" /> : <Eye size={14} />}
                             </button>
 
                             {renaming === part.partId ? (
@@ -131,14 +137,21 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
 
                             <div className="seg" onClick={e => e.stopPropagation()}>
                                 <button
-                                    className={`seg-item ${part.type === 'static' ? 'active static' : ''}`}
+                                    className={`seg-item ${unused ? 'active none' : ''}`}
+                                    onClick={() => onExportChange(part.partId, false)}
+                                    title="このパーツを .emg に含めない（下描き・アタリ・作業用レイヤーなど）"
+                                >
+                                    使わない
+                                </button>
+                                <button
+                                    className={`seg-item ${!unused && part.type === 'static' ? 'active static' : ''}`}
                                     onClick={() => onTypeChange(part.partId, 'static')}
                                     title="常に表示されるパーツ（体・背景など）"
                                 >
                                     Static
                                 </button>
                                 <button
-                                    className={`seg-item ${part.type === 'switch' ? 'active' : ''}`}
+                                    className={`seg-item ${!unused && part.type === 'switch' ? 'active' : ''}`}
                                     onClick={() => onTypeChange(part.partId, 'switch')}
                                     title="1 つだけ表示される差分パーツ（目・口など）"
                                 >
@@ -148,7 +161,11 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                         </div>
 
                         <div className="part-card-body">
-                            {part.type === 'switch' ? (
+                            {unused ? (
+                                <div className="part-meta">
+                                    .emg に含めません（{part.layerIds.length} レイヤー）
+                                </div>
+                            ) : part.type === 'switch' ? (
                                 <>
                                     <div className="frame-strip" onClick={e => e.stopPropagation()}>
                                         {part.frames.map(frame => (

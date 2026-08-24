@@ -189,6 +189,11 @@ body,
   background: #4b5563;
 }
 
+.seg-item.active.none {
+  background: #52525b;
+  color: #d4d4d8;
+}
+
 /* ---- Badges --------------------------------------------------------------- */
 .badge {
   font-size: 10px;
@@ -231,16 +236,30 @@ body,
   border-color: #2563eb;
 }
 
+/* 使用しないパーツ。一覧から消さずに沈める（戻せることが分かる必要がある） */
+.part-card.unused {
+  opacity: 0.55;
+  background: #1f1f21;
+}
+
+.part-card.unused .part-name {
+  text-decoration: line-through;
+  color: #8a8a8e;
+}
+
+/* パネル幅は可変なので、狭いときは種別の選択肢を次の行に落とす。
+   3 択になった分、名前が潰れて読めなくなるのを防ぐ。 */
 .part-card-head {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 8px 8px 4px;
+  flex-wrap: wrap;
 }
 
 .part-name {
   flex: 1;
-  min-width: 0;
+  min-width: 60px;
   font-size: 13px;
   font-weight: 600;
   color: #e4e4e6;

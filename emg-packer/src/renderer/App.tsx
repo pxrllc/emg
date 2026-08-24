@@ -15,7 +15,7 @@ function App() {
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
-        handlePartDefaultVisibleChange,
+        handlePartDefaultVisibleChange, handlePartExportChange,
         handlePreviewFrame, handlePreviewToggle, handlePreviewReset,
         handleGroupSelected, handleRenamePart,
         setSelectedPartId, setSelectedLayer, setLayerMeta,
@@ -84,6 +84,7 @@ function App() {
                         previewOff={previewOff}
                         onSelectPart={setSelectedPartId}
                         onTypeChange={handlePartTypeChange}
+                        onExportChange={handlePartExportChange}
                         onDefaultFrameChange={handlePartDefaultFrameChange}
                         onDefaultVisibleChange={handlePartDefaultVisibleChange}
                         onPreviewFrame={handlePreviewFrame}
