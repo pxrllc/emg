@@ -24,9 +24,21 @@ export async function convertToEmg(
     //   - switch（差分）パーツ … 非表示のものも含めて全レイヤーを書き出す
     //   - static（ベース）パーツ … 常時表示されるため、非表示のレイヤーは意図的に使っていないとみなし除外
     // PSD で表示されていたレイヤーは isDefault として渡し、switch パーツの初期表示にする。
-    const exportable = layers.filter(l =>
-        (partTypes.get(l.partId) ?? 'switch') === 'switch' ? true : l.visible
-    );
+    // v0.5.0 §4: 全レイヤーが非表示の static パーツは、捨てずに
+    // 「初期非表示のトグル」として書き出す（帽子や眼鏡を後から出せるようにする）。
+    // 一部だけ非表示の場合は従来どおり、その隠れレイヤーを除外する。
+    const staticAllHidden = new Set<string>();
+    for (const [partId, type] of partTypes) {
+        if (type !== 'static') continue;
+        const ls = layers.filter(l => l.partId === partId);
+        if (ls.length > 0 && ls.every(l => !l.visible)) staticAllHidden.add(partId);
+    }
+
+    const exportable = layers.filter(l => {
+        const type = partTypes.get(l.partId) ?? 'switch';
+        if (type === 'switch') return true;
+        return l.visible || staticAllHidden.has(l.partId);
+    });
     if (exportable.length === 0) {
         throw new Error('書き出せるレイヤーがありません。PSD にレイヤーが含まれているか確認してください。');
     }
@@ -62,6 +74,9 @@ export async function convertToEmg(
                 // PSD で表示されていたレイヤーを switch パーツの初期表示（part.default）にする。
                 isDefault: l.visible,
                 visible: true,
+                defaultVisible: (partTypes.get(l.partId) ?? 'switch') === 'static'
+                    ? !staticAllHidden.has(l.partId)
+                    : undefined,
                 opacity: l.opacity,
                 blendMode: l.blendMode,
             },

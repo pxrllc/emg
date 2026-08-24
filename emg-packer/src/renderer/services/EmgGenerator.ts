@@ -25,6 +25,8 @@ export interface EmgTexture {
 export interface EmgPart {
     partID: string;
     type: 'static' | 'switch';
+    /** v0.5.0 §4。static パーツの初期表示。false のときのみ出力する。 */
+    defaultVisible?: boolean;
     default?: string; // v0.5.0 以降はフレーム識別子
     layers: EmgPartLayer[];
 }
@@ -224,6 +226,17 @@ export class EmgGenerator {
         // 未対応の実装はそのファイルを描画できないうえ、失敗として検知もできないため。
         // フレームが 1 枚ずつなら frameName は単なる別名であり、宣言は不要
         // （不必要に古い実装を締め出さない）。
+        // v0.5.0 §4: 全レイヤーが PSD で非表示だった static パーツは、
+        // 捨てずに「初期非表示」として書き出す（帽子や眼鏡を後から出せるようにする）。
+        // 一部だけ非表示のパーツは従来どおり見えているレイヤーのみを持つ。
+        for (const part of emgParts) {
+            if (part.type !== 'static') continue;
+            const partItems = items.filter(i => i.meta.partId === part.partID);
+            if (partItems.length > 0 && partItems.every(i => i.meta.defaultVisible === false)) {
+                part.defaultVisible = false;
+            }
+        }
+
         const hasMultiLayerFrame = emgParts.some(part => {
             const counts = new Map<string, number>();
             for (const l of part.layers) {
@@ -234,7 +247,7 @@ export class EmgGenerator {
         });
 
         return {
-            version: '0.3.0',
+            version: '0.5.0',
             ...(hasMultiLayerFrame ? { requiredExtensions: ['EMG_frame_name'] } : {}),
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,

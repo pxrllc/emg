@@ -55,12 +55,23 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
 
         if (layer.id !== undefined) {
             if (!newMeta[layer.id]) {
+                // PSD では差分（表情など）は 1 枚だけ表示され残りは非表示になっている。
+                // それをそのまま「書き出さない」にすると switch パーツの差分が全部落ちて
+                // 切り替えられなくなるため、switch は既定で全レイヤーを書き出し、
+                // PSD で表示されていたものを isDefault（初期表示）とする。
+                //
+                // static は PSD の可視性を defaultVisible として持たせる。v0.5.0 §4 により
+                // 「初期非表示のトグル」として書き出せるようになったため、
+                // 非表示のアクセサリ類を捨てずに済む。
+                const isSwitch = currentType === 'switch';
                 newMeta[layer.id] = {
                     id: layer.id,
                     partId: currentPartId,
                     type: currentType,
                     frameName: currentFrameName,
-                    visible: !layer.hidden,
+                    visible: true,
+                    isDefault: isSwitch ? !layer.hidden : undefined,
+                    defaultVisible: isSwitch ? undefined : !layer.hidden,
                     opacity: normalizeOpacity(layer.opacity),
                     blendMode: layer.blendMode || 'normal'
                 };
@@ -82,6 +93,25 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
         
         traverse(child, pid, ptype);
     });
+
+    // static パーツの後処理。
+    // 「全レイヤーが非表示」なら、パーツごと初期非表示のトグルとして書き出す（v0.5.0 §4）。
+    // 「一部だけ非表示」なら、その隠れレイヤーは意図的に使っていないものとみなし、
+    // 書き出しから外す（常時表示される static に混ぜると意図しない重なりになるため）。
+    const staticByPart = new Map<string, LayerMeta[]>();
+    for (const id in newMeta) {
+        const m = newMeta[id];
+        if (m.type !== 'static') continue;
+        if (!staticByPart.has(m.partId)) staticByPart.set(m.partId, []);
+        staticByPart.get(m.partId)!.push(m);
+    }
+    for (const metas of staticByPart.values()) {
+        const allHidden = metas.every(m => m.defaultVisible === false);
+        if (allHidden) continue;   // パーツごとトグルにするのでレイヤーは全部残す
+        for (const m of metas) {
+            if (m.defaultVisible === false) m.visible = false;
+        }
+    }
 
     return newMeta;
 };
