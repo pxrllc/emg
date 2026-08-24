@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { resolveTransformAt } from '../../core/EmgTransform';
 import type { EmgAvatar } from '../../types/schema';
 import { EmgStateMachine } from '../../core/EmgStateMachine';
 import { resolvePartType } from '../../core/EmgCompat';
@@ -199,6 +200,19 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
 
         let animationFrameId: number;
 
+        // v0.5.0 §7: tracks を持つ sprite。1 つでもあれば毎フレーム再描画する。
+        const transformSprites = (avatar.sprites ?? []).filter(
+            (sp: any) => Array.isArray(sp.tracks) && sp.tracks.length > 0);
+        const animStart = performance.now();
+
+        /** partID に効いている変換。対象が無ければ null（従来どおりの描画になる）。 */
+        const transformFor = (partID: string) => {
+            if (transformSprites.length === 0) return null;
+            const sp = transformSprites.find((x: any) => x.targetPartID === partID);
+            if (!sp) return null;
+            return resolveTransformAt(sp, (performance.now() - animStart) / 1000);
+        };
+
         const render = () => {
             // Clear
             ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform to clear full canvas
@@ -290,11 +304,30 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                 const dw = layer.width;
                 const dh = layer.height;
 
-                ctx.globalAlpha = layer.opacity !== undefined ? layer.opacity : 1.0;
+                // v0.5.0 §7: このパーツを対象とする tracks があれば変換を適用する。
+                // §7.4 の順序（アンカーへ移動 → scale → rotate → 戻す → translate）を
+                // Canvas の変換行列で表現する。tracks が無ければ従来どおり素の drawImage。
+                const tf = transformFor(layer.partID);
+                const hasTransform = tf !== null;
+
+                ctx.globalAlpha = (layer.opacity !== undefined ? layer.opacity : 1.0)
+                    * (tf ? tf.opacity : 1);
                 if (layer.blendMode === 'multiply') ctx.globalCompositeOperation = 'multiply';
                 else ctx.globalCompositeOperation = 'source-over';
 
+                if (hasTransform) {
+                    const ax = (layer as any).anchor_x ?? dx;
+                    const ay = (layer as any).anchor_y ?? dy;
+                    ctx.save();
+                    ctx.translate(ax + tf.translate_x, ay + tf.translate_y);
+                    ctx.rotate(tf.rotation * Math.PI / 180);
+                    ctx.scale(tf.scale_x, tf.scale_y);
+                    ctx.translate(-ax, -ay);
+                }
+
                 ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+
+                if (hasTransform) ctx.restore();
 
                 // Highlight Selection (Edit Mode)
                 if (editMode && selectedLayerId === layer.layerID) {
@@ -310,7 +343,16 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
             animationFrameId = requestAnimationFrame(render);
         };
 
-        render();
+        if (transformSprites.length > 0) {
+            // 変換は時間の関数なので、動きがある間は継続的に描き直す必要がある。
+            const loop = () => {
+                render();
+                animationFrameId = requestAnimationFrame(loop);
+            };
+            animationFrameId = requestAnimationFrame(loop);
+        } else {
+            render();
+        }
 
         return () => {
             cancelAnimationFrame(animationFrameId);

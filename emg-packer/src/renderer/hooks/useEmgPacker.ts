@@ -16,15 +16,41 @@ const normalizeOpacity = (v?: number): number => {
 const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Record<number, LayerMeta> => {
     const newMeta = { ...currentMeta };
 
-    const traverse = (layer: PsdLayer, defaultPartId: string, defaultType: 'static' | 'switch') => {
+    // 「@」始まりのグループは *フレーム* グループとして扱う（v0.5.0 §2 の frameName）。
+    // 通常のグループはこれまでどおりパーツ（深い階層が partID を上書きする）。
+    //
+    // 目印を必要とするのは、この traverse がもともと「どのグループ階層も partID を
+    // 上書きする」規則で動いており、階層の深さだけでは frameName と区別できないため。
+    // 接頭辞を opt-in にすることで既存の PSD の解釈は一切変わらない。
+    //
+    //   衣装        （グループ）→ partID = 衣装
+    //     @制服     （グループ）→ frameName = 制服（partID は 衣装 のまま）
+    //       上着
+    //       スカート
+    const FRAME_GROUP_PREFIX = '@';
+
+    const traverse = (
+        layer: PsdLayer,
+        defaultPartId: string,
+        defaultType: 'static' | 'switch',
+        defaultFrameName?: string
+    ) => {
         const isGroup = layer.children && layer.children.length > 0;
-        
+
         let currentPartId = defaultPartId;
         let currentType = defaultType;
-        
+        let currentFrameName = defaultFrameName;
+
         if (isGroup) {
-            currentPartId = layer.name || `Group_${layer.id}`;
-            currentType = 'switch';
+            const name = layer.name || `Group_${layer.id}`;
+            if (name.startsWith(FRAME_GROUP_PREFIX)) {
+                currentFrameName = name.slice(FRAME_GROUP_PREFIX.length);
+                currentType = 'switch';   // フレームを持つ以上、親は排他パーツ
+            } else {
+                currentPartId = name;
+                currentType = 'switch';
+                currentFrameName = undefined;
+            }
         }
 
         if (layer.id !== undefined) {
@@ -33,17 +59,19 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
                     id: layer.id,
                     partId: currentPartId,
                     type: currentType,
+                    frameName: currentFrameName,
                     visible: !layer.hidden,
                     opacity: normalizeOpacity(layer.opacity),
                     blendMode: layer.blendMode || 'normal'
                 };
             } else {
                 newMeta[layer.id].partId = currentPartId;
+                newMeta[layer.id].frameName = currentFrameName;
             }
         }
-        
+
         if (isGroup) {
-            layer.children?.forEach(l => traverse(l, currentPartId, currentType));
+            layer.children?.forEach(l => traverse(l, currentPartId, currentType, currentFrameName));
         }
     };
 

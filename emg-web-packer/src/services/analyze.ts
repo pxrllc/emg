@@ -16,6 +16,11 @@ export interface PartInfo {
 export interface AnalyzedLayer {
     layer: Layer;
     partId: string;
+    /**
+     * v0.5.0 §2。このレイヤーが属するフレームの名前。
+     * PSD で「@」始まりのグループに入っている場合に付く。
+     */
+    frameName?: string;
     visible: boolean;
     opacity: number;
     blendMode: string;
@@ -44,20 +49,43 @@ export function analyzePsd(root: Psd): { parts: PartInfo[]; layers: AnalyzedLaye
     // ルート直下での既定 type を partID ごとに覚える（最初に現れたものを採用）。
     const defaultTypeByPart = new Map<string, PartType>();
 
-    const traverse = (layer: Layer, inheritedPartId: string, inheritedType: PartType) => {
+    // 「@」始まりのグループは *フレーム* グループとして扱う（v0.5.0 §2 の frameName）。
+    // 通常のグループはこれまでどおりパーツ。接頭辞を opt-in にすることで、
+    // 既存の PSD の解釈は一切変わらない（emg-packer 側と同じ規則）。
+    //
+    //   衣装        （グループ）→ partID = 衣装
+    //     @制服     （グループ）→ frameName = 制服（partID は 衣装 のまま）
+    //       上着
+    //       スカート
+    const FRAME_GROUP_PREFIX = '@';
+
+    const traverse = (
+        layer: Layer,
+        inheritedPartId: string,
+        inheritedType: PartType,
+        inheritedFrameName?: string
+    ) => {
         const isGroup = !!layer.children && layer.children.length > 0;
 
         let partId = inheritedPartId;
         let type = inheritedType;
+        let frameName = inheritedFrameName;
         if (isGroup) {
-            partId = layer.name || `Group_${layer.id}`;
-            type = 'switch';
+            const name = layer.name || `Group_${layer.id}`;
+            if (name.startsWith(FRAME_GROUP_PREFIX)) {
+                frameName = name.slice(FRAME_GROUP_PREFIX.length);
+                type = 'switch';   // フレームを持つ以上、親は排他パーツ
+            } else {
+                partId = name;
+                type = 'switch';
+                frameName = undefined;
+            }
         }
 
         if (!defaultTypeByPart.has(partId)) defaultTypeByPart.set(partId, type);
 
         if (isGroup) {
-            layer.children?.forEach(child => traverse(child, partId, type));
+            layer.children?.forEach(child => traverse(child, partId, type, frameName));
             return;
         }
 
@@ -66,6 +94,7 @@ export function analyzePsd(root: Psd): { parts: PartInfo[]; layers: AnalyzedLaye
             layers.push({
                 layer,
                 partId,
+                frameName,
                 visible: !layer.hidden,
                 opacity: normalizeOpacity(layer.opacity),
                 blendMode: layer.blendMode || 'normal',

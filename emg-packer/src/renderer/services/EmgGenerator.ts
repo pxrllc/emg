@@ -7,6 +7,8 @@ import { generateDraftMapping } from './MappingGenerator';
 
 export interface EmgData {
     version: string;
+    /** v0.4.0 §2。理解できない実装に読ませてはならない機能の宣言。 */
+    requiredExtensions?: string[];
     baseCanvasWidth: number;
     baseCanvasHeight: number;
     textures: EmgTexture[];
@@ -23,13 +25,15 @@ export interface EmgTexture {
 export interface EmgPart {
     partID: string;
     type: 'static' | 'switch';
-    default?: string; // Only for switch type
+    default?: string; // v0.5.0 以降はフレーム識別子
     layers: EmgPartLayer[];
 }
 
 export interface EmgPartLayer {
     textureID: string;
     textureFile: string;
+    /** v0.5.0 §2。同じ値を持つレイヤーは同時に表示される。 */
+    frameName?: string;
     x: number; // Texture atlas x
     y: number; // Texture atlas y
     width: number;
@@ -117,7 +121,8 @@ export class EmgGenerator {
             // Check if this item is the default
             // The item.meta.isDefault flag is what we check.
             if (part.type === 'switch' && item.meta.isDefault) {
-                part.default = textureId;
+                // v0.5.0 §1.2: default はフレーム識別子で解決される。
+                part.default = item.meta.frameName ?? textureId;
             }
             // Fallback default
             if (part.type === 'switch' && !part.default) {
@@ -129,6 +134,7 @@ export class EmgGenerator {
 
             part.layers.push({
                 textureID: textureId,
+                ...(item.meta.frameName ? { frameName: item.meta.frameName } : {}),
                 textureFile: packResult.atlases[item.packed.atlasIndex].textureFile,
                 x: item.packed.x,
                 y: item.packed.y,
@@ -214,8 +220,22 @@ export class EmgGenerator {
         // I will add `sortOrder` to `ExportItem` definition right here.
         // Then `App.tsx` will fill it.
 
+        // v0.5.0 §2.6: 1 フレームに 2 枚以上のレイヤーが属する場合のみ宣言する。
+        // 未対応の実装はそのファイルを描画できないうえ、失敗として検知もできないため。
+        // フレームが 1 枚ずつなら frameName は単なる別名であり、宣言は不要
+        // （不必要に古い実装を締め出さない）。
+        const hasMultiLayerFrame = emgParts.some(part => {
+            const counts = new Map<string, number>();
+            for (const l of part.layers) {
+                const fid = l.frameName ?? l.textureID;
+                counts.set(fid, (counts.get(fid) ?? 0) + 1);
+            }
+            return [...counts.values()].some(n => n > 1);
+        });
+
         return {
             version: '0.3.0',
+            ...(hasMultiLayerFrame ? { requiredExtensions: ['EMG_frame_name'] } : {}),
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
             textures: packResult.atlases.map(a => ({

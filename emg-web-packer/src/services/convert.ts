@@ -57,6 +57,7 @@ export async function convertToEmg(
             meta: {
                 id: l.layer.id!,
                 partId: l.partId,
+                frameName: l.frameName,
                 type: partTypes.get(l.partId) ?? 'switch',
                 // PSD で表示されていたレイヤーを switch パーツの初期表示（part.default）にする。
                 isDefault: l.visible,
