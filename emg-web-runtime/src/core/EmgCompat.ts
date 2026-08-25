@@ -7,8 +7,12 @@
  * この実装が理解する機能識別子（emg-extensions-registry.md）。
  * v0.4.0 の追加はいずれも無視しても表示が成立するため空。
  */
-// EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
-export const SUPPORTED_EXTENSIONS: ReadonlySet<string> = new Set<string>(['EMG_frame_name']);
+// EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
+// EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+export const SUPPORTED_EXTENSIONS: ReadonlySet<string> = new Set<string>([
+    'EMG_frame_name',
+    'EMG_switch_none',
+]);
 
 /**
  * F5: 未知の識別子が 1 つでもあれば読み込みを拒否する。
@@ -41,10 +45,9 @@ export function frameId(layer: { frameName?: string; textureID?: string }): stri
 }
 
 /**
- * v0.5.0 §4: static パーツは defaultVisible で初期状態が決まる。
- * switch パーツでは無視する（§4.1）。
+ * v0.5.0 §4: defaultVisible は static / switch の両方で初期状態を決める。
+ * switch では「初期状態でどのフレームも表示しない」を意味する（§4.3）。
  */
 export function isPartInitiallyVisible(part: { type?: string; defaultVisible?: boolean }): boolean {
-    if (part.type === 'switch') return true;
     return part.defaultVisible !== false;
 }

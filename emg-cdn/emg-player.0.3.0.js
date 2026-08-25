@@ -137,8 +137,9 @@
 
     // この実装が理解する機能識別子（emg-extensions-registry.md）。
     // v0.4.0 の範囲では 1 つも実装していないため空。
-    // EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
-    const SUPPORTED_EXTENSIONS = new Set(['EMG_frame_name']);
+    // EMG_frame_name:   v0.5.0 §2 の frameName に対応済み。
+    // EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+    const SUPPORTED_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
 
     // v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一なので、
     // 従来のファイルでは解決結果が変わらない。
@@ -316,9 +317,11 @@
             // v0.2.2+ render logic
             jsonData.parts.forEach(part => {
                 const partType = resolvePartType(part);   // v0.4.0 F2
-                // v0.5.0 §4: static パーツは defaultVisible で初期状態が決まる。
-                // switch パーツでは無視する（§4.1）。
-                const partVisible = partType !== 'static' || (part.defaultVisible !== false);
+                // v0.5.0 §4: defaultVisible は static / switch の両方で初期状態を決める。
+                // switch では「初期状態でどのフレームも表示しない」を意味する（§4.3）。
+                // チークや青ざめのように、排他バリエーションでありながら
+                // 「どれも出ていない」のが常態である対象のための状態。
+                const partVisible = part.defaultVisible !== false;
                 // パーツコンテナを作成（必要に応じて）
                 // レイヤーを展開
                 part.layers.forEach(layer => {

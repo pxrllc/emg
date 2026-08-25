@@ -209,6 +209,12 @@ namespace Emg.Runtime
         }
 
         /// <summary>
+        /// switch パーツを未選択（どのフレームも表示しない）にします。
+        /// v0.5.0 §4.3.3。defaultVisible: false のパーツが始まる状態でもあります。
+        /// </summary>
+        public void ClearPart(string partID) => SetPart(partID, null);
+
+        /// <summary>
         /// 現在アクティブな差分の textureID を返します。
         /// </summary>
         public string GetCurrentTextureID(string partID)

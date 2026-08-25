@@ -10,9 +10,11 @@ public static class EmgCompat
 {
     /// <summary>
     /// この実装が理解する機能識別子（emg-extensions-registry.md）。
-    /// EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
+    /// EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
+    /// EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
     /// </summary>
-    public static readonly IReadOnlySet<string> SupportedExtensions = new HashSet<string> { "EMG_frame_name" };
+    public static readonly IReadOnlySet<string> SupportedExtensions =
+        new HashSet<string> { "EMG_frame_name", "EMG_switch_none" };
 
     /// <summary>
     /// v0.4.0 §2.2。未知の識別子が 1 つでもあれば例外を投げる。

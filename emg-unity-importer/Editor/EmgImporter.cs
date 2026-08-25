@@ -120,7 +120,10 @@ namespace Emg.Editor
         /// このインポーターが理解する機能識別子（emg-extensions-registry.md）。
         /// v0.4.0 の追加はいずれも無視しても表示が成立するため空。
         /// </summary>
-        private static readonly HashSet<string> SupportedExtensions = new HashSet<string> { "EMG_frame_name" };
+        // EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
+        // EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+        private static readonly HashSet<string> SupportedExtensions =
+            new HashSet<string> { "EMG_frame_name", "EMG_switch_none" };
 
         /// <summary>
         /// Finds the main JSON entry. Mirrors emg-cdn/emg-player.0.3.0.js and Emg.Core:
@@ -250,7 +253,9 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。static は defaultVisible。
+                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。defaultVisible は
+                    // static / switch の両方に効く。switch で false のとき（§4.3）は
+                    // どのフレームも出ない = 未選択状態で始まる。
                     layerGo.SetActive(part.defaultVisible && (part.ResolvedType == "switch"
                         ? layer.FrameID == part.@default
                         : true));
@@ -315,7 +320,9 @@ namespace Emg.Editor
 
                     var layerGo = new GameObject($"{part.partID}_{layer.textureID}");
                     layerGo.transform.SetParent(partGo.transform, false);
-                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。static は defaultVisible。
+                    // v0.5.0 §2.2 / §4: 表示単位はフレーム識別子。defaultVisible は
+                    // static / switch の両方に効く。switch で false のとき（§4.3）は
+                    // どのフレームも出ない = 未選択状態で始まる。
                     layerGo.SetActive(part.defaultVisible && (part.ResolvedType == "switch"
                         ? layer.FrameID == part.@default
                         : true));

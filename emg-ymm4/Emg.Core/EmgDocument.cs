@@ -71,14 +71,16 @@ public sealed class EmgPart
 
     /// <summary>
     /// v0.5.0 §4。初期状態で表示するか。不在時は true。
-    /// static パーツにのみ意味を持ち、switch パーツでは無視する（§4.1）。
+    /// static / switch の両方に意味を持つ。switch では「初期状態でどのフレームも
+    /// 表示しない」を意味する（§4.3）。チークや青ざめのように、排他バリエーション
+    /// でありながら「どれも出ていない」のが常態である対象のための状態。
     /// </summary>
     [JsonPropertyName("defaultVisible")]
     public bool? DefaultVisible { get; set; }
 
-    /// <summary>不在時の既定を解決した初期可視性。switch パーツは常に true。</summary>
+    /// <summary>不在時の既定を解決した初期可視性。</summary>
     [JsonIgnore]
-    public bool ResolvedDefaultVisible => ResolvedType != "static" || (DefaultVisible ?? true);
+    public bool ResolvedDefaultVisible => DefaultVisible ?? true;
 
     [JsonPropertyName("layers")]
     public List<EmgLayer> Layers { get; set; } = new();

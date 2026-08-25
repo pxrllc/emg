@@ -110,6 +110,18 @@ const CASES = [
         apply: d => { d.parts.find(p => p.partID === 'arms').defaultVisible = false; },
     },
     {
+        id: 'switch_none',
+        spec: '4.3',
+        desc: 'Blushs（switch・5 レイヤー）を defaultVisible: false にする',
+        note: '18 枚 → 17 枚。switch はもともと 1 フレームしか描かないため、減るのは 1 枚。'
+            + '差分を持ちながら常態は「無し」であるパーツ（チーク・青ざめ）の表現。'
+            + 'EMG_switch_none の宣言が必須で、未対応実装は読み込みを拒否する',
+        apply: d => {
+            d.parts.find(p => p.partID === 'Blushs').defaultVisible = false;
+            d.requiredExtensions = [...(d.requiredExtensions ?? []), 'EMG_switch_none'];
+        },
+    },
+    {
         id: 'presets',
         spec: '5 章',
         desc: 'presets[] を追加し、mapping.json の表情から presetID で参照する',

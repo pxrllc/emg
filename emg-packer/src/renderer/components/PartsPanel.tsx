@@ -10,9 +10,11 @@ interface PartsPanelProps {
     onSelectPart: (partId: string) => void;
     onTypeChange: (partId: string, type: 'static' | 'switch') => void;
     onExportChange: (partId: string, include: boolean) => void;
-    onDefaultFrameChange: (partId: string, frameId: string) => void;
+    /** frameId が null なら「初期状態でどれも表示しない」（v0.5.0 §4.3）。 */
+    onDefaultFrameChange: (partId: string, frameId: string | null) => void;
     onDefaultVisibleChange: (partId: string, defaultVisible: boolean) => void;
     onPreviewFrame: (partId: string, frameId: string) => void;
+    onPreviewNone: (partId: string) => void;
     onPreviewToggle: (partId: string) => void;
     onPreviewReset: () => void;
     onRenamePart: (partId: string, newName: string) => void;
@@ -33,7 +35,7 @@ interface PartsPanelProps {
 export const PartsPanel: React.FC<PartsPanelProps> = ({
     parts, selectedPartId, previewFrame, previewOff,
     onSelectPart, onTypeChange, onExportChange, onDefaultFrameChange, onDefaultVisibleChange,
-    onPreviewFrame, onPreviewToggle, onPreviewReset, onRenamePart, onTypeAll,
+    onPreviewFrame, onPreviewNone, onPreviewToggle, onPreviewReset, onRenamePart, onTypeAll,
 }) => {
     const [renaming, setRenaming] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -88,7 +90,8 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                 // type とは別の状態ではなく、type の選択肢の 1 つとして扱う
                 // （static / switch / 使用しない は同時に 1 つしか成り立たない）。
                 const unused = part.exportedCount === 0;
-                const hidden = previewOff[part.partId] ?? (part.type === 'static' && !part.defaultVisible);
+                // v0.5.0 §4: static は初期非表示トグル、switch は §4.3 の未選択。
+                const hidden = previewOff[part.partId] ?? !part.defaultVisible;
                 const activeFrame = previewFrame[part.partId] ?? part.defaultFrameId;
 
                 return (
@@ -168,18 +171,32 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                             ) : part.type === 'switch' ? (
                                 <>
                                     <div className="frame-strip" onClick={e => e.stopPropagation()}>
+                                        {/* v0.5.0 §4.3: 差分を持ちながら「どれも出さない」のが
+                                            常態であるパーツ（チーク・青ざめ・汗・涙）用。 */}
+                                        <button
+                                            className={[
+                                                'frame-chip', 'frame-none',
+                                                hidden ? 'previewing' : '',
+                                                part.initiallyNone ? 'is-default' : '',
+                                            ].join(' ')}
+                                            title="どれも表示しない — クリックでプレビュー / ダブルクリックで初期状態にする"
+                                            onClick={() => onPreviewNone(part.partId)}
+                                            onDoubleClick={() => onDefaultFrameChange(part.partId, null)}
+                                        >
+                                            なし
+                                        </button>
                                         {part.frames.map(frame => (
                                             <button
                                                 key={frame.frameId}
                                                 className={[
                                                     'frame-chip',
-                                                    frame.frameId === activeFrame ? 'previewing' : '',
-                                                    frame.frameId === part.defaultFrameId ? 'is-default' : '',
+                                                    !hidden && frame.frameId === activeFrame ? 'previewing' : '',
+                                                    !part.initiallyNone && frame.frameId === part.defaultFrameId ? 'is-default' : '',
                                                 ].join(' ')}
                                                 title={
-                                                    frame.frameId === part.defaultFrameId
-                                                        ? `${frame.frameId}（既定）`
-                                                        : `${frame.frameId} — クリックでプレビュー / ダブルクリックで既定にする`
+                                                    !part.initiallyNone && frame.frameId === part.defaultFrameId
+                                                        ? `${frame.frameId}（初期表示）`
+                                                        : `${frame.frameId} — クリックでプレビュー / ダブルクリックで初期表示にする`
                                                 }
                                                 onClick={() => onPreviewFrame(part.partId, frame.frameId)}
                                                 onDoubleClick={() => onDefaultFrameChange(part.partId, frame.frameId)}
@@ -193,9 +210,10 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                     </div>
                                     <div className="part-meta">
                                         {part.frames.length} 差分 / {part.layerIds.length} レイヤー
-                                        {activeFrame !== part.defaultFrameId && (
+                                        {part.initiallyNone && <span> · 初期状態は「なし」</span>}
+                                        {(hidden ? !part.initiallyNone : activeFrame !== part.defaultFrameId || part.initiallyNone) && (
                                             <span style={{ color: '#93b4fd' }}>
-                                                {' '}· プレビュー中: {activeFrame}
+                                                {' '}· プレビュー中: {hidden ? 'なし' : activeFrame}
                                             </span>
                                         )}
                                     </div>

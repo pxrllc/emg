@@ -16,7 +16,7 @@ function App() {
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
         handlePartDefaultVisibleChange, handlePartExportChange,
-        handlePreviewFrame, handlePreviewToggle, handlePreviewReset,
+        handlePreviewFrame, handlePreviewNone, handlePreviewToggle, handlePreviewReset,
         handleGroupSelected, handleRenamePart,
         setSelectedPartId, setSelectedLayer, setLayerMeta,
         toast, setToast,
@@ -88,6 +88,7 @@ function App() {
                         onDefaultFrameChange={handlePartDefaultFrameChange}
                         onDefaultVisibleChange={handlePartDefaultVisibleChange}
                         onPreviewFrame={handlePreviewFrame}
+                        onPreviewNone={handlePreviewNone}
                         onPreviewToggle={handlePreviewToggle}
                         onPreviewReset={handlePreviewReset}
                         onRenamePart={handleRenamePart}

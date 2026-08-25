@@ -1,7 +1,7 @@
 
 import JSZip from 'jszip';
 import type { EmgAvatar, EmgStates, EmgSemanticMapping } from '../types/schema';
-import { checkRequiredExtensions, frameId, isPartInitiallyVisible } from './EmgCompat';
+import { checkRequiredExtensions, frameId, isPartInitiallyVisible, resolvePartType } from './EmgCompat';
 
 export interface LoadedProject {
     avatar: EmgAvatar;
@@ -81,8 +81,16 @@ class ProjectLoader {
                                 // layerID はレイヤーごとに一意である必要がある（React キー・
                                 // 選択状態）ため、別のフィールドとして持つ。
                                 l.frameID = frameId(l);
-                                // v0.5.0 §4: static パーツの初期可視性
-                                if (l.visible === undefined) l.visible = isPartInitiallyVisible(part);
+                                // v0.5.0 §4: パーツの初期可視性。
+                                // static は layer.visible で表す。switch は「未選択」
+                                // として描画側で解決する（§4.3.3）。レイヤーを不可視に
+                                // してしまうと、外部制御でフレームを指定されても
+                                // 出せなくなるため。
+                                if (l.visible === undefined) {
+                                    l.visible = resolvePartType(part) === 'switch'
+                                        ? true
+                                        : isPartInitiallyVisible(part);
+                                }
                                 // Ensure layerID exists (for React keys and selection)
                                 if (!l.layerID) {
                                     const collides = !!l.textureID && (textureIdCounts.get(l.textureID) ?? 0) > 1;

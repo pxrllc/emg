@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { resolveTransformAt } from '../../core/EmgTransform';
 import type { EmgAvatar } from '../../types/schema';
 import { EmgStateMachine } from '../../core/EmgStateMachine';
-import { resolvePartType } from '../../core/EmgCompat';
+import { isPartInitiallyVisible, resolvePartType } from '../../core/EmgCompat';
 
 interface EmgCanvasProps {
     avatar: EmgAvatar;
@@ -110,7 +110,8 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
 
                 const part = avatar.parts.find(p => p.partID === layer.partID);
                 if (part && resolvePartType(part) === 'switch') {
-                    let activeLayerID = part.default;
+                    // v0.5.0 §4.3: defaultVisible: false の switch は未選択で始まる。
+                    let activeLayerID = isPartInitiallyVisible(part) ? part.default : '__HIDDEN__';
                     if (currentVariant && currentVariant.overrides && currentVariant.overrides[layer.partID]) {
                         activeLayerID = currentVariant.overrides[layer.partID];
                     }
@@ -254,7 +255,10 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                 if (resolvePartType(part) === 'switch') {
                     // Check if this layer is the "active" texture for this part
                     // 1. Check Variant Override
-                    let activeLayerID = part.default;
+                    // v0.5.0 §4.3: defaultVisible: false の switch は未選択で始まる。
+                    // レイヤー自体は可視のままにしておく必要がある。不可視にすると
+                    // 外部制御でフレームを指定されても出せなくなる（§4.3.3）。
+                    let activeLayerID = isPartInitiallyVisible(part) ? part.default : '__HIDDEN__';
                     if (currentVariant && currentVariant.overrides && currentVariant.overrides[layer.partID]) {
                         activeLayerID = currentVariant.overrides[layer.partID];
                     }

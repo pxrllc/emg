@@ -318,6 +318,12 @@ body,
   background: rgba(37, 99, 235, 0.28);
 }
 
+/* v0.5.0 §4.3「どれも表示しない」。差分ではないので見た目を分ける。 */
+.frame-chip.frame-none {
+  border-style: dashed;
+  color: #8a8a8e;
+}
+
 /* 既定（.emg の part.default になるもの） */
 .frame-chip.is-default {
   color: #e3c15b;

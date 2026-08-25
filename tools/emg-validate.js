@@ -14,7 +14,7 @@ const path = require('path');
 const JSZip = require('../emg-packer/node_modules/jszip');
 
 /** emg-extensions-registry.md に登録されている識別子 */
-const KNOWN_EXTENSIONS = new Set(['EMG_frame_name']);
+const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
 
 /** emg-json-spec-0.4.0.md 5.1（CSS mix-blend-mode と同一） */
 const KNOWN_BLEND_MODES = new Set([
@@ -65,6 +65,7 @@ function validate(data, entryNames) {
     const partIds = new Set();
     const zSeen = new Map();
     let framesWithMultipleLayers = 0;
+    const switchNoneParts = [];   // v0.5.0 §4.3: 初期状態でどれも表示しない switch
 
     for (const part of data.parts ?? []) {
         if (partIds.has(part.partID)) E(`partID '${part.partID}' が重複しています（6 章：ファイル全体で一意）`);
@@ -76,8 +77,8 @@ function validate(data, entryNames) {
         if (part.type === 'switch' && part.default === undefined) {
             E(`switch パーツ '${part.partID}' に default がありません（4 章）`);
         }
-        if (part.type === 'switch' && part.defaultVisible !== undefined) {
-            W(`switch パーツ '${part.partID}' の defaultVisible は無視されます（v0.5.0 4.1）`);
+        if (part.type === 'switch' && part.defaultVisible === false) {
+            switchNoneParts.push(part.partID);
         }
         if (part.control !== undefined && part.control !== 'animated' && part.control !== 'user') {
             W(`パーツ '${part.partID}' の control が '${part.control}' です（v0.5.0 3.1）`);
@@ -117,6 +118,14 @@ function validate(data, entryNames) {
         }
 
         for (const n of frameGroups.values()) if (n > 1) framesWithMultipleLayers++;
+    }
+
+    // --- switch の defaultVisible の宣言義務（v0.5.0 4.7）---
+    // 未対応実装は default のフレームを描いてしまい、出ないはずのものが出る。
+    if (switchNoneParts.length > 0 && !(data.requiredExtensions ?? []).includes('EMG_switch_none')) {
+        E(`switch パーツ ${switchNoneParts.map(p => `'${p}'`).join(', ')} が defaultVisible: false ですが、` +
+          `requiredExtensions に 'EMG_switch_none' がありません（v0.5.0 4.7）。` +
+          `未対応の実装は default のフレームを表示してしまいます`);
     }
 
     // --- frameName の宣言義務（v0.5.0 2.6）---

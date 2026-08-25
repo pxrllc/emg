@@ -29,9 +29,18 @@ export interface PartInfo {
     layerIds: number[];
     /** switch のときのみ意味を持つ。 */
     frames: FrameInfo[];
-    /** switch の既定フレーム（part.default になるもの）。 */
+    /**
+     * switch の既定フレーム（part.default になるもの）。
+     * `initiallyNone` が true でも、表示状態にされたときに選ばれるフレームとして
+     * 出力され続ける（v0.5.0 §4.3.2）。
+     */
     defaultFrameId?: string;
-    /** static の初期表示（v0.5.0 §4）。 */
+    /**
+     * v0.5.0 §4.3。switch パーツを初期状態で「どのフレームも表示しない」にするか。
+     * チークや青ざめのように、差分を持ちながら常態は「無し」であるパーツ。
+     */
+    initiallyNone: boolean;
+    /** 初期表示（v0.5.0 §4）。static はトグル、switch は §4.3 の未選択。 */
     defaultVisible: boolean;
     /** 書き出し対象になっているレイヤー数。 */
     exportedCount: number;
@@ -72,6 +81,7 @@ export function buildParts(root: Psd | null, layerMeta: Record<number, LayerMeta
                 type: meta.type,
                 layerIds: [],
                 frames: [],
+                initiallyNone: false,
                 defaultVisible: true,
                 exportedCount: 0,
             };
@@ -92,15 +102,18 @@ export function buildParts(root: Psd | null, layerMeta: Record<number, LayerMeta
         if (meta.isDefault) part.defaultFrameId = fid;
     }
 
-    // 既定フレームが未設定の switch は先頭のフレームに倒す。EmgGenerator の
-    // フォールバックと同じ挙動なので、UI の表示と書き出し結果が食い違わない。
     for (const part of byPart.values()) {
-        if (part.type === 'switch' && !part.defaultFrameId) {
-            part.defaultFrameId = part.frames[0]?.frameId;
-        }
-        // static は「全レイヤー非表示」のときだけパーツごと初期非表示になる
-        // （recalculateMeta / EmgGenerator と同じ判定）。
-        if (part.type === 'static') {
+        if (part.type === 'switch') {
+            // isDefault が 1 つも立っていない = 初期状態でどれも表示しない（§4.3）。
+            part.initiallyNone = !part.defaultFrameId;
+            part.defaultVisible = !part.initiallyNone;
+            // 既定フレームが未設定でも、表示状態にされたときに選ばれるフレームとして
+            // 先頭に倒す。EmgGenerator のフォールバックと同じ挙動なので、
+            // UI の表示と書き出し結果が食い違わない（§4.3.2）。
+            if (!part.defaultFrameId) part.defaultFrameId = part.frames[0]?.frameId;
+        } else {
+            // static は「全レイヤー非表示」のときだけパーツごと初期非表示になる
+            // （recalculateMeta / EmgGenerator と同じ判定）。
             part.defaultVisible = !part.layerIds.every(id => layerMeta[id]?.defaultVisible === false);
         }
     }

@@ -72,6 +72,10 @@ export async function convertToEmg(
                 frameName: l.frameName,
                 type: partTypes.get(l.partId) ?? 'switch',
                 // PSD で表示されていたレイヤーを switch パーツの初期表示（part.default）にする。
+                // 差分グループの全レイヤーが PSD で非表示だった場合、isDefault が 1 つも
+                // 立たない。EmgGenerator はそれを v0.5.0 §4.3 の「初期状態でどのフレームも
+                // 表示しない」として書き出す（チーク・青ざめのように、差分を持ちながら
+                // 常態は「無し」であるパーツ）。意図した挙動。
                 isDefault: l.visible,
                 visible: true,
                 defaultVisible: (partTypes.get(l.partId) ?? 'switch') === 'static'

@@ -197,7 +197,8 @@ export function useEmgPacker() {
             const part = partById.get(meta.partId);
             if (!part) continue;
 
-            const off = previewOff[part.partId] ?? (part.type === 'static' && !part.defaultVisible);
+            // v0.5.0 §4: static は初期非表示トグル、switch は §4.3 の未選択。
+            const off = previewOff[part.partId] ?? !part.defaultVisible;
             if (off) continue;
 
             if (part.type === 'switch') {
@@ -319,8 +320,12 @@ export function useEmgPacker() {
                 };
             }
 
-            // switch にしたのに既定が 1 つも立っていない状態を作らない。
-            if (type === 'switch' && !part.layerIds.some(id => next[id]?.isDefault)) {
+            // static から switch に「変換した」ときだけ、既定が無い状態を避けるために
+            // 先頭フレームを既定にする。すでに switch のパーツに対しては行わない。
+            // v0.5.0 §4.3 の「初期状態はなし」を選んでいるパーツで Switch を
+            // 押し直すたびに、その指定が消えてしまうため。
+            const wasSwitch = part.type === 'switch';
+            if (type === 'switch' && !wasSwitch && !part.layerIds.some(id => next[id]?.isDefault)) {
                 const firstId = part.frames[0]?.layerIds ?? [];
                 for (const id of firstId) {
                     if (next[id]) next[id] = { ...next[id], isDefault: true };
@@ -330,8 +335,14 @@ export function useEmgPacker() {
         });
     };
 
-    /** switch パーツの既定フレーム（.emg の part.default）を決める。 */
-    const handlePartDefaultFrameChange = (partId: string, frameId: string) => {
+    /**
+     * switch パーツの既定フレーム（.emg の part.default）を決める。
+     *
+     * frameId に null を渡すと「初期状態でどれも表示しない」（v0.5.0 §4.3）。
+     * チークや青ざめのように、差分を持ちながら常態は「無し」であるパーツ用。
+     * isDefault が 1 つも立っていない状態がそれを表す。
+     */
+    const handlePartDefaultFrameChange = (partId: string, frameId: string | null) => {
         const part = partById.get(partId);
         if (!part) return;
         const layers = flattenLayers(psdRoot);
@@ -342,10 +353,12 @@ export function useEmgPacker() {
                 if (!m) continue;
                 const layer = layers.find(l => l.id === id);
                 if (!layer) continue;
-                next[id] = { ...m, isDefault: frameIdOf(layer, m) === frameId };
+                next[id] = { ...m, isDefault: frameId !== null && frameIdOf(layer, m) === frameId };
             }
             return next;
         });
+        // 「なし」を既定にしたらプレビューもその状態にする。
+        if (frameId === null) setPreviewOff(prev => ({ ...prev, [partId]: true }));
     };
 
     /** パーツごと書き出しに含めるか。static の「初期非表示トグル」もこれで表す。 */
@@ -381,9 +394,14 @@ export function useEmgPacker() {
         setPreviewOff(prev => ({ ...prev, [partId]: false }));
     };
 
+    /** v0.5.0 §4.3: プレビューを「どれも表示しない」にする。 */
+    const handlePreviewNone = (partId: string) => {
+        setPreviewOff(prev => ({ ...prev, [partId]: true }));
+    };
+
     const handlePreviewToggle = (partId: string) => {
         const part = partById.get(partId);
-        const current = previewOff[partId] ?? (part?.type === 'static' && !part.defaultVisible);
+        const current = previewOff[partId] ?? !(part?.defaultVisible ?? true);
         setPreviewOff(prev => ({ ...prev, [partId]: !current }));
     };
 
@@ -659,6 +677,7 @@ export function useEmgPacker() {
         handlePartExportChange,
         handlePartDefaultVisibleChange,
         handlePreviewFrame,
+        handlePreviewNone,
         handlePreviewToggle,
         handlePreviewReset,
         handleGroupSelected,

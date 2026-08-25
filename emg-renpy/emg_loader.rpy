@@ -52,6 +52,12 @@ init python:
                 # v0.5.0 §4: defaultVisible が false の static パーツは登録しない。
                 # Ren'Py にはランタイムの可視性状態が無いため、初期非表示 =
                 # イメージを作らない、という扱いにする（必要なら呼び出し側が show する）。
+                #
+                # switch パーツ（§4.3）では意味が違う。フレームごとのイメージは
+                # すべて登録する必要がある（後から show できなければ、チークを
+                # 出す手段が無くなる）。効くのは「初期状態でどれを出すか」だけで、
+                # Ren'Py ではそもそも呼び出し側が show するまで何も出ないため、
+                # 登録の可否には影響しない。
                 if part_type == "static":
                     if part.get("defaultVisible", True):
                         _register_static_part(part, tex_map, canvas_w, canvas_h, base_name)
@@ -68,7 +74,10 @@ init python:
 
     # この実装が理解する機能識別子（emg-extensions-registry.md）。
     # v0.4.0 の追加はいずれも無視しても表示が成立するため空。
-    SUPPORTED_EXTENSIONS = frozenset(["EMG_frame_name"])
+    #   EMG_frame_name  : v0.5.0 §2 の frameName に対応済み。
+    #   EMG_switch_none : v0.5.0 §4.3。Ren'Py では呼び出し側が show するまで
+    #                     何も表示されないため、初期非表示は自然に満たされる。
+    SUPPORTED_EXTENSIONS = frozenset(["EMG_frame_name", "EMG_switch_none"])
 
     def _frame_id(layer):
         """

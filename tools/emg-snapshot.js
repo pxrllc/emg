@@ -42,6 +42,9 @@ function resolveSwitch(part) {
 function buildDrawList(data) {
     const draw = [];
     for (const part of data.parts || []) {
+        // v0.5.0 4 章: defaultVisible: false は初期状態で描かれない。
+        // static は「初期非表示のトグル」、switch は 4.3 の「どのフレームも表示しない」。
+        if (part.defaultVisible === false) continue;
         if (part.type === 'static') {
             for (const l of part.layers || []) draw.push({ part: part.partID, layer: l });
         } else {

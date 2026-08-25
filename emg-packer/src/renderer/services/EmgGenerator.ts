@@ -25,7 +25,11 @@ export interface EmgTexture {
 export interface EmgPart {
     partID: string;
     type: 'static' | 'switch';
-    /** v0.5.0 §4。static パーツの初期表示。false のときのみ出力する。 */
+    /**
+     * v0.5.0 §4。パーツの初期表示。false のときのみ出力する。
+     * static は「初期非表示のトグル」、switch は「初期状態でどのフレームも
+     * 表示しない」を意味する（§4.3）。
+     */
     defaultVisible?: boolean;
     default?: string; // v0.5.0 以降はフレーム識別子
     layers: EmgPartLayer[];
@@ -89,6 +93,10 @@ export class EmgGenerator {
                 partsMap.set(partId, {
                     partID: partId,
                     type: item.meta.type as 'static' | 'switch',
+                    // 後段で値を入れる。ここでキーを作っておくと JSON の並びが
+                    // partID / type / defaultVisible / default / layers になって読みやすい
+                    // （undefined のキーは JSON.stringify が省く）。
+                    defaultVisible: undefined,
                     default: undefined,
                     layers: []
                 });
@@ -229,10 +237,18 @@ export class EmgGenerator {
         // v0.5.0 §4: 全レイヤーが PSD で非表示だった static パーツは、
         // 捨てずに「初期非表示」として書き出す（帽子や眼鏡を後から出せるようにする）。
         // 一部だけ非表示のパーツは従来どおり見えているレイヤーのみを持つ。
+        // v0.5.0 §4.3: switch パーツも defaultVisible: false を取れる。
+        // 「チーク／青ざめのどれか」でありながら「どれも出ていない」のが常態、
+        // という対象のための状態。isDefault が 1 つも立っていないことで表す。
         for (const part of emgParts) {
-            if (part.type !== 'static') continue;
             const partItems = items.filter(i => i.meta.partId === part.partID);
-            if (partItems.length > 0 && partItems.every(i => i.meta.defaultVisible === false)) {
+            if (partItems.length === 0) continue;
+
+            if (part.type === 'static') {
+                if (partItems.every(i => i.meta.defaultVisible === false)) {
+                    part.defaultVisible = false;
+                }
+            } else if (!partItems.some(i => i.meta.isDefault)) {
                 part.defaultVisible = false;
             }
         }
@@ -246,9 +262,19 @@ export class EmgGenerator {
             return [...counts.values()].some(n => n > 1);
         });
 
+        // v0.5.0 §4.7: switch での defaultVisible: false は宣言が必須。
+        // 未対応の実装は default のフレームを描いてしまい、出ないはずのチークが
+        // 出続ける（= 誤った絵）ため。static のみの場合は宣言してはならない。
+        const hasSwitchNone = emgParts.some(p => p.type === 'switch' && p.defaultVisible === false);
+
+        const requiredExtensions = [
+            ...(hasMultiLayerFrame ? ['EMG_frame_name'] : []),
+            ...(hasSwitchNone ? ['EMG_switch_none'] : []),
+        ];
+
         return {
             version: '0.5.0',
-            ...(hasMultiLayerFrame ? { requiredExtensions: ['EMG_frame_name'] } : {}),
+            ...(requiredExtensions.length > 0 ? { requiredExtensions } : {}),
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
             textures: packResult.atlases.map(a => ({

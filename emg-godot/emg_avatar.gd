@@ -17,6 +17,7 @@ var _texture_to_part: Dictionary = {}   # textureID -> partID
 var _texture_to_sprite: Dictionary = {} # textureID -> Sprite2D (flat lookup)
 var _part_type: Dictionary = {}      # partID -> "static" | "switch"
 var _part_visible: Dictionary = {}   # partID -> bool（v0.5.0 §4）
+var _part_frame: Dictionary = {}     # partID -> 選択中のフレーム識別子（v0.5.0 §4.3.3）
 var _sprite_base_pos: Dictionary = {}    # Sprite2D -> 変換前の position（v0.5.0 §7）
 var _sprite_anchor: Dictionary = {}      # Sprite2D -> anchor（キャンバス座標）
 var _sprite_base_alpha: Dictionary = {}  # Sprite2D -> layer.opacity
@@ -123,6 +124,7 @@ func _build_parts() -> void:
 	_texture_to_sprite.clear()
 	_part_type.clear()
 	_part_visible.clear()
+	_part_frame.clear()
 	_sprite_base_pos.clear()
 	_sprite_anchor.clear()
 	_sprite_base_alpha.clear()
@@ -132,9 +134,13 @@ func _build_parts() -> void:
 		var part_type: String = _resolve_part_type(part)
 		var default_id: String = part.get("default", "")
 		_part_type[part_id] = part_type
-		# v0.5.0 §4: static パーツは defaultVisible で初期状態が決まる（switch では無視）
-		var part_visible: bool = part_type != "static" or part.get("defaultVisible", true)
+		# v0.5.0 §4: defaultVisible は static / switch の両方で初期状態を決める。
+		# switch では「初期状態でどのフレームも表示しない」を意味する（§4.3）。
+		var part_visible: bool = part.get("defaultVisible", true)
 		_part_visible[part_id] = part_visible
+		# 未選択から復帰したときに出すフレーム。defaultVisible: false でも
+		# default は必須で、この用途のために残る（v0.5.0 §4.3.2）。
+		_part_frame[part_id] = default_id
 
 		var layer_map: Dictionary = {}
 
@@ -197,20 +203,40 @@ func _build_parts() -> void:
 
 ## Shows only the layer matching texture_id within part_id's layer group, hides the rest.
 func switch_texture(part_id: String, frame_id: String) -> void:
-	if not _part_visible.get(part_id, true):
-		return  # 非表示のパーツは切り替えても出さない（v0.5.0 §4）
+	var part_type: String = _part_type.get(part_id, "switch")
+	# static パーツは切り替えの対象ではない。非表示なら出さない（v0.5.0 §4）。
+	if part_type != "switch" and not _part_visible.get(part_id, true):
+		return
+	# v0.5.0 §4.3.3: switch では「フレームを指定する」ことが未選択状態を抜ける操作。
+	# ここで早期 return してしまうと、defaultVisible: false のパーツ（チーク等）を
+	# 後から出す手段が無くなる。
+	_part_frame[part_id] = frame_id
+	if part_type == "switch":
+		_part_visible[part_id] = true
 	var layer_map: Dictionary = _part_layers.get(part_id, {})
 	for fid in layer_map.keys():
 		for sprite in layer_map[fid]:
 			(sprite as Sprite2D).visible = (fid == frame_id)
 
 
+## v0.5.0 §4.3.3: switch を「未選択（どのフレームも表示しない）」状態にする。
+func clear_frame(part_id: String) -> void:
+	_set_part_visible(part_id, false)
+
+
 func _set_part_visible(part_id: String, visible: bool) -> void:
 	_part_visible[part_id] = visible
+	var part_type: String = _part_type.get(part_id, "switch")
 	var layer_map: Dictionary = _part_layers.get(part_id, {})
+	# switch を表示状態に戻すときは、全レイヤーではなく選択中のフレームだけを出す。
+	# 全部出すと排他のはずの差分が重なる（チークと青ざめが同時に出る）。
+	var target: String = String(_part_frame.get(part_id, ""))
 	for fid in layer_map.keys():
 		for sprite in layer_map[fid]:
-			(sprite as Sprite2D).visible = visible
+			if part_type == "switch":
+				(sprite as Sprite2D).visible = visible and fid == target
+			else:
+				(sprite as Sprite2D).visible = visible
 
 
 ## v0.5.0 §5.2: プリセットを適用する。指定されていない partID は変更しない。
@@ -607,8 +633,9 @@ func set_expression(name: String) -> void:
 
 ## Feature identifiers this implementation understands (emg-extensions-registry.md).
 ## Empty for v0.4.0: none of its additions change what gets drawn.
-## EMG_frame_name: v0.5.0 §2 の frameName に対応済み。
-const SUPPORTED_EXTENSIONS: Array[String] = ["EMG_frame_name"]
+## EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
+## EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+const SUPPORTED_EXTENSIONS: Array[String] = ["EMG_frame_name", "EMG_switch_none"]
 
 
 ## v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一。

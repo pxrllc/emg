@@ -20,9 +20,10 @@ interface InspectorPanelProps {
     onSelectPart: (partId: string) => void;
     onTypeChange: (partId: string, type: 'static' | 'switch') => void;
     onExportChange: (partId: string, include: boolean) => void;
-    onDefaultFrameChange: (partId: string, frameId: string) => void;
+    onDefaultFrameChange: (partId: string, frameId: string | null) => void;
     onDefaultVisibleChange: (partId: string, defaultVisible: boolean) => void;
     onPreviewFrame: (partId: string, frameId: string) => void;
+    onPreviewNone: (partId: string) => void;
     onPreviewToggle: (partId: string) => void;
     onPreviewReset: () => void;
     onRenamePart: (partId: string, newName: string) => void;
@@ -95,6 +96,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onDefaultFrameChange={props.onDefaultFrameChange}
                         onDefaultVisibleChange={props.onDefaultVisibleChange}
                         onPreviewFrame={props.onPreviewFrame}
+                        onPreviewNone={props.onPreviewNone}
                         onPreviewToggle={props.onPreviewToggle}
                         onPreviewReset={props.onPreviewReset}
                         onRenamePart={props.onRenamePart}
