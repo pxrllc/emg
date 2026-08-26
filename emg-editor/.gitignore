@@ -14,6 +14,7 @@ asset/
 .claude/
 out
 dist
+dist-web
 dist-ssr
 *.local
 

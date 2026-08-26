@@ -9,7 +9,9 @@
     "preview": "electron-vite preview",
     "electron:dev": "electron-vite dev",
     "electron:build": "electron-vite build && electron-builder",
-    "dev:web": "vite --config vite.config.mts --port 5273"
+    "dev:web": "vite --config vite.config.mts --port 5273",
+    "build:web": "vite build --config vite.config.mts",
+    "preview:web": "vite preview --config vite.config.mts"
   },
   "dependencies": {
     "ag-psd": "^30.1.0",

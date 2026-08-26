@@ -4,6 +4,7 @@ name: Deploy to GitHub Pages
 #   /          → emg-cdn（リファレンスプレイヤー + デモ）
 #   /runtime/  → emg-web-runtime
 #   /packer/   → emg-web-packer（PSD → .emg 変換）
+#   /editor/   → emg-editor（アバター編集。Electron 版と同一のコード）
 #
 # サイトを一時的に閉じたい場合は、下の各ビルドステップを
 # 「Build placeholder only」に差し替える（.github/pages-placeholder/index.html を配信する）。
@@ -55,11 +56,20 @@ jobs:
           npm ci
           npm run build
 
+      # emg-editor は Electron 版とまったく同じ renderer をブラウザ向けに出力する
+      # （src/renderer/ が Electron API に依存していないため、別アプリは不要）。
+      - name: Build emg-editor (/editor/)
+        working-directory: emg-editor
+        run: |
+          npm ci
+          npm run build:web
+
       - name: Place built apps
         run: |
-          mkdir -p _site/runtime _site/packer
+          mkdir -p _site/runtime _site/packer _site/editor
           cp -r emg-web-runtime/dist/. _site/runtime/
           cp -r emg-web-packer/dist/. _site/packer/
+          cp -r emg-editor/dist-web/. _site/editor/
 
       - uses: actions/configure-pages@v5
 
