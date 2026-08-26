@@ -17,7 +17,9 @@ function App() {
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
         mapping, setMapping,
-        presets, previewDelta, handlePresetSave, handlePresetApply,
+        presets, expressions, handleExpressionAdd, handleExpressionChange,
+        handleExpressionRename, handleExpressionDelete,
+        previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
         handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
@@ -150,6 +152,11 @@ function App() {
                         onPresetUpdate={handlePresetUpdate}
                         onPresetRename={handlePresetRename}
                         onPresetDelete={handlePresetDelete}
+                        expressions={expressions}
+                        onExpressionAdd={handleExpressionAdd}
+                        onExpressionChange={handleExpressionChange}
+                        onExpressionRename={handleExpressionRename}
+                        onExpressionDelete={handleExpressionDelete}
                         parts={parts}
                         selectedPartId={selectedPartId}
                         previewFrame={previewFrame}

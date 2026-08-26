@@ -1,5 +1,5 @@
 import type { EmgData, EmgPart } from './EmgGenerator';
-import type { AvatarMapping } from '../types';
+import type { AvatarExpression, AvatarMapping, AvatarPreset } from '../types';
 
 export interface EmgSemanticMapping {
     avatarId: string;
@@ -10,6 +10,8 @@ export interface EmgSemanticMapping {
         lipSync: { open?: string; a: string; i: string; u: string; e: string; o: string; n: string };
     };
     expressions: Record<string, {
+        /** v0.5.0 §5.3。先に適用され、parts が後から上書きする。 */
+        presetID?: string;
         parts?: Record<string, string[]>;
         eyebrow?: string;
         other?: string[];
@@ -110,7 +112,12 @@ const frameId = (l: { frameName?: string; textureID: string }) => l.frameName ??
  * 未割り当てのスロットは書き出さない — 空文字列を書くと、消費側が
  * 「そのフレームを表示せよ」と解釈しかねないため。
  */
-export function buildMapping(emgData: EmgData, state: AvatarMapping): EmgSemanticMapping | null {
+export function buildMapping(
+    emgData: EmgData,
+    state: AvatarMapping,
+    expressions: AvatarExpression[] = [],
+    presets: AvatarPreset[] = [],
+): EmgSemanticMapping | null {
     const find = (partID: string) => emgData.parts.find(p => p.partID === partID);
 
     // 指定されたパーツが実在し、かつ switch であるものだけを採用する。
@@ -158,8 +165,68 @@ export function buildMapping(emgData: EmgData, state: AvatarMapping): EmgSemanti
     return {
         avatarId: state.avatarId.trim() || 'avatar',
         baseMapping,
-        expressions: { default: {} },
+        expressions: buildExpressions(expressions, presets, blinkPart, lipPart),
     };
+}
+
+/**
+ * 表情を組み立てる。
+ *
+ * `default` は必ず置く。プレイヤーは未知の表情名を受け取ると `default` に
+ * 落とすため、これが無いと何も適用されない。
+ *
+ * `overrides` は 1 つでも埋まっていれば出力する。プレイヤーは状態ごとに
+ * 「override にあればそれ、無ければ基本の割り当て」と解決するので、
+ * 部分指定でも壊れない。
+ */
+function buildExpressions(
+    expressions: AvatarExpression[],
+    presets: AvatarPreset[],
+    blinkPart?: EmgPart,
+    lipPart?: EmgPart,
+): EmgSemanticMapping['expressions'] {
+    const out: EmgSemanticMapping['expressions'] = { default: {} };
+    const presetIds = new Set(presets.map(p => p.presetID));
+
+    const keep = (part: EmgPart | undefined, value: string) =>
+        part && value && part.layers.some(l => frameId(l) === value) ? value : '';
+
+    for (const expr of expressions) {
+        const name = expr.name.trim();
+        if (!name) continue;
+
+        const entry: EmgSemanticMapping['expressions'][string] = {};
+
+        // 参照先が消えているプリセットは書かない（読み込み側は無視するが、
+        // 生成側が壊れた参照を書いてよい理由は無い）。
+        if (expr.presetID && presetIds.has(expr.presetID)) entry.presetID = expr.presetID;
+
+        const blink = {
+            open: keep(blinkPart, expr.blink.open),
+            half: keep(blinkPart, expr.blink.half),
+            closed: keep(blinkPart, expr.blink.closed),
+        };
+        const lipSync = {
+            a: keep(lipPart, expr.lipSync.a),
+            i: keep(lipPart, expr.lipSync.i),
+            u: keep(lipPart, expr.lipSync.u),
+            e: keep(lipPart, expr.lipSync.e),
+            o: keep(lipPart, expr.lipSync.o),
+            n: keep(lipPart, expr.lipSync.n),
+        };
+
+        const hasBlink = Object.values(blink).some(Boolean);
+        const hasLip = Object.values(lipSync).some(Boolean);
+        if (hasBlink || hasLip) {
+            entry.overrides = {
+                ...(hasBlink ? { blink } : {}),
+                ...(hasLip ? { lipSync } : {}),
+            };
+        }
+
+        out[name] = entry;
+    }
+    return out;
 }
 
 /**

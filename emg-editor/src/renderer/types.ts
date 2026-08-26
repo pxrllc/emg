@@ -85,6 +85,37 @@ export interface AvatarPreset {
 }
 
 /**
+ * 表情（`mapping.json` の `expressions`）の編集状態。
+ *
+ * **構造はプリセットが持ち、表情はそれを参照して目・口だけを足します。**
+ * これは仕様上の制約から来る役割分担です — 表情の `parts` に目や口を書いても、
+ * 解決の順序（`parts` を適用 → blink / lipSync が自分のパーツを上書き）により
+ * **黙って無効になります**。したがって目・口は `overrides` でしか指定できません。
+ *
+ * `parts` をここで編集させないのは、プリセット側で表現できるためです。
+ * 2 か所で同じことができると、どちらに書いたかで挙動が変わる罠になります。
+ */
+export interface AvatarExpression {
+    /** `expressions` のキー。利用者が決める名前。 */
+    name: string;
+    /** 参照するプリセット。空なら参照しない。 */
+    presetID: string;
+    /** この表情のときのまばたき。1 つでも埋まっていれば出力する（部分指定も可）。 */
+    blink: { open: string; half: string; closed: string };
+    /** この表情のときの口。同上。 */
+    lipSync: { a: string; i: string; u: string; e: string; o: string; n: string };
+}
+
+export function emptyExpression(name: string): AvatarExpression {
+    return {
+        name,
+        presetID: '',
+        blink: { open: '', half: '', closed: '' },
+        lipSync: { a: '', i: '', u: '', e: '', o: '', n: '' },
+    };
+}
+
+/**
  * `mapping.json` の編集状態。
  *
  * `data.json` が構造を定めるのに対し、`mapping.json` は意味を与える —

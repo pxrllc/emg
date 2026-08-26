@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import type { AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
+import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
 import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
@@ -455,7 +455,8 @@ export class EmgGenerator {
         animations: Record<string, PartAnimation> = {},
         onProgress?: ExportProgressCallback,
         mappingState?: AvatarMapping,
-        presets: AvatarPreset[] = []
+        presets: AvatarPreset[] = [],
+        expressions: AvatarExpression[] = []
     ): Promise<Blob> {
         const zip = new JSZip();
         const report = (phase: string, percent: number) => onProgress?.(phase, percent);
@@ -490,7 +491,7 @@ export class EmgGenerator {
         //    キーワード推測のドラフトを出す。推測は初期値のためのものなので、
         //    割り当てがある限り推測結果で上書きしない。
         const mapping = mappingState
-            ? buildMapping(emgData, mappingState)
+            ? buildMapping(emgData, mappingState, expressions, presets)
             : generateDraftMapping(emgData);
         if (mapping) {
             zip.file('mapping.json', JSON.stringify(mapping, null, 2));

@@ -5,9 +5,10 @@ import { PartsPanel } from './PartsPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { MappingPanel } from './MappingPanel';
 import { PresetsPanel } from './PresetsPanel';
+import { ExpressionsPanel } from './ExpressionsPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
-import type { AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
+import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
 
 type Tab = 'parts' | 'mapping' | 'presets' | 'layer' | 'json';
 
@@ -53,6 +54,12 @@ interface InspectorPanelProps {
     onPresetUpdate: (presetID: string) => void;
     onPresetRename: (presetID: string, label: string) => void;
     onPresetDelete: (presetID: string) => void;
+
+    expressions: AvatarExpression[];
+    onExpressionAdd: (name: string) => void;
+    onExpressionChange: (name: string, patch: Partial<AvatarExpression>) => void;
+    onExpressionRename: (name: string, next: string) => void;
+    onExpressionDelete: (name: string) => void;
 
     layerName?: string;
     layerId: number | null;
@@ -146,6 +153,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                     />
                 )}
                 {activeTab === 'presets' && (
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <PresetsPanel
                         presets={props.presets}
                         previewDelta={props.previewDelta}
@@ -156,6 +164,21 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onRename={props.onPresetRename}
                         onDelete={props.onPresetDelete}
                     />
+                    <div style={{ padding: '0 12px 12px' }}>
+                        <ExpressionsPanel
+                            expressions={props.expressions}
+                            presets={props.presets}
+                            parts={props.parts}
+                            mapping={props.mapping}
+                            hasFile={props.hasFile}
+                            onAdd={props.onExpressionAdd}
+                            onChange={props.onExpressionChange}
+                            onRename={props.onExpressionRename}
+                            onDelete={props.onExpressionDelete}
+                            onPreviewFrame={props.onPreviewFrame}
+                        />
+                    </div>
+                    </div>
                 )}
                 {activeTab === 'layer' && (
                     <PropertiesPanel

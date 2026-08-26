@@ -6,7 +6,7 @@ import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import { defaultPartAnimation, emptyMapping, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation } from '../types';
+import { defaultPartAnimation, emptyExpression, emptyMapping, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 
@@ -297,6 +297,10 @@ export function useEmgPacker() {
     // 状態の組（presets[]）。差分として持つ（types.ts の AvatarPreset を参照）。
     const [presets, setPresets] = useState<AvatarPreset[]>([]);
 
+    // 表情（mapping.json の expressions）。構造はプリセットが持ち、
+    // 表情はそれを参照して目・口だけを足す（types.ts の AvatarExpression を参照）。
+    const [expressions, setExpressions] = useState<AvatarExpression[]>([]);
+
     const handlePsdLoad = async (file: File) => {
         try {
             const root = await FileLoader.load(file);
@@ -305,6 +309,7 @@ export function useEmgPacker() {
             setPreviewOff({});
             setMapping(emptyMapping());
             setPresets([]);
+            setExpressions([]);
             applyTree(root, recalculateMeta(root, {}));
         } catch (e) {
             // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
@@ -852,6 +857,30 @@ export function useEmgPacker() {
 
     const handlePresetDelete = (presetID: string) => {
         setPresets(prev => prev.filter(p => p.presetID !== presetID));
+        // 参照が宙に浮かないよう、表情側の参照も外す。
+        setExpressions(prev => prev.map(e => e.presetID === presetID ? { ...e, presetID: '' } : e));
+    };
+
+    // ---- 表情（mapping.json の expressions） --------------------------------
+
+    const handleExpressionAdd = (name: string) => {
+        const n = name.trim();
+        if (!n || expressions.some(e => e.name === n)) return;
+        setExpressions(prev => [...prev, emptyExpression(n)]);
+    };
+
+    const handleExpressionChange = (name: string, patch: Partial<AvatarExpression>) => {
+        setExpressions(prev => prev.map(e => e.name === name ? { ...e, ...patch } : e));
+    };
+
+    const handleExpressionRename = (name: string, next: string) => {
+        const n = next.trim();
+        if (!n || n === name || expressions.some(e => e.name === n)) return;
+        setExpressions(prev => prev.map(e => e.name === name ? { ...e, name: n } : e));
+    };
+
+    const handleExpressionDelete = (name: string) => {
+        setExpressions(prev => prev.filter(e => e.name !== name));
     };
 
     /** v0.5.0 §4.3: プレビューを「どれも表示しない」にする。 */
@@ -1008,7 +1037,8 @@ export function useEmgPacker() {
                 partAnimations,
                 (phase, percent) => setExportProgress({ phase, percent }),
                 mapping,
-                presets
+                presets,
+                expressions
             );
 
             const link = document.createElement('a');
@@ -1156,6 +1186,11 @@ export function useEmgPacker() {
         mapping,
         setMapping,
         presets,
+        expressions,
+        handleExpressionAdd,
+        handleExpressionChange,
+        handleExpressionRename,
+        handleExpressionDelete,
         previewDelta,
         handlePresetSave,
         handlePresetApply,
