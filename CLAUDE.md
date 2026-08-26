@@ -32,9 +32,38 @@ Top-level spec docs: `emg-json-spec.md` (full EMG v0.3.0 JSON schema, normative 
 - **0.4.0** adds no expressive power. It adds the compatibility rules v0.3.0 never had (how to treat unknown fields and unknown enum values), `requiredExtensions[]`, and `layers[].anchor_*`, and relaxes `sprites[].fps` to optional. This is groundwork that has to ship *before* implementations are widely distributed, because a forward-compatibility rule cannot retroactively change binaries already in the wild. Its §9.2 experiment (measuring how the existing six consumers actually react to unknown values) must be run before its §1.2 wording is settled.
 `emg-spec-diff-0.3.0-to-0.4.0.md` compares the two side by side — read it before touching a consumer, since the F2 rule (unknown `parts[].type` resolves by whether the part has a `default`) is the one change that alters rendering behaviour.
 
-`emg-extensions-registry.md` is the single list of feature identifiers usable in `requiredExtensions[]`. Identifiers accrue across versions, so they live here rather than in any one spec. The rule that matters: declare an identifier only when an implementation that ignores the feature would draw the *wrong* picture — never when it merely fails to animate or leaves a toggle on. Currently one entry, `EMG_frame_name`.
+`emg-extensions-registry.md` is the single list of feature identifiers usable in `requiredExtensions[]`. Identifiers accrue across versions, so they live here rather than in any one spec. The rule that matters: declare an identifier only when an implementation that ignores the feature would draw the *wrong* picture — never when it merely fails to animate or leaves a toggle on. Two entries: `EMG_frame_name` and `EMG_switch_none`.
 
 - **0.5.0** adds the expressiveness: `frameName` (layers that switch together), `control`, `defaultVisible` (independent toggles), `presets[]`, `sequence.keys[]` (non-uniform timing), and `tracks[]` (transforms). Its load-bearing idea is the **frame identifier** — `frameName` if present, else `textureID` — which every reference resolves against, including `mapping.json`'s; that is what lets `frameName` exist without changing the meaning of any older file. §7 (transforms) is separable and costs more to implement than §2–6 combined, so shipping §2–6 alone is still conformant.
+
+A consolidated, non-normative field reference for the whole v0.5.0 surface (every field with the version that introduced it) is published as an artifact rather than kept in the repo; ask the user for the link if you need it.
+
+## Read this first — the spec facts everything depends on
+
+Before touching any producer or consumer, know these. **Each one has already caused a real bug in this repo**, and none of them are guessable from the code.
+
+1. **`static` vs `switch` is the branch point in all six consumers.** `static` draws every layer in the part; `switch` draws exactly one frame. Getting this wrong on one part silently produces a wrong picture, not an error — a group of differentials treated as `static` stacks all variants on top of each other, and a multi-layer body treated as `switch` renders one layer out of ten.
+2. **The frame identifier is `frameName ?? textureID`.** Every reference resolves against it: `parts[].default`, `sequence.frames[]`, `sequence.keys[].frame`, `presets[].parts`, and `mapping.json`'s blink/lipSync entries. Never resolve a reference as a bare `textureID`.
+3. **A layer is only unique as `(partID, frame identifier)`.** `textureID` repeats across parts in real files (`"01"` exists in `Mouth`, `Eyes` and `Eyebrows` in senti). Storing a bare `textureID` picks whichever part is enumerated first — that is the "eyebrows are blinking" bug.
+4. **Two coordinate systems.** `x`/`y`/`width`/`height` are **atlas pixels** (where to sample); `basePosition_x`/`_y` are **canvas coordinates** (where to draw).
+5. **`textureZIndex` is a single file-wide order, drawn ascending (back to front).** Never draw part-by-part — that breaks overlaps that cross parts. Equal values are undefined in order.
+6. **Never branch on `version`** (rule B1) — decide structure by field presence. Real files lie: `yuriko.emg` claims `0.2.2` while holding the pre-0.2 flat schema.
+7. **`requiredExtensions[]` is declared only when ignoring the feature would draw the *wrong* picture** — never for "does not animate" or "toggle stays on". Over-declaring locks out working implementations for no reason.
+8. **`mapping.json` takes control of the parts it explicitly names.** A `sprites[]` entry with the same `targetPartID` must not self-trigger (omit `trigger`, which means "must not autoplay").
+9. **One texture atlas is the premise, not a preference.** All sources pack into a single atlas; split to multiple only when 8192px genuinely cannot hold it, and tell the user when that happens.
+
+## Spec versioning until alpha
+
+**Until the alpha release, the spec is revised in place within `0.5.x` — `0.5.1`, `0.5.2`, … Do not open `0.6.0`.**
+
+This is deliberate. Nothing is publicly distributed yet, so this is the only window in which a forward-compatibility rule, an enum's meaning, or a normative "MUST ignore" can still be corrected without stranding files already in the wild. That is the entire reason 0.4.0 exists as its own version, and the reason its §9.2 measurement had to run before its §1.2 wording was settled. Once alpha ships, the freedom is gone.
+
+Consequences:
+
+- A revision **amends `emg-json-spec-0.5.0.md`** and gets a dated row in its version-history table saying what changed and what was retracted. The 2026-08-25 change (extending `defaultVisible` to `switch`, adding `EMG_switch_none`) is the first such revision, and retracted a "MUST ignore" clause from the initial draft — exactly the kind of change that becomes impossible after alpha.
+- Producers write the current `0.5.x` into `version`; consumers still must not branch on it (rule 6 above). `EmgGenerator` currently emits `0.5.0` in both packers.
+- **A revision that changes rendering behaviour must land in all six consumers plus both packers in the same pass.** There is no build-time check for this drift, and `emg-packer` / `emg-editor` / `emg-web-packer` are three separate producer code paths (see "Two packer codebases").
+- `tools/emg-validate.js` and `emg-extensions-registry.md` are part of the same pass — a new rule that the validator does not check is a rule that will be broken silently.
 
 ## Common commands
 
