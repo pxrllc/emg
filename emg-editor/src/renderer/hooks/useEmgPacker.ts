@@ -9,6 +9,10 @@ import { PreviewItem } from '../components/PreviewPanel';
 import { defaultPartAnimation, emptyExpression, emptyMapping, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
+import {
+    applyTemplate, buildTemplate, isTemplate, TEMPLATE_EXT,
+    type EditorTemplate, type TemplateReport,
+} from '../services/Template';
 
 // ag-psd returns opacity as 0-255; normalize to 0.0-1.0
 const normalizeOpacity = (v?: number): number => {
@@ -40,6 +44,77 @@ const countLeaves = (layers: PsdLayer[]): number => {
     };
     walk(layers);
     return n;
+};
+
+// ---- パーツ単位の layerMeta 変換 -------------------------------------------
+// UI からの操作とテンプレートの適用が、同じ規則を通るようにするために切り出した。
+// 片方だけ直すと「手で押したときと、テンプレートを当てたときで結果が違う」になる。
+
+type MetaMap = Record<number, LayerMeta>;
+
+/**
+ * パーツの種別を変える。所属レイヤー全部に反映する。
+ *
+ * switch では `isDefault` が、static では `defaultVisible` が意味を持つ。
+ * 切り替え時に反対側を消しておかないと、書き出しに前の型の判断が残って混ざる。
+ */
+const setPartType = (prev: MetaMap, part: PartInfo, type: 'static' | 'switch'): MetaMap => {
+    // 全レイヤーが PSD で非表示だった static パーツは、捨てずにパーツごと
+    // 「初期非表示のトグル」として書き出す（v0.5.0 §4）。recalculateMeta と同じ判定。
+    const allHidden = part.layerIds.every(id => prev[id]?.defaultVisible === false);
+    const next = { ...prev };
+
+    for (const id of part.layerIds) {
+        const m = next[id];
+        if (!m) continue;
+
+        // switch → static のとき、defaultVisible はまだ無い（switch では
+        // isDefault の方が意味を持つ側だったため）。ここで ?? true に倒すと
+        // 差分 6 枚が全部「常時表示」になり、目が 6 枚重なった絵が書き出される。
+        // 引き継ぐべきは「既定だったフレームだけが見える」という状態。
+        const keepVisible = type !== 'static'
+            ? true
+            : allHidden || (m.type === 'switch' ? !!m.isDefault : (m.defaultVisible ?? true));
+
+        next[id] = {
+            ...m,
+            type,
+            isDefault: type === 'switch' ? m.isDefault : undefined,
+            defaultVisible: type === 'static' ? keepVisible : undefined,
+            visible: keepVisible,
+        };
+    }
+
+    // static から switch に「変換した」ときだけ、既定が無い状態を避けるために
+    // 先頭フレームを既定にする。すでに switch のパーツに対しては行わない。
+    // v0.5.0 §4.3 の「初期状態はなし」を選んでいるパーツで Switch を
+    // 押し直すたびに、その指定が消えてしまうため。
+    if (type === 'switch' && part.type !== 'switch' && !part.layerIds.some(id => next[id]?.isDefault)) {
+        for (const id of part.frames[0]?.layerIds ?? []) {
+            if (next[id]) next[id] = { ...next[id], isDefault: true };
+        }
+    }
+    return next;
+};
+
+/** switch パーツの既定フレーム。`null` は「どれも表示しない」（v0.5.0 §4.3）。 */
+const setPartDefaultFrame = (prev: MetaMap, part: PartInfo, frameId: string | null): MetaMap => {
+    const next = { ...prev };
+    for (const f of part.frames) {
+        for (const id of f.layerIds) {
+            if (next[id]) next[id] = { ...next[id], isDefault: frameId !== null && f.frameId === frameId };
+        }
+    }
+    return next;
+};
+
+/** static パーツの初期表示（v0.5.0 §4）。 */
+const setPartDefaultVisible = (prev: MetaMap, part: PartInfo, defaultVisible: boolean): MetaMap => {
+    const next = { ...prev };
+    for (const id of part.layerIds) {
+        if (next[id]) next[id] = { ...next[id], defaultVisible, visible: true };
+    }
+    return next;
 };
 
 /** 取り込んだ素材をキャンバス上で平行移動する。 */
@@ -594,50 +669,7 @@ export function useEmgPacker() {
     const handlePartTypeChange = (partId: string, type: 'static' | 'switch') => {
         const part = partById.get(partId);
         if (!part) return;
-
-        // 全レイヤーが PSD で非表示だった static パーツは、捨てずにパーツごと
-        // 「初期非表示のトグル」として書き出す（v0.5.0 §4）。recalculateMeta と同じ判定。
-        const allHidden = part.layerIds.every(id => layerMeta[id]?.defaultVisible === false);
-
-        setLayerMeta(prev => {
-            const next = { ...prev };
-            for (const id of part.layerIds) {
-                const m = next[id];
-                if (!m) continue;
-
-                // switch → static のとき、defaultVisible はまだ無い（switch では
-                // isDefault の方が意味を持つ側だったため）。ここで ?? true に倒すと
-                // 差分 6 枚が全部「常時表示」になり、目が 6 枚重なった絵が書き出される。
-                // 引き継ぐべきは「既定だったフレームだけが見える」という状態。
-                const keepVisible = type !== 'static'
-                    ? true
-                    : allHidden || (m.type === 'switch' ? !!m.isDefault : (m.defaultVisible ?? true));
-
-                next[id] = {
-                    ...m,
-                    type,
-                    // switch では isDefault が、static では defaultVisible が意味を持つ。
-                    // 切り替え時に反対側を消しておかないと、書き出しに前の型の
-                    // 判断が残って混ざる。
-                    isDefault: type === 'switch' ? m.isDefault : undefined,
-                    defaultVisible: type === 'static' ? keepVisible : undefined,
-                    visible: keepVisible,
-                };
-            }
-
-            // static から switch に「変換した」ときだけ、既定が無い状態を避けるために
-            // 先頭フレームを既定にする。すでに switch のパーツに対しては行わない。
-            // v0.5.0 §4.3 の「初期状態はなし」を選んでいるパーツで Switch を
-            // 押し直すたびに、その指定が消えてしまうため。
-            const wasSwitch = part.type === 'switch';
-            if (type === 'switch' && !wasSwitch && !part.layerIds.some(id => next[id]?.isDefault)) {
-                const firstId = part.frames[0]?.layerIds ?? [];
-                for (const id of firstId) {
-                    if (next[id]) next[id] = { ...next[id], isDefault: true };
-                }
-            }
-            return next;
-        });
+        setLayerMeta(prev => setPartType(prev, part, type));
     };
 
     /**
@@ -650,18 +682,7 @@ export function useEmgPacker() {
     const handlePartDefaultFrameChange = (partId: string, frameId: string | null) => {
         const part = partById.get(partId);
         if (!part) return;
-        const layers = flattenLayers(psdRoot);
-        setLayerMeta(prev => {
-            const next = { ...prev };
-            for (const id of part.layerIds) {
-                const m = next[id];
-                if (!m) continue;
-                const layer = layers.find(l => l.id === id);
-                if (!layer) continue;
-                next[id] = { ...m, isDefault: frameId !== null && frameIdOf(layer, m) === frameId };
-            }
-            return next;
-        });
+        setLayerMeta(prev => setPartDefaultFrame(prev, part, frameId));
         // 「なし」を既定にしたらプレビューもその状態にする。
         if (frameId === null) setPreviewOff(prev => ({ ...prev, [partId]: true }));
     };
@@ -683,13 +704,7 @@ export function useEmgPacker() {
     const handlePartDefaultVisibleChange = (partId: string, defaultVisible: boolean) => {
         const part = partById.get(partId);
         if (!part) return;
-        setLayerMeta(prev => {
-            const next = { ...prev };
-            for (const id of part.layerIds) {
-                if (next[id]) next[id] = { ...next[id], defaultVisible, visible: true };
-            }
-            return next;
-        });
+        setLayerMeta(prev => setPartDefaultVisible(prev, part, defaultVisible));
         setPreviewOff(prev => ({ ...prev, [partId]: !defaultVisible }));
     };
 
@@ -1133,6 +1148,92 @@ export function useEmgPacker() {
         setSelectedPartId(cur => (cur === partId ? newName : cur));
     };
 
+    // ---- テンプレート（別の素材へ持ち込む） --------------------------------
+
+    /**
+     * 今の割り当てをテンプレートとして書き出す。
+     *
+     * `handleSaveProject` とは別物です。あちらは `layerMeta` をそのまま落とすので、
+     * キーが**レイヤーの数値 ID** — 同じ素材の続きにしか使えません。
+     * テンプレートは partID とフレーム識別子だけを持ちます。
+     */
+    const handleTemplateSave = () => {
+        if (!psdRoot) return;
+        const tpl = buildTemplate(parts, partAnimations, mapping, presets, expressions);
+        const blob = new Blob([JSON.stringify(tpl, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `avatar${TEMPLATE_EXT}`;
+        link.click();
+        setToast({
+            title: 'テンプレートを書き出しました',
+            body: `${Object.keys(tpl.partTypes).length} パーツ / プリセット ${tpl.presets.length} / 表情 ${tpl.expressions.length}`,
+        });
+    };
+
+    /** 適用結果。名前が当たらなかったものを必ず見せるので、消えないダイアログで出す。 */
+    const [templateReport, setTemplateReport] = useState<TemplateReport | null>(null);
+
+    const handleTemplateLoad = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.onchange = async (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            try {
+                const data = JSON.parse(await file.text());
+                if (!isTemplate(data)) {
+                    setToast({
+                        title: 'テンプレートとして読めません',
+                        body: `templateVersion がありません。「設定を読込」用の project.json ではありませんか？`,
+                        tone: 'error',
+                    });
+                    return;
+                }
+                applyTemplateToState(data);
+            } catch (err) {
+                setToast({ title: 'テンプレートを読み込めませんでした', body: String(err), tone: 'error' });
+            }
+        };
+        input.click();
+    };
+
+    const applyTemplateToState = (tpl: EditorTemplate) => {
+        const app = applyTemplate(tpl, parts);
+
+        setLayerMeta(prev => {
+            let next = prev;
+            for (const part of parts) {
+                const type = app.partTypes[part.partId];
+                if (type) next = setPartType(next, part, type);
+
+                // 種別を変えた後に当てる。static になったパーツに既定フレームを
+                // 書いても意味が無いので、最終的な種別で分ける。
+                const finalType = type ?? part.type;
+                if (finalType === 'switch') {
+                    if (part.partId in app.defaults) {
+                        next = setPartDefaultFrame(next, part, app.defaults[part.partId]);
+                    }
+                } else if (part.partId in app.toggles) {
+                    next = setPartDefaultVisible(next, part, app.toggles[part.partId]);
+                }
+            }
+            return next;
+        });
+
+        // アニメーションは差分で重ねる。テンプレートに出てこないパーツの設定を
+        // 消す理由が無い（プリセットの「触れていないものは変えない」と同じ考え方）。
+        setPartAnimations(prev => ({ ...prev, ...app.animations }));
+        // 一方、まばたき・プリセット・表情は一式で意味を持つので置き換える。
+        // 混ぜると presetID の衝突で「どちらの怒り眉か」が決まらなくなる。
+        setMapping(app.mapping);
+        setPresets(app.presets);
+        setExpressions(app.expressions);
+        handlePreviewReset();
+        setTemplateReport(app.report);
+    };
+
     const handleSaveProject = () => {
         const projectData = {
             version: '1.0',
@@ -1205,6 +1306,10 @@ export function useEmgPacker() {
         handleExport,
         handleSaveProject,
         handleLoadProject,
+        handleTemplateSave,
+        handleTemplateLoad,
+        templateReport,
+        setTemplateReport,
         handleVisibilityAll,
         handleTypeAll,
         handlePartTypeChange,

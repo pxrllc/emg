@@ -10,6 +10,7 @@ import { countUnassigned, findMappingControlledParts } from './services/MappingG
 import { SourceLoader } from './services/SourceLoader';
 import { SpriteSheetLoader } from './services/SpriteSheetLoader';
 import { SpriteSheetDialog } from './components/SpriteSheetDialog';
+import { TemplateReportDialog } from './components/TemplateReportDialog';
 
 function App() {
     const {
@@ -23,6 +24,7 @@ function App() {
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
         handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
+        handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
         handlePartDefaultVisibleChange, handlePartExportChange,
@@ -190,6 +192,8 @@ function App() {
                         onExport={handleExport}
                         onSaveProject={handleSaveProject}
                         onLoadProject={handleLoadProject}
+                        onTemplateSave={handleTemplateSave}
+                        onTemplateLoad={handleTemplateLoad}
                     />
                 }
                 onLoadPsd={openFilePicker}
@@ -206,6 +210,9 @@ function App() {
                         setSheetFile(null);
                     }}
                 />
+            )}
+            {templateReport && (
+                <TemplateReportDialog report={templateReport} onClose={() => setTemplateReport(null)} />
             )}
             <FileDropOverlay onFiles={files => void addFiles(files)} />
             <Toast message={toast} onClose={() => setToast(null)} />

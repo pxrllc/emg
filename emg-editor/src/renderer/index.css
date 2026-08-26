@@ -701,6 +701,33 @@ button.delta-chip:hover { border-color: #2563eb; }
   overflow: auto;
 }
 
+/* テンプレート適用の結果。落ちた名前まで出すので 1 行が伸びうる。 */
+.tpl-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tpl-row-label { font-size: 12px; color: #d4d4d8; }
+
+.tpl-row-count {
+  font-family: var(--mono, monospace);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tpl-row-count.ok      { color: #22c55e; }
+.tpl-row-count.partial { color: #f0b37e; }
+
+.tpl-row-missing {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #8a8a8e;
+}
+
 .modal-foot {
   display: flex;
   justify-content: flex-end;

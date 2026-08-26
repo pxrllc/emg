@@ -70,6 +70,8 @@ interface InspectorPanelProps {
     onExport: () => void;
     onSaveProject: () => void;
     onLoadProject: () => void;
+    onTemplateSave: () => void;
+    onTemplateLoad: () => void;
 }
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -233,8 +235,17 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                     </div>
                 )}
                 <div className="action-bar-row">
-                    <button className="btn" onClick={props.onSaveProject} disabled={!props.hasFile || !!props.exportProgress}>設定を保存</button>
+                    <button className="btn" onClick={props.onSaveProject} disabled={!props.hasFile || !!props.exportProgress}
+                        title="この素材の続きから編集するためのファイル（レイヤー ID で対応を取ります）">設定を保存</button>
                     <button className="btn" onClick={props.onLoadProject} disabled={!!props.exportProgress}>設定を読込</button>
+                </div>
+                {/* テンプレートは「設定」と違い、別の素材に持ち込める。
+                    対応を取るのが数値 ID か名前かという違いなので、並べて置くと取り違える。 */}
+                <div className="action-bar-row">
+                    <button className="btn" onClick={props.onTemplateSave} disabled={!props.hasFile || !!props.exportProgress}
+                        title="別の素材に持ち込むためのファイル（パーツ名とフレーム名で対応を取ります）">テンプレートを保存</button>
+                    <button className="btn" onClick={props.onTemplateLoad} disabled={!props.hasFile || !!props.exportProgress}
+                        title="別の素材で作った割り当て・プリセット・表情を当てる">テンプレートを適用</button>
                 </div>
             </div>
         </div>
