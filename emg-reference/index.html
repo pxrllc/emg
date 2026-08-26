@@ -294,7 +294,7 @@ li { margin-bottom: 5px; }
 <div class="shell">
   <nav class="nav">
     <div class="nav-head">
-      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.1</span></div>
+      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.2</span></div>
       <div class="nav-sub">パーツ分割 2D アバターの配布形式</div>
       <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
     </div>
@@ -328,6 +328,7 @@ li { margin-bottom: 5px; }
     <div class="nav-group">
       <div class="nav-label">規則</div>
       <a href="#drawmodel">描画モデル</a>
+      <a href="#exact">結果を一致させる規定</a>
       <a href="#compat">互換性</a>
       <a href="#extensions"><code>requiredExtensions</code></a>
     </div>
@@ -355,6 +356,7 @@ li { margin-bottom: 5px; }
         <div><span class="ver v4">0.4.0</span> 互換性の規則を追加</div>
         <div><span class="ver v5">0.5.0</span> 表現力を追加</div>
         <div><span class="ver v5">0.5.1</span> switch の「どれも出さない」</div>
+        <div><span class="ver v5">0.5.2</span> 実装間で結果を一致させる規定</div>
       </div>
 
       <div class="note">
@@ -379,7 +381,7 @@ li { margin-bottom: 5px; }
 
 <pre><span class="c">// data.json の骨格</span>
 {
-  <span class="k">"version"</span>: <span class="s">"0.5.1"</span>,
+  <span class="k">"version"</span>: <span class="s">"0.5.2"</span>,
   <span class="k">"requiredExtensions"</span>: [],          <span class="c">// 0.4.0</span>
   <span class="k">"baseCanvasWidth"</span>: 2894,
   <span class="k">"baseCanvasHeight"</span>: 4093,
@@ -684,7 +686,8 @@ li { margin-bottom: 5px; }
         <p>
           <strong>ファイル全体で 1 本の順序</strong>です。パーツ単位ではありません。
           値が大きいほど手前で、描画は昇順（奥から手前）に行います。
-          同じ値が複数ある場合の順序は<strong>未定義</strong>です。
+          同じ値が複数ある場合は<strong>宣言順</strong>（<code class="inl">parts[]</code> の順、
+          その中の <code class="inl">layers[]</code> の順）で描きます <span class="ver v5">0.5.2</span>。
         </p>
 
         <h3><code>blendMode</code> <span class="ver v4">0.4.0</span></h3>
@@ -1005,6 +1008,13 @@ li { margin-bottom: 5px; }
         </table>
         </div>
 
+        <p>
+          <code class="inl">avatarId</code> は<strong>識別用のラベル</strong>で、解決には使いません。
+          <code class="inl">mapping.json</code> は独自のバージョンを持たず、同梱される
+          <code class="inl">data.json</code> の <code class="inl">version</code> に従います
+          <span class="ver v5">0.5.2</span>。
+        </p>
+
         <div class="warn">
           <p><strong>表情から目・口のパーツを直接指定することはできません。</strong>
           解決は <code class="inl">expressions[].parts</code> を先に適用し、そのあと blink と lipSync が
@@ -1070,6 +1080,13 @@ li { margin-bottom: 5px; }
   }
 }</pre>
 
+        <p>
+          <code class="inl">avatarId</code> は<strong>識別用のラベル</strong>で、解決には使いません。
+          <code class="inl">mapping.json</code> は独自のバージョンを持たず、同梱される
+          <code class="inl">data.json</code> の <code class="inl">version</code> に従います
+          <span class="ver v5">0.5.2</span>。
+        </p>
+
         <div class="warn">
           <p><strong>表情から目・口のパーツを直接指定することはできません。</strong>
           解決は <code class="inl">expressions[].parts</code> を先に適用し、
@@ -1107,6 +1124,104 @@ li { margin-bottom: 5px; }
          alpha=layer.opacity)</pre>
 
         <p>キャンバスの背景は<strong>透明</strong>です。<code class="inl">.emg</code> は背景色を持ちません。</p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="exact">
+        <h2>結果を一致させる規定 <span class="ver v5">0.5.2</span></h2>
+        <p class="sec-note">「複数の実装が同じ絵を出す」ために必要な前提。0.5.1 まで未定義だったもの。</p>
+
+        <h3>座標系</h3>
+        <p>
+          キャンバスもアトラスも <strong>左上が原点、X は右、Y は下</strong>。単位は px。
+          <code class="inl">rotation</code> の<strong>時計回りが正</strong>は、この向きでの右回りです。
+        </p>
+        <div class="note">
+          <p>Y 軸を上向きに扱うエンジン（Unity 等）へ移す場合は、
+          <strong>読み込み時に一度だけ変換</strong>してください。仕様側は画像フォーマットとして自然な向きに固定しています。</p>
+        </div>
+
+        <h3>色空間とアルファ</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>項目</th><th>規定</th><th>理由</th></tr>
+          <tr><td>合成の色空間</td><td><strong>sRGB のまま。リニアへ変換しない</strong></td>
+              <td>CSS の <code>mix-blend-mode</code> と同じ値集合を使うため。変換を挟むと <code>multiply</code> / <code>screen</code> の結果が実装ごとに変わる</td></tr>
+          <tr><td>アルファ</td><td><strong>straight（非乗算済み）</strong></td>
+              <td>PNG の規定どおり。実装が内部で premultiply するのは自由だが、結果は straight 合成と一致すること</td></tr>
+        </table>
+        </div>
+
+        <h3><code>sequence</code> と <code>tracks</code></h3>
+        <p><strong>1 つの sprite が両方を持てます。</strong>それぞれ独立に評価します。</p>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th></th><th>時間の基準</th><th>繰り返し</th></tr>
+          <tr><td><code>sequence</code></td><td><code>fps</code> または <code>keys[].t</code></td><td><code>trigger</code> が決める</td></tr>
+          <tr><td><code>tracks</code></td><td><code>duration</code></td><td><code>loop</code> が決める</td></tr>
+        </table>
+        </div>
+        <p>
+          <strong><code class="inl">loop</code> は <code class="inl">sequence</code> に効きません。</strong>
+          <code class="inl">sequence</code> が末尾に達したとき、<code class="inl">auto_loop</code> なら先頭から再開し、
+          それ以外（<code class="inl">random_interval</code> / <code class="inl">external</code> / 不在）は
+          <strong>末尾のフレームを保持</strong>します。
+        </p>
+        <p>
+          <strong><code class="inl">keys</code> があれば <code class="inl">fps</code> は無視します。</strong>
+          両方を書いてはいけませんが、遭遇した場合の解釈はこれで一意に定まります。
+        </p>
+
+        <h3>同じパーツを複数の sprite が対象にしたとき</h3>
+        <div class="warn">
+          <p><strong>同一パーツを自律発火する <code class="inl">sequence</code> を複数書いてはいけません。</strong>
+          表示できるフレームは 1 つなので取り合いになります。</p>
+        </div>
+        <p>
+          違反したファイルに遭遇した場合、および外部制御で複数が同時に有効になった場合は、
+          <strong><code class="inl">sprites[]</code> の宣言順で後にあるものが勝ちます</strong>。
+        </p>
+        <p>
+          <code class="inl">tracks</code> も同じで、同一パーツの同一 <code class="inl">path</code> に
+          複数のトラックが効く場合は<strong>宣言順で後のものが上書き</strong>します。
+          <strong>加算してはいけません</strong> — 加算にすると評価順の違いがそのまま値の違いになります。
+        </p>
+        <p>
+          再生中の sprite に同じ <code class="inl">spriteID</code> の再生要求が来たら、
+          <strong>先頭から再生し直します</strong>（無視もキューイングもしない）。
+        </p>
+
+        <h3>参照の欠落と異常系</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>状況</th><th>挙動</th></tr>
+          <tr><td><code>presets[]</code> が存在しない <code>partID</code> / フレームを指す</td>
+              <td>その項目のみ無視し、残りを適用する</td></tr>
+          <tr><td><code>textures[]</code> のファイルが ZIP に無い</td><td><strong>読み込みを失敗させる</strong></td></tr>
+          <tr><td>PNG が復号できない</td><td><strong>読み込みを失敗させる</strong></td></tr>
+          <tr><td>メイン JSON が見つからない</td><td><strong>読み込みを失敗させる</strong></td></tr>
+        </table>
+        </div>
+        <div class="note">
+          <p><strong>一部のレイヤーを黙って描かずに続行してはいけません。</strong>
+          沈黙して誤った絵を出すより、検知できる状態を優先します。
+          ZIP のエントリ名は<strong>大文字小文字を区別</strong>します。</p>
+        </div>
+
+        <h3>数値</h3>
+        <ul>
+          <li>座標・寸法・<code class="inl">textureZIndex</code> は<strong>整数</strong></li>
+          <li><code class="inl">opacity</code> が 0.0〜1.0 の範囲外なら<strong>クランプ</strong>する</li>
+          <li>内部精度は実装に委ねる。<strong>ピクセル完全一致は要求しない</strong> — 求めるのは「同じ絵に見えること」</li>
+        </ul>
+
+        <h3>アトラスの滲み（参考）</h3>
+        <p>
+          アトラスは矩形を密に詰めており<strong>パディングを持ちません</strong>。等倍では問題ありませんが、
+          <code class="inl">scale_*</code> で拡大したりバイリニアでサンプリングすると、
+          隣接領域の色が滲むことがあります。0.5 系列ではパディングを要求しません。
+          拡大を前提とする素材では、生成側が 1〜2px の余白を入れると回避できます。
+        </p>
       </section>
 
       <!-- ─────────────────────────────────────────────── -->
@@ -1255,7 +1370,7 @@ li { margin-bottom: 5px; }
         <p class="sec-note">最小構成の <code class="inl">data.json</code>。</p>
 
 <pre>{
-  <span class="k">"version"</span>: <span class="s">"0.5.1"</span>,
+  <span class="k">"version"</span>: <span class="s">"0.5.2"</span>,
   <span class="k">"requiredExtensions"</span>: [<span class="s">"EMG_switch_none"</span>],
   <span class="k">"baseCanvasWidth"</span>: 1024,
   <span class="k">"baseCanvasHeight"</span>: 1024,

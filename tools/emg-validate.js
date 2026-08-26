@@ -165,6 +165,37 @@ function validate(data, entryNames, mapping) {
         }
     }
 
+    // --- 0.5.2 10.5.1: 同一パーツを自律発火の sequence が奪い合ってはならない ---
+    // 表示できるフレームは 1 つなので、複数書くと取り合いになる。
+    {
+        const autoByPart = new Map();
+        for (const s of data.sprites ?? []) {
+            if (!s.sequence) continue;
+            const t = s.trigger?.type;
+            if (!t || t === 'external') continue;   // 自律発火しないものは競合しない
+            if (!autoByPart.has(s.targetPartID)) autoByPart.set(s.targetPartID, []);
+            autoByPart.get(s.targetPartID).push(s.spriteID);
+        }
+        for (const [partID, ids] of autoByPart) {
+            if (ids.length > 1) {
+                E(`パーツ '${partID}' を自律発火する sprite が ${ids.length} 個あります`
+                  + `（${ids.map(i => `'${i}'`).join(', ')}）。表示できるフレームは 1 つなので`
+                  + `取り合いになります（0.5.2 10.5.1）`);
+            }
+        }
+    }
+
+    // --- 0.5.2 10.4.3: keys と fps を同時に書いてはならない ---
+    for (const s of data.sprites ?? []) {
+        if (s.sequence?.keys && s.fps !== undefined) {
+            W(`sprite '${s.spriteID}' が keys と fps の両方を持っています。`
+              + `fps は無視されます（0.5.2 10.4.3）`);
+        }
+    }
+
+    // --- 0.5.2 10.7: opacity は 0.0〜1.0 ---
+    // （範囲外はレイヤー検査で既にエラーにしている）
+
     // --- 7.3: mapping.json が掌握するパーツは自律発火してはならない ---
     // blinkPartKey / blinkParts / lipSyncPartKey / lipSyncParts による「明示的」な指定のみ。
     // partID のキーワード一致で解決されただけのものは該当しない。

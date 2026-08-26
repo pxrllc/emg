@@ -51,12 +51,12 @@ function buildDrawList(data) {
             for (const l of resolveSwitch(part)) draw.push({ part: part.partID, layer: l });
         }
     }
-    // textureZIndex 昇順 = 奥から手前。同値の順序は仕様上未定義なので、
-    // スナップショットの安定のみを目的に partID/textureID で決定的に整列する。
-    return draw.sort((a, b) =>
-        (a.layer.textureZIndex - b.layer.textureZIndex)
-        || a.part.localeCompare(b.part)
-        || String(a.layer.textureID).localeCompare(String(b.layer.textureID)));
+    // textureZIndex 昇順 = 奥から手前。
+    // 同値のときは宣言順（parts[] の順、その中の layers[] の順）で描く（0.5.2 10.3）。
+    // 以前は partID/textureID の辞書順で並べていたが、それは仕様が定める順序ではない。
+    return draw
+        .map((d, i) => ({ ...d, seq: i }))
+        .sort((a, b) => (a.layer.textureZIndex - b.layer.textureZIndex) || (a.seq - b.seq));
 }
 
 function render(data, label) {

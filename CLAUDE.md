@@ -51,21 +51,22 @@ Before touching any producer or consumer, know these. **Each one has already cau
 6. **Never branch on `version`** (rule B1) — decide structure by field presence. Real files lie: `yuriko.emg` claims `0.2.2` while holding the pre-0.2 flat schema.
 7. **`requiredExtensions[]` is declared only when ignoring the feature would draw the *wrong* picture** — never for "does not animate" or "toggle stays on". Over-declaring locks out working implementations for no reason.
 8. **`mapping.json` takes control of the parts it explicitly names.** A `sprites[]` entry with the same `targetPartID` must not self-trigger (omit `trigger`, which means "must not autoplay").
-9. **One texture atlas is the premise, not a preference.** All sources pack into a single atlas; split to multiple only when 8192px genuinely cannot hold it, and tell the user when that happens.
+9. **Rendering rules that used to be implementation-defined are now fixed (0.5.2 §10).** Top-left origin with Y down; composite in sRGB without linearising; straight (non-premultiplied) alpha; equal `textureZIndex` draws in declaration order; `loop` applies to `tracks` only while `trigger` governs `sequence` repetition; `keys` beats `fps`; a missing or broken texture must fail the load rather than silently skip layers.
+10. **One texture atlas is the premise, not a preference.** All sources pack into a single atlas; split to multiple only when 8192px genuinely cannot hold it, and tell the user when that happens.
 
 ## Spec versioning until alpha
 
-**Current spec version: `0.5.1`.**
+**Current spec version: `0.5.2`.**
 
 **Until the alpha release, every batch of added features bumps the `x` in `0.5.x` by one — regardless of how large or small the batch is. Do not open `0.6.0`.** No size threshold, no judgement call about whether something "deserves" a version: one batch, one increment.
 
 This is deliberate. Nothing is publicly distributed yet, so this is the only window in which a forward-compatibility rule, an enum's meaning, or a normative "MUST ignore" can still be corrected without stranding files already in the wild. That is the entire reason 0.4.0 exists as its own version, and the reason its §9.2 measurement had to run before its §1.2 wording was settled. Once alpha ships, the freedom is gone.
 
-`emg-json-spec-0.5.0.md` defines the **0.5 series**, not just 0.5.0 — the filename is the version the series started at, and the document always describes the current version. Its §0 header states which that is, and §11 carries the history. Do not rename the file per revision; six other documents reference it.
+`emg-json-spec-0.5.0.md` defines the **0.5 series**, not just 0.5.0 — the filename is the version the series started at, and the document always describes the current version. Its §0 header states which that is, and §12 carries the history. Do not rename the file per revision; six other documents reference it.
 
 Consequences of an increment:
 
-- **Amend `emg-json-spec-0.5.0.md`**: update the §0 "現行版" line and add a row to §11 saying what changed *and what was retracted*. `0.5.1` retracted 0.5.0's "MUST ignore `defaultVisible` on `switch`" — exactly the kind of change that becomes impossible after alpha.
+- **Amend `emg-json-spec-0.5.0.md`**: update the §0 "現行版" line and add a row to §12 saying what changed *and what was retracted*. `0.5.1` retracted 0.5.0's "MUST ignore `defaultVisible` on `switch`"; `0.5.2` settled a batch of previously-undefined rendering rules (§10) — both are changes that become impossible after alpha.
 - **Bump what producers emit.** `EmgGenerator` in **both** `emg-packer` and `emg-editor` hardcodes the version string; `emg-web-packer` follows `emg-packer` through the alias. Consumers still must not branch on it (rule 6 above).
 - **A revision that changes rendering behaviour must land in all six consumers plus both packers in the same pass.** There is no build-time check for this drift, and `emg-packer` / `emg-editor` / `emg-web-packer` are three separate producer code paths (see "Two packer codebases").
 - `emg-reference/index.html` is part of the same pass — its version legend, the "導入" column of the affected field, and the current-version note all move together.
