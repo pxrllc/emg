@@ -317,6 +317,7 @@ li { margin-bottom: 5px; }
       <a href="#trigger"><code>trigger</code></a>
       <a href="#tracks"><code>tracks[]</code></a>
       <a href="#presets"><code>presets[]</code></a>
+      <a href="#states">状態の使い分け</a>
     </div>
 
     <div class="nav-group">
@@ -945,6 +946,100 @@ li { margin-bottom: 5px; }
   <span class="k">"label"</span>: <span class="s">"にこやか"</span>,
   <span class="k">"parts"</span>:   { <span class="k">"Eyebrows"</span>: <span class="s">"01"</span>, <span class="k">"Blushs"</span>: <span class="s">"01"</span> },
   <span class="k">"toggles"</span>: { <span class="k">"arms"</span>: true } }</pre>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="states">
+        <h2>状態の使い分け</h2>
+        <p class="sec-note">着せ替え・小物・シーン・表情を、どの機構で表現するか。</p>
+
+        <p>
+          v0.5 には状態を表す機構が 4 つあります。<strong>似て見えますが排他性の扱いが違い</strong>、
+          選び間違えると後から破綻します。
+        </p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>やりたいこと</th><th>使う機構</th><th>排他性</th></tr>
+          <tr><td>衣装の切り替え（制服／私服）</td>
+              <td><code>switch</code> + <code>frameName</code></td>
+              <td><strong>自動で排他</strong>。1 スロットに 1 フレーム</td></tr>
+          <tr><td>小物の on/off（帽子・眼鏡）</td>
+              <td><code>static</code> + <code>defaultVisible</code></td>
+              <td>無し。自由に組み合わせられる</td></tr>
+          <tr><td>複数パーツをまとめて指定</td>
+              <td><code>presets[]</code></td>
+              <td>無し。<strong>差分として適用される</strong></td></tr>
+          <tr><td>表情（まばたき・口パクを含む）</td>
+              <td><code>mapping.json</code> の <code>expressions</code></td>
+              <td>無し</td></tr>
+        </table>
+        </div>
+
+        <h3>着せ替えは <code>frameName</code> が本命</h3>
+        <p>
+          「上着とスカートが同時に切り替わる」は <code class="inl">presets[].toggles</code> でも書けますが、
+          <strong>排他性を自分で管理することになります</strong> — 制服を選んだら私服の全パーツを
+          <code class="inl">false</code> にする、という列挙が要り、衣装を 1 つ足すたびに
+          既存プリセット全部の書き換えが必要になります。
+        </p>
+        <p>
+          <code class="inl">switch</code> + <code class="inl">frameName</code> なら排他は自動です。
+          <strong>z が非連続な組（上着 z=20 / 体 z=10 / スカート z=5）も 1 フレームにできる</strong>のが
+          この機構の存在理由なので、「1 枚の画像に焼き込む」で代替できない組み合わせもここで扱えます。
+        </p>
+        <p>
+          <code class="inl">presets[]</code> が要るのは、<strong>衣装の切り替えに小物の on/off が伴う</strong>場合です
+          （制服のときだけ帽子を出す、など）。<code class="inl">switch</code> パーツと
+          <code class="inl">static</code> のトグルにまたがるため、まとめる側が要ります。
+        </p>
+
+        <h3>表情はどこに置くか</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th></th><th><code>presets[]</code>（data.json）</th><th><code>expressions</code>（mapping.json）</th></tr>
+          <tr><td>役割</td><td>構造的な状態の組</td><td>意味づけ</td></tr>
+          <tr><td>目・口</td><td>指定できる</td><td><strong>指定できない</strong>（後述）</td></tr>
+          <tr><td>まばたき／口パクの差し替え</td><td>不可</td><td><code>overrides.blink</code> / <code>overrides.lipSync</code></td></tr>
+          <tr><td>相互参照</td><td>—</td><td><code>presetID</code> でプリセットを呼べる</td></tr>
+        </table>
+        </div>
+
+        <div class="warn">
+          <p><strong>表情から目・口のパーツを直接指定することはできません。</strong>
+          解決は <code class="inl">expressions[].parts</code> を先に適用し、そのあと blink と lipSync が
+          自分のパーツを上書きします。<code class="inl">parts</code> に <code class="inl">Eyes</code> を
+          書いても<strong>黙って無効になります</strong>。目と口は
+          <code class="inl">overrides.blink</code> / <code class="inl">overrides.lipSync</code> を使ってください。</p>
+        </div>
+
+        <p>
+          したがって想定される分担は、<strong>プリセットが「どのフレーム・どのトグル」という構造を持ち、
+          表情がそれを <code class="inl">presetID</code> で参照しつつ、目・口だけを
+          <code class="inl">overrides</code> で足す</strong>形です。
+        </p>
+
+        <h3>現状の制約</h3>
+        <p>0.5 系列では次を扱いません。回避策とあわせて把握しておいてください。</p>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>できないこと</th><th>起きること</th><th>回避策</th></tr>
+          <tr><td>プリセット同士の<strong>排他</strong></td>
+              <td>衣装 A を適用しても衣装 B が外れない</td>
+              <td>排他が要るものは <code>frameName</code> で 1 パーツにまとめる</td></tr>
+          <tr><td><strong>絶対指定</strong>（差分ではなく全体を決める）</td>
+              <td>シーン A → B で、B が触れないパーツに A の残骸が残る</td>
+              <td>シーンに関わるパーツを全プリセットで列挙する</td></tr>
+          <tr><td><strong>直交性の宣言</strong></td>
+              <td>同じパーツに触れる 2 つのプリセットが衝突しても検知されず後勝ち</td>
+              <td>衣装用と表情用で触るパーツを分けておく</td></tr>
+        </table>
+        </div>
+        <p>
+          いずれも <code class="inl">conflicts</code> / <code class="inl">requires</code> のような依存グラフを
+          導入すれば解けますが、<strong>組み合わせ検証の実装を全消費側に要求する</strong>ため、
+          必要性が実データで確認されるまで見送られています（0.5.0 §4.4）。
+        </p>
       </section>
 
       <!-- ─────────────────────────────────────────────── -->
