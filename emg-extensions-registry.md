@@ -55,7 +55,7 @@
 | 識別子 | 導入 | 対象機能 | 宣言が必要な条件 |
 |---|---|---|---|
 | `EMG_frame_name` | v0.5.0 | `layers[].frameName`（`emg-json-spec-0.5.0.md` §2） | **1 つのフレーム識別子に 2 枚以上のレイヤーが属する場合** |
-| `EMG_switch_none` | v0.5.0 | `parts[].defaultVisible`（`emg-json-spec-0.5.0.md` §4.3） | **`type: "switch"` のパーツに `defaultVisible: false` を指定した場合** |
+| `EMG_switch_none` | v0.5.1 | `parts[].defaultVisible`（`emg-json-spec-0.5.0.md` §4.3） | **`type: "switch"` のパーツに `defaultVisible: false` を指定した場合** |
 
 ### 3.1 `EMG_frame_name`
 
@@ -92,4 +92,4 @@ v0.5.0 が追加した機能のうち `control` / `presets[]` / `sequence.keys[]
 | 日付 | 内容 |
 |---|---|
 | 2026-08-24 | 新規作成。`EMG_frame_name` を登録 |
-| 2026-08-25 | `EMG_switch_none` を登録（`emg-json-spec-0.5.0.md` §4.3 の改訂に伴う） |
+| 2026-08-25 | `EMG_switch_none` を登録（0.5.1 での §4.3 改訂に伴う） |

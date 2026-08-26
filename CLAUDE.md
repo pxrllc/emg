@@ -54,16 +54,20 @@ Before touching any producer or consumer, know these. **Each one has already cau
 
 ## Spec versioning until alpha
 
-**Until the alpha release, the spec is revised in place within `0.5.x` — `0.5.1`, `0.5.2`, … Do not open `0.6.0`.**
+**Current spec version: `0.5.1`.**
+
+**Until the alpha release, every batch of added features bumps the `x` in `0.5.x` by one — regardless of how large or small the batch is. Do not open `0.6.0`.** No size threshold, no judgement call about whether something "deserves" a version: one batch, one increment.
 
 This is deliberate. Nothing is publicly distributed yet, so this is the only window in which a forward-compatibility rule, an enum's meaning, or a normative "MUST ignore" can still be corrected without stranding files already in the wild. That is the entire reason 0.4.0 exists as its own version, and the reason its §9.2 measurement had to run before its §1.2 wording was settled. Once alpha ships, the freedom is gone.
 
-Consequences:
+`emg-json-spec-0.5.0.md` defines the **0.5 series**, not just 0.5.0 — the filename is the version the series started at, and the document always describes the current version. Its §0 header states which that is, and §11 carries the history. Do not rename the file per revision; six other documents reference it.
 
-- A revision **amends `emg-json-spec-0.5.0.md`** and gets a dated row in its version-history table saying what changed and what was retracted. The 2026-08-25 change (extending `defaultVisible` to `switch`, adding `EMG_switch_none`) is the first such revision, and retracted a "MUST ignore" clause from the initial draft — exactly the kind of change that becomes impossible after alpha.
-- Producers write the current `0.5.x` into `version`; consumers still must not branch on it (rule 6 above). `EmgGenerator` currently emits `0.5.0` in both packers.
+Consequences of an increment:
+
+- **Amend `emg-json-spec-0.5.0.md`**: update the §0 "現行版" line and add a row to §11 saying what changed *and what was retracted*. `0.5.1` retracted 0.5.0's "MUST ignore `defaultVisible` on `switch`" — exactly the kind of change that becomes impossible after alpha.
+- **Bump what producers emit.** `EmgGenerator` in **both** `emg-packer` and `emg-editor` hardcodes the version string; `emg-web-packer` follows `emg-packer` through the alias. Consumers still must not branch on it (rule 6 above).
 - **A revision that changes rendering behaviour must land in all six consumers plus both packers in the same pass.** There is no build-time check for this drift, and `emg-packer` / `emg-editor` / `emg-web-packer` are three separate producer code paths (see "Two packer codebases").
-- `tools/emg-validate.js` and `emg-extensions-registry.md` are part of the same pass — a new rule that the validator does not check is a rule that will be broken silently.
+- `tools/emg-validate.js` and `emg-extensions-registry.md` are part of the same pass — a new rule the validator does not check is a rule that will be broken silently. Registry entries record the version that introduced the identifier (`EMG_frame_name` → 0.5.0, `EMG_switch_none` → 0.5.1).
 
 ## Common commands
 
