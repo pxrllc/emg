@@ -10,7 +10,8 @@ There is no root build system — each subdirectory below is an **independent np
 
 | Directory | What it is | Stack |
 |---|---|---|
-| `emg-packer/` | Electron desktop app: loads a PSD (or `.kra`), lets the user assign `partID`/`type` per layer, packs a texture atlas, and exports a `.emg` file | Electron + Vite (electron-vite) + React + TypeScript, `ag-psd` |
+| `emg-packer/` | Electron desktop app: loads a PSD (or `.kra`), lets the user assign `partID`/`type` per layer, packs a texture atlas, and exports a `.emg` file. **`emg-editor` forked from this at v0.1.5** — see "Two packer codebases" below | Electron + Vite (electron-vite) + React + TypeScript, `ag-psd` |
+| `emg-editor/` | Fork of `emg-packer` at v0.1.5, renamed and versioned independently (0.2.0). The product that gets developed further: parts-level editing, multi-source import, animation authoring. **Its `services/` is a copy, not a share** | same as `emg-packer` |
 | `emg-web-runtime/` | Browser app for playing/authoring EMG avatars (states, variants, undo history) — WIP. Note `npm run build` runs `tsc` first, so a type error blocks deployment entirely (this silently broke Pages for ~6 months) | Vite + React + TypeScript + styled-components |
 | `emg-lite/` | Spec + adapter + tools for **EMG-lite** (`.emgl`), a *separate*, simpler 5-slot avatar IR (base/mouthOpen/mouthClosed/eyesOpen/eyesClosed) distinct from full EMG — see "Two coexisting specs" below | Spec docs + `adapter/png-adapter.ts` + `tools/emg-viewer` (Vite + Electron) |
 | `emg-cdn/` | Deployable reference player (`emg-player.0.1.0.js`, `.0.2.2.js`, `.0.3.0.js` — **0.3.0 is current**, adds `mapping.json`) and demo page | Vanilla JS + JSZip, no build step |
@@ -18,7 +19,7 @@ There is no root build system — each subdirectory below is an **independent np
 | `emg-renpy/` | Ren'Py loader script (`emg_loader.rpy`) for playing EMG avatars inside a Ren'Py game | Ren'Py `.rpy` |
 | `emg-godot/` | Godot 4.x loader (`emg_avatar.gd`, `class_name EmgAvatar`) — written but **never run** (no Godot editor here) | GDScript |
 | `emg-ymm4/` | YMM4 (ゆっくりムービーメーカー4) Tachie plugin loading `.emg` — **builds and runs; verified in the real app** (display, blink, vowel lip-sync, layer-picker UI). See "emg-ymm4" below | C# `net10.0-windows`; `Emg.Core/` sub-library is YMM4-independent |
-| `emg-web-packer/` | Browser-only PSD/KRA → `.emg` converter (no server, no install). Reuses `emg-packer`'s services via a Vite alias rather than copying them — see its `README.md` | Vite + React + TypeScript |
+| `emg-web-packer/` | Browser-only PSD/KRA → `.emg` converter (no server, no install). Reuses **`emg-packer`**'s services via a Vite alias rather than copying them — it stays on `emg-packer`, not `emg-editor` — see its `README.md` | Vite + React + TypeScript |
 | `aviutl-for-egml/` | Electron/React app that imports EMG-lite assets and exports AviUtl `.exo` project/timeline data | Electron + Vite + React + TypeScript + Tailwind + Zustand |
 | `develop/` | Standalone integration/dev HTML+CSS+JS sandbox (no build) | Vanilla |
 | `doc/` | Spec/design docs (packer, Ren'Py, Unity importer, upstream contribution plans, YMM4 verification) — **intentionally gitignored, local-only**, not part of the tracked repo for other clones | Markdown |
@@ -40,8 +41,8 @@ Top-level spec docs: `emg-json-spec.md` (full EMG v0.3.0 JSON schema, normative 
 Each JS/TS project uses its own `package.json` in its own directory (`npm install` once per project you touch):
 
 ```bash
-# emg-packer (Electron packer app)
-cd emg-packer
+# emg-packer (Electron packer app) / emg-editor (its fork; same commands)
+cd emg-packer   # or: cd emg-editor
 npm install
 npm run dev      # electron-vite dev — launches the Electron app
 npm run build    # electron-vite build
@@ -160,7 +161,23 @@ The repo hosts **two separate avatar formats** that share a name prefix but are 
 
 When working in `emg-lite/` or `aviutl-for-egml/`, you're in the EMG-lite world (5-slot, `AvatarData`/`assetsRoot`/`mapping`), not the full-EMG world (`parts[]`/`textures[]`). Don't confuse EMG-lite's `mapping: Record<string, AvatarLayerMap>` with full EMG's `mapping.json` (`emg-mapping-spec.md`) — same word, unrelated schemas. See `doc/emg_upstream_contribution_plan.md` for the original field-by-field comparison and rationale behind the `mapping.json` extension.
 
+### Two packer codebases — `emg-packer` and `emg-editor`
+
+`emg-editor` was **forked from `emg-packer` at v0.1.5** (2026-08-26) and is now a separate product with its own version line (0.2.0). Everything under "emg-packer internals" below describes both, because the fork was a verbatim copy.
+
+| | `emg-packer` | `emg-editor` |
+|---|---|---|
+| Role | PSD → `.emg` converter | avatar editor; the one that gets developed further |
+| `services/` | the copy `emg-web-packer` aliases | an **independent copy** |
+| Browser build | `emg-web-packer` (`@packer` alias) | none |
+
+**`emg-web-packer` still aliases `emg-packer`, not `emg-editor`.** Its `vite.config.ts`, `tsconfig.json` `paths`, `server.fs.allow` and `include` all point at `emg-packer/src/renderer/services`. Do not repoint them without being asked — the browser tool is a *converter*, which is what `emg-packer` is.
+
+**Spec changes and `services/` bug fixes must be applied to both.** A new field, a `requiredExtensions` identifier, or a `TexturePacker`/`EmgGenerator` fix landing in only one of them makes the same PSD produce different `.emg` files. There is no build-time check for this drift; the three copies to keep in step for producer-side spec work are `emg-packer`, `emg-editor`, and `emg-web-packer`'s own `analyze.ts`/`convert.ts`.
+
 ### emg-packer internals (PSD → `.emg`)
+
+Applies to `emg-editor` identically unless noted.
 
 Flow: `PsdLoader` (parses PSD via `ag-psd`, injects `_partName` from top-level group names as a starting hint) → user assigns `partID`/`type`/`default` per layer in the UI (`App.tsx` state, `LayerMeta` in `types.ts`) → `TexturePacker` (shelf packing, power-of-two sizing, `startSize = 2048`, `maxSize = 8192`) → `EmgGenerator.createData()`/`generate()` builds the v0.3.0 JSON and zips it with the atlas PNG (plus a `mapping.json` draft from `MappingGenerator`, when blink/mouth parts can be detected) via JSZip.
 

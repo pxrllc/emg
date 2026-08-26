@@ -28,6 +28,7 @@ EMG は、パーツ分割されたキャラクター素材を「軽量かつ汎�
 | ディレクトリ | 内容 |
 |---|---|
 | [`emg-packer/`](./emg-packer/) | PSD から `.emg` を生成する Electron 製パッカー。`mapping.json` の下書き自動生成に対応 |
+| [`emg-editor/`](./emg-editor/) | `emg-packer` v0.1.5 から分岐したアバター編集アプリ。パーツ単位の編集・仕様準拠プレビューを持ち、今後の開発はこちらで進む |
 | [`emg-web-runtime/`](./emg-web-runtime/) | ブラウザ上で EMG アバターを再生・確認するランタイム（WIP） |
 | [`emg-cdn/`](./emg-cdn/) | リファレンスプレイヤー（`emg-player.0.3.0.js` 等）とデモページ。GitHub Pages で配信 |
 | [`emg-unity-importer/`](./emg-unity-importer/) | Unity 向け `.emg` インポーター（WIP） |

@@ -1,0 +1,108 @@
+# EMG Editor
+
+PSD / KRA からアバターのパーツを組み立て、`.emg`（EMG v0.5.0）を書き出すデスクトップアプリです。
+
+Electron + Vite (electron-vite) + React + TypeScript。
+
+---
+
+## emg-packer との関係
+
+**`emg-editor` は `emg-packer` v0.1.5 から分岐した別プロダクトです。**
+
+| | `emg-packer` | `emg-editor` |
+|---|---|---|
+| 位置づけ | PSD → `.emg` の変換ツール | アバターを組み立てる編集ツール |
+| 状態 | 現行維持 | ここから発展させる |
+| ブラウザ版 | `emg-web-packer`（`services/` を alias で共有） | なし |
+
+`emg-web-packer` は名前のとおり「変換器」なので、**参照先は `emg-packer` のまま**です。
+`emg-editor` の `services/` は分岐時点のコピーであり、以後は独立して変化します。
+
+> **注意:** 分岐により `services/` が 2 系統になりました。
+> EMG 仕様の変更（新しいフィールド、`requiredExtensions` の追加など）や、
+> `TexturePacker` / `EmgGenerator` のバグ修正は、
+> **`emg-packer` と `emg-editor` の両方に反映する必要があります。**
+> 片方だけ直すと、同じ PSD から違う `.emg` が出ます。
+
+`emg-editor` は Electron API に依存しない構成（`src/renderer/` は ag-psd / jszip /
+ブラウザ標準 API のみ）を維持しています。`emg-packer` から引き継いだ性質で、
+ブラウザだけで動かせることの土台になっています（`npm run dev:web`）。
+
+---
+
+## 開発
+
+```bash
+npm install
+
+npm run dev          # electron-vite dev — Electron アプリとして起動
+npm run dev:web      # Vite のみ。ブラウザで renderer を開く（http://localhost:5273）
+npm run build        # electron-vite build
+npm run electron:build   # インストーラを作る（electron-builder）
+```
+
+### `dev:web` について
+
+`src/renderer/` は Electron / Node の API を一切使っていないため、
+**普通の Vite アプリとしてブラウザで動きます**。
+
+UI の確認や修正はこちらの方が速く回せます（DevTools、ホットリロード、
+スクリーンショット）。Electron 固有の挙動を確かめるときだけ `npm run dev` を使ってください。
+
+`asset/` は gitignore されています。手元の PSD を置くと、
+dev サーバから `/asset/<name>.psd` として取得できます。
+
+---
+
+## 画面
+
+3 ペイン構成です。
+
+| ペイン | 役割 |
+|---|---|
+| 左：レイヤー | PSD のツリー。パーツ境界と種別バッジ、書き出し対象の可視化 |
+| 中央：プレビュー | **書き出される `.emg` と同じ規則**での合成、テクスチャアトラス |
+| 右：設定 | パーツ / レイヤー / JSON のタブと、固定された書き出しバー |
+
+### パーツという単位
+
+`.emg` の構造は `parts[]` です。パーツ単位で次を操作します。
+
+- **種別** — `使わない` / `Static`（常に表示）/ `Switch`（1 つだけ表示）
+- **差分** — `Switch` のフレーム一覧。クリックでプレビュー、ダブルクリックで初期表示に設定
+- **なし** — 差分を持ちながら「どれも出さない」のが常態のパーツ（チーク、青ざめ等）。
+  v0.5.0 §4.3。書き出すと `defaultVisible: false` と `requiredExtensions: ["EMG_switch_none"]` が付きます
+
+### PSD の書き方
+
+- **トップレベルのグループが 1 パーツ**になります
+- グループの種別は中身の可視状態から推定します。差分グループは「1 つだけ表示して残りは非表示」
+  という慣習に従うので、非表示が可視と同数以上あれば `Switch` とみなします
+- **`@` で始まるグループ**は 1 つの差分（`frameName`、v0.5.0 §2）としてまとまります
+
+```
+衣装            （グループ）→ partID = 衣装
+  @制服         （グループ）→ frameName = 制服
+    上着
+    スカート
+  @私服
+    シャツ
+    ズボン
+```
+
+---
+
+## 既知の制約
+
+- **`.clip` は未対応**です。Clip Studio から PSD で書き出してください
+- テストスイートはありません。`npm run dev:web` での手動確認が検証手段です
+- アトラスの詰め込み効率は実測 36〜43% です（シェルフ packing）。
+  複数素材を 1 枚に収める用途では改善が必要です
+
+---
+
+## ライセンス
+
+Apache 2.0（リポジトリルートの `LICENSE.md`）。
+第三者依存は `NOTICE.md` を参照してください。

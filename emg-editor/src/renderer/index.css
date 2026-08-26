@@ -1,0 +1,495 @@
+:root {
+  --bg-color: #1e1e1e;
+  --panel-bg: #252526;
+  --header-bg: #333333;
+  --border-color: #3e3e42;
+  --accent-color: #007acc;
+  --text-color: #cccccc;
+  --text-disabled: #6e6e6e;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+.layout-container {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--panel-bg);
+}
+
+.panel-header {
+  height: 30px;
+  background-color: var(--header-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+  user-select: none;
+}
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+}
+
+/* 中身が自前でスクロールを持つパネル。ここでも overflow:auto にすると
+   入れ子スクロールになり、常時スクロールバーが 2 本出る。 */
+.panel-body.no-pad {
+  padding: 0;
+  overflow: hidden;
+}
+
+.resize-handle-outer {
+  width: 6px;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background-color: var(--bg-color);
+  cursor: col-resize;
+}
+
+.resize-handle-inner {
+  width: 1px;
+  background-color: var(--border-color);
+  transition: background-color 0.15s, width 0.15s;
+}
+
+.resize-handle-outer:hover .resize-handle-inner,
+.resize-handle-outer[data-resize-handle-active] .resize-handle-inner {
+  width: 3px;
+  background-color: #3b82f6;
+}
+
+/* ---- Buttons -------------------------------------------------------------
+   プライマリ（青）は「その画面で次にやるべき操作」1 つだけに使う。
+   青が複数あると、押せない Export が最初の PSD 読み込みより目立つ、という
+   実際に起きていた問題が再発する。 */
+.btn {
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: #37373a;
+  color: var(--text-color);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.btn:hover:not(:disabled) {
+  background: #45454a;
+  color: #fff;
+}
+
+/* 無効なプライマリが「押せそうな青」のまま薄くなるだけだと、まだ視線を集めてしまう。
+   無効なときは色そのものを落として、目立つ位置から降ろす。 */
+.btn:disabled {
+  cursor: not-allowed;
+  background: #2c2c2f;
+  border-color: #3e3e42;
+  color: #5f5f64;
+}
+
+.btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #9a9a9e;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: #37373a;
+  color: #fff;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* ---- Segmented control (Static / Switch) --------------------------------- */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  background: #2a2a2d;
+}
+
+.seg-item {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: #8a8a8e;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.seg-item:hover:not(.active) {
+  background: #37373a;
+  color: #ddd;
+}
+
+.seg-item.active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.seg-item.active.static {
+  background: #4b5563;
+}
+
+.seg-item.active.none {
+  background: #52525b;
+  color: #d4d4d8;
+}
+
+/* ---- Badges --------------------------------------------------------------- */
+.badge {
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.badge-switch {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.5);
+  color: #93b4fd;
+}
+
+.badge-static {
+  background: rgba(107, 114, 128, 0.2);
+  border-color: rgba(107, 114, 128, 0.5);
+  color: #b3b7be;
+}
+
+.badge-frame {
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #e3c15b;
+}
+
+/* ---- Parts panel ---------------------------------------------------------- */
+.part-card {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: #232326;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.part-card.selected {
+  border-color: #2563eb;
+}
+
+/* 使用しないパーツ。一覧から消さずに沈める（戻せることが分かる必要がある） */
+.part-card.unused {
+  opacity: 0.55;
+  background: #1f1f21;
+}
+
+.part-card.unused .part-name {
+  text-decoration: line-through;
+  color: #8a8a8e;
+}
+
+/* パネル幅は可変なので、狭いときは種別の選択肢を次の行に落とす。
+   3 択になった分、名前が潰れて読めなくなるのを防ぐ。 */
+.part-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 4px;
+  flex-wrap: wrap;
+}
+
+.part-name {
+  flex: 1;
+  min-width: 60px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e4e4e6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.part-card-body {
+  padding: 0 8px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.part-meta {
+  font-size: 11px;
+  color: #7d7d82;
+}
+
+/* フレーム（差分）チップ。クリックでプレビューが切り替わる。 */
+.frame-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.frame-chip {
+  position: relative;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 5px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: #2a2a2d;
+  color: #a5a5aa;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.frame-chip:hover {
+  background: #37373a;
+  color: #fff;
+}
+
+/* プレビュー中 */
+.frame-chip.previewing {
+  border-color: #3b82f6;
+  color: #fff;
+  background: rgba(37, 99, 235, 0.28);
+}
+
+/* v0.5.0 §4.3「どれも表示しない」。差分ではないので見た目を分ける。 */
+.frame-chip.frame-none {
+  border-style: dashed;
+  color: #8a8a8e;
+}
+
+/* 既定（.emg の part.default になるもの） */
+.frame-chip.is-default {
+  color: #e3c15b;
+  border-color: rgba(234, 179, 8, 0.5);
+}
+
+.frame-chip.is-default::after {
+  content: '★';
+  margin-left: 4px;
+  font-size: 9px;
+}
+
+/* ---- Action bar (bottom of right panel) ---------------------------------- */
+.action-bar {
+  border-top: 1px solid var(--border-color);
+  background: #252526;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.action-bar-row {
+  display: flex;
+  gap: 8px;
+}
+
+.action-bar-row > .btn {
+  flex: 1;
+}
+
+.action-hint {
+  font-size: 11px;
+  color: #7d7d82;
+  text-align: center;
+}
+
+/* ---- Preview toolbar / minimap ------------------------------------------- */
+.preview-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.zoom-readout {
+  min-width: 46px;
+  text-align: center;
+  font-size: 11px;
+  color: #a5a5aa;
+  font-variant-numeric: tabular-nums;
+}
+
+.minimap-container {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 120px;
+  max-height: 160px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: rgba(20, 20, 22, 0.85);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.minimap-image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.minimap-viewport {
+  position: absolute;
+  border: 1px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.16);
+  pointer-events: none;
+}
+
+/* ---- Empty state ---------------------------------------------------------- */
+.empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px 16px;
+  text-align: center;
+  color: #7d7d82;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 市松模様はキャンバス自身が持っているので、この下地は無地でよい。
+   両方に敷くと、絵の輪郭と背景の境目が見分けにくくなる。 */
+.preview-area {
+  background-color: #191919;
+}
+
+/* Layer Tree Styles */
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tree-item:hover {
+  background-color: #3e3e42;
+}
+
+.tree-item.selected {
+  background-color: #094771;
+  color: white;
+}
+
+.tree-item-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* パーツに属さない（書き出されない）レイヤーはひと目で分かるようにする */
+.tree-item.excluded .tree-item-content {
+  opacity: 0.45;
+}
+
+/* パーツ境界。どのグループが 1 つの partID になるかをツリー上で示す */
+.tree-item.part-root {
+  border-left: 2px solid #2563eb;
+}
+
+.tree-item.part-root.static-part {
+  border-left-color: #6b7280;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.icon-btn:hover {
+  color: white;
+}
+
+.indent {
+  width: 16px;
+  display: inline-block;
+}
