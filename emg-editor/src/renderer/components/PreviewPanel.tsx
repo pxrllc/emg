@@ -8,13 +8,18 @@ export interface PreviewItem {
 }
 
 interface PreviewPanelProps {
-    textureUrl: string | null;
+    /** アトラス画像。分割されている場合は複数枚（emg-json-spec.md 1.3）。 */
+    atlasUrls: string[];
     compositionItems: PreviewItem[];
     width: number;
     height: number;
 }
 
-export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, compositionItems, width, height }) => {
+export const PreviewPanel: React.FC<PreviewPanelProps> = ({ atlasUrls, compositionItems, width, height }) => {
+    // 何枚目のアトラスを見ているか。分割時に 2 枚目以降が見えないままだと、
+    // そこに載った素材の確認ができない。
+    const [atlasIndex, setAtlasIndex] = useState(0);
+    const textureUrl = atlasUrls[Math.min(atlasIndex, Math.max(0, atlasUrls.length - 1))] ?? null;
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [viewport, setViewport] = useState({ x: 0, y: 0, w: 0, h: 0 }); // Percentages 0-1
@@ -50,6 +55,10 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
         if (imgSize.w === 0 || imgSize.h === 0) return;
         handleFit();
     }, [imgSize, mode, handleFit]);
+
+    useEffect(() => {
+        if (atlasIndex > atlasUrls.length - 1) setAtlasIndex(0);
+    }, [atlasUrls.length, atlasIndex]);
 
     // モードを変えたら「自動フィット」に戻す。合成とアトラスでは寸法が大きく違うので、
     // 片方に合わせたズームをもう片方に持ち越しても意味がない。
@@ -188,6 +197,19 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                         アトラス
                     </button>
                 </div>
+                {mode === 'texture' && atlasUrls.length > 1 && (
+                    <div className="seg" title="アトラスが複数枚に分割されています">
+                        {atlasUrls.map((_, i) => (
+                            <button
+                                key={i}
+                                className={`seg-item ${i === atlasIndex ? 'active' : ''}`}
+                                onClick={() => { userZoomedRef.current = false; setAtlasIndex(i); }}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button
                         className="btn btn-sm"
@@ -228,7 +250,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({ textureUrl, composit
                 {imgSize.w === 0 && (
                     <div className="empty-state" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                         {mode === 'composition'
-                            ? 'PSD を読み込むと、書き出したときの見た目がここに出ます。'
+                            ? 'PSD / 画像を読み込むと、書き出したときの見た目がここに出ます。'
                             : 'パッキング後のテクスチャアトラスがここに出ます。'}
                     </div>
                 )}

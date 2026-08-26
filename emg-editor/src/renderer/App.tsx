@@ -6,13 +6,14 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
 import { findMappingControlledParts } from './services/MappingGenerator';
+import { SourceLoader } from './services/SourceLoader';
 
 function App() {
     const {
-        psdRoot, packedTextureUrl, selectedLayer, layerMeta,
+        psdRoot, atlasUrls, selectedLayer, layerMeta,
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
-        handlePsdLoad, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleSourceAdd, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
@@ -47,18 +48,33 @@ function App() {
     );
 
     const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
+    const openAddPicker = () => document.getElementById('source-add-input')?.click();
 
     return (
         <>
+            {/* 開く: 今の内容を捨てて読み直す */}
             <input
                 type="file"
-                accept=".psd,.kra,.clip"
+                accept={SourceLoader.ACCEPT}
                 style={{ display: 'none' }}
                 id="psd-upload-input"
                 onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handlePsdLoad(file);
                     e.target.value = '';
+                }}
+            />
+            {/* 追加: 今の内容に合流させる。複数選択すると順に取り込む */}
+            <input
+                type="file"
+                accept={SourceLoader.ACCEPT}
+                multiple
+                style={{ display: 'none' }}
+                id="source-add-input"
+                onChange={async (e) => {
+                    const files = [...(e.target.files ?? [])];
+                    e.target.value = '';
+                    for (const f of files) await handleSourceAdd(f);
                 }}
             />
             <MainLayout
@@ -74,12 +90,13 @@ function App() {
                         onPsdUpdate={handlePsdUpdate}
                         onVisibilityAll={handleVisibilityAll}
                         onLoadPsd={openFilePicker}
+                        onAddSource={openAddPicker}
                         onGroupSelected={handleGroupSelected}
                     />
                 }
                 centerPanel={
                     <PreviewPanel
-                        textureUrl={packedTextureUrl}
+                        atlasUrls={atlasUrls}
                         compositionItems={compositionItems}
                         width={psdRoot?.width || 0}
                         height={psdRoot?.height || 0}
@@ -125,6 +142,7 @@ function App() {
                     />
                 }
                 onLoadPsd={openFilePicker}
+                onAddSource={openAddPicker}
             />
             <Toast message={toast} onClose={() => setToast(null)} />
         </>

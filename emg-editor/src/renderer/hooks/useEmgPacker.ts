@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
+import { SourceLoader } from '../services/SourceLoader';
 import { Psd } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
@@ -12,6 +13,52 @@ import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 const normalizeOpacity = (v?: number): number => {
     if (typeof v !== 'number') return 1.0;
     return v > 1 ? v / 255 : v;
+};
+
+/** 木の中で使われている最大のレイヤー ID。取り込み時の採番の起点にする。 */
+const maxLayerId = (layers: PsdLayer[]): number => {
+    let max = 0;
+    const walk = (ls: PsdLayer[]) => {
+        for (const l of ls) {
+            if (typeof l.id === 'number' && l.id > max) max = l.id;
+            if (l.children) walk(l.children);
+        }
+    };
+    walk(layers);
+    return max;
+};
+
+/** 葉レイヤー（画像を持つもの）の数。取り込み結果の表示に使う。 */
+const countLeaves = (layers: PsdLayer[]): number => {
+    let n = 0;
+    const walk = (ls: PsdLayer[]) => {
+        for (const l of ls) {
+            if (l.canvas) n++;
+            if (l.children) walk(l.children);
+        }
+    };
+    walk(layers);
+    return n;
+};
+
+/** 取り込んだ素材をキャンバス上で平行移動する。 */
+const shiftLayers = (layers: PsdLayer[], dx: number, dy: number): void => {
+    for (const l of layers) {
+        if (typeof l.left === 'number') l.left += dx;
+        if (typeof l.top === 'number') l.top += dy;
+        if (typeof l.right === 'number') l.right += dx;
+        if (typeof l.bottom === 'number') l.bottom += dy;
+        if (l.children) shiftLayers(l.children, dx, dy);
+    }
+};
+
+/** partID はファイル全体で一意でなければならない（emg-json-spec.md 6 章）。 */
+const uniqueGroupName = (siblings: PsdLayer[], base: string): string => {
+    const used = new Set(siblings.map(l => l.name).filter(Boolean) as string[]);
+    if (!used.has(base)) return base;
+    let n = 2;
+    while (used.has(`${base}_${n}`)) n++;
+    return `${base}_${n}`;
 };
 
 const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Record<number, LayerMeta> => {
@@ -139,7 +186,7 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
 
 export function useEmgPacker() {
     const [psdRoot, setPsdRoot] = useState<Psd | null>(null);
-    const [packedTextureUrl, setPackedTextureUrl] = useState<string | null>(null);
+    const [atlasUrls, setAtlasUrls] = useState<string[]>([]);
     const [selectedLayer, setSelectedLayer] = useState<PsdLayer | null>(null);
     const [layerMeta, setLayerMeta] = useState<Record<number, LayerMeta>>({});
     const [packResult, setPackResult] = useState<PackResult | null>(null);
@@ -162,9 +209,86 @@ export function useEmgPacker() {
             const root = await FileLoader.load(file);
             const initialMeta = recalculateMeta(root, {});
             setLayerMeta(initialMeta);
+            setPartAnimations({});
+            setPreviewFrame({});
+            setPreviewOff({});
             setPsdRoot(root);
         } catch (e) {
             console.error('Failed to load file:', e);
+            alert(String(e instanceof Error ? e.message : e));
+        }
+    };
+
+    /**
+     * 2 つ目以降のソースを取り込んで、いま開いている木に合流させる。
+     *
+     * 合成は「1 本の木にまとめる」形にする。走査結果がこれまでどおり単一の
+     * packItems 配列になり、**全素材が 1 枚のアトラスに詰められる**（要件 R-1）。
+     * ソースごとに PackResult を持つ実装にはしない。
+     */
+    const handleSourceAdd = async (file: File) => {
+        try {
+            const source = await SourceLoader.load(file);
+            if (source.children.length === 0) {
+                alert(`${file.name} に取り込めるレイヤーがありませんでした。`);
+                return;
+            }
+
+            // 何も開いていなければ通常の読み込みと同じ扱いにする。
+            if (!psdRoot) {
+                const root: Psd = { width: source.width, height: source.height, children: source.children };
+                setLayerMeta(recalculateMeta(root, {}));
+                setPsdRoot(root);
+                setToast({ title: '取り込み', body: `${source.name}（${source.children.length} レイヤー）` });
+                return;
+            }
+
+            // 1. ID を振り直す。PsdLoader.ensureIds は読み込みごとに 1 から数え直すため、
+            //    そのまま混ぜると layerMeta（id がキー）で設定が混線する。
+            let nextId = maxLayerId(psdRoot.children ?? []) + 1;
+            const reid = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => ({
+                ...l,
+                id: nextId++,
+                children: l.children ? reid(l.children) : undefined,
+            }));
+            const incoming = reid(source.children as PsdLayer[]);
+
+            // 2. キャンバスは大きい方に合わせて広げる。既存レイヤーは動かさない
+            //    （動かすと今まで書き出していた座標が変わってしまう）。
+            const canvasW = Math.max(psdRoot.width ?? 0, source.width);
+            const canvasH = Math.max(psdRoot.height ?? 0, source.height);
+
+            // 3. 取り込んだ素材は新しいキャンバスの中央に置く。
+            //    左上に積むと既存の絵と重なって何が入ったのか分からない。
+            const dx = Math.round((canvasW - source.width) / 2);
+            const dy = Math.round((canvasH - source.height) / 2);
+            if (dx !== 0 || dy !== 0) shiftLayers(incoming, dx, dy);
+
+            // 4. ソース 1 つ = グループ 1 つ。グループ名がそのまま partID になる。
+            const group: PsdLayer = {
+                id: nextId++,
+                name: uniqueGroupName(psdRoot.children ?? [], source.name),
+                hidden: false,
+                children: incoming,
+                canvas: undefined,
+            };
+
+            // 前面に積む（ag-psd の children は背面 → 前面）。
+            const newRoot: Psd = {
+                ...psdRoot,
+                width: canvasW,
+                height: canvasH,
+                children: [...(psdRoot.children ?? []), group],
+            };
+
+            setLayerMeta(recalculateMeta(newRoot, layerMeta));
+            setPsdRoot(newRoot);
+            setToast({
+                title: '取り込み',
+                body: `${group.name}（${countLeaves(incoming)} レイヤー）`,
+            });
+        } catch (e) {
+            console.error('Failed to add source:', e);
             alert(String(e instanceof Error ? e.message : e));
         }
     };
@@ -250,16 +374,17 @@ export function useEmgPacker() {
                     console.log(`Packing ${packItems.length} items...`);
                     const res = await TexturePacker.pack(packItems);
                     setPackResult(res);
-                    // プレビューは 1 枚目のみ。分割された場合の 2 枚目以降は表示しない。
-                    setPackedTextureUrl(res.atlases[0]?.canvas.toDataURL() ?? null);
+                    // 分割された場合も全枚数を渡す。1 枚目だけ出していたころは、
+                    // 2 枚目以降に載った素材がプレビューから消えていた。
+                    setAtlasUrls(res.atlases.map(a => a.canvas.toDataURL()));
                 } catch (e) {
                     console.error("Packing failed", e);
                     setPackResult(null);
-                    setPackedTextureUrl(null);
+                    setAtlasUrls([]);
                 }
             } else {
                 setPackResult(null);
-                setPackedTextureUrl(null);
+                setAtlasUrls([]);
             }
         };
         runPack();
@@ -624,10 +749,24 @@ export function useEmgPacker() {
             link.download = 'model.emg';
             link.click();
 
-            setToast({
-                title: 'Export Complete',
-                body: `model.emg (${exportItems.length} layers)`
-            });
+            // 「全素材を 1 枚のテクスチャに詰める」が守られたかを、
+            // ここで必ず利用者に見せる。以前は console.warn だけで、
+            // 分割されても DevTools を開かない限り気づけなかった。
+            const usedPx = exportItems.reduce((n, i) => n + i.packed.width * i.packed.height, 0);
+            const atlasPx = result.atlases.reduce((n, a) => n + a.width * a.height, 0);
+            const occupancy = atlasPx > 0 ? Math.round(100 * usedPx / atlasPx) : 0;
+            const sizes = result.atlases.map(a => `${a.width}×${a.height}`).join(', ');
+
+            setToast(result.atlases.length === 1
+                ? {
+                    title: '書き出しました',
+                    body: `model.emg — テクスチャ 1 枚 ${sizes}（占有率 ${occupancy}%）/ ${exportItems.length} レイヤー`,
+                }
+                : {
+                    title: `書き出しました（テクスチャが ${result.atlases.length} 枚に分割）`,
+                    body: `8192px に収まらないため分割しました: ${sizes}。`
+                        + `不要なパーツを「使わない」にする、素材を縮小する、などで 1 枚に収まります。`,
+                });
         } catch (e) {
             console.error('Export failed:', e);
             alert('Export failed: ' + e);
@@ -734,7 +873,7 @@ export function useEmgPacker() {
 
     return {
         psdRoot,
-        packedTextureUrl,
+        atlasUrls,
         selectedLayer,
         layerMeta,
         compositionItems,
@@ -746,6 +885,7 @@ export function useEmgPacker() {
         previewOff,
         partAnimations,
         handlePsdLoad,
+        handleSourceAdd,
         handlePsdUpdate,
         handleLayerVisibilityChange,
         handleExport,

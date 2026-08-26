@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Layer, Psd } from 'ag-psd';
-import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FolderPlus, Group } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FilePlus, FolderPlus, Group } from 'lucide-react';
 import type { LayerMeta } from '../types';
 
 // Module-level variable for reliable drag tracking in Electron
@@ -16,6 +16,7 @@ interface LayerTreeProps {
     selectedLayer?: Layer | null;
     onVisibilityAll?: (visible: boolean) => void;
     onLoadPsd?: () => void;
+    onAddSource?: () => void;
     onGroupSelected?: () => void;
 }
 
@@ -29,6 +30,7 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     selectedLayer,
     onVisibilityAll,
     onLoadPsd,
+    onAddSource,
     onGroupSelected
 }) => {
     if (!psd || !psd.children) return (
@@ -40,7 +42,8 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
             </button>
             <div style={{ fontSize: '11px', color: '#5f5f64', lineHeight: 1.7 }}>
                 トップレベルのグループが 1 パーツになります。<br />
-                「@」で始まるグループは 1 つの差分としてまとまります。
+                「@」で始まるグループは 1 つの差分としてまとまります。<br />
+                読み込んだ後、PSD や画像を <b>追加</b> して 1 つの .emg にまとめられます。
             </div>
         </div>
     );
@@ -159,6 +162,13 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     return (
         <div className="layer-tree" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #3e3e42', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button
+                    className="btn btn-sm"
+                    onClick={() => onAddSource?.()}
+                    title="PSD / KRA / 画像を今の内容に追加する（1 枚のテクスチャにまとめて書き出されます）"
+                >
+                    <FilePlus size={13} /> 追加
+                </button>
                 <button
                     className="btn btn-sm"
                     onClick={handleGroupSelected}

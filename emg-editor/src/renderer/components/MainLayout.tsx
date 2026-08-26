@@ -1,11 +1,12 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FileUp } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
     centerPanel?: React.ReactNode;
     rightPanel?: React.ReactNode;
     onLoadPsd?: () => void;
+    onAddSource?: () => void;
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
 }
@@ -18,7 +19,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, hasFile }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, hasFile }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -31,11 +32,21 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                 <span>レイヤー</span>
                             </div>
                             {/* 読み込み済みなら、これはもう主役ではない。青は Export 側に譲る。 */}
-                            {onLoadPsd && hasFile && (
-                                <button className="btn btn-sm btn-ghost" onClick={onLoadPsd} title="別の PSD / KRA を開く">
-                                    <FileUp size={13} />
-                                    開く
-                                </button>
+                            {hasFile && (
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    {onAddSource && (
+                                        <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像を追加する">
+                                            <FilePlus size={13} />
+                                            追加
+                                        </button>
+                                    )}
+                                    {onLoadPsd && (
+                                        <button className="btn btn-sm btn-ghost" onClick={onLoadPsd} title="別のファイルを開き直す（今の内容は破棄）">
+                                            <FileUp size={13} />
+                                            開く
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                         <div className="panel-body no-pad">
