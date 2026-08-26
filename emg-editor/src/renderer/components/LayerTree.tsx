@@ -38,14 +38,25 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     if (!psd || !psd.children) return (
         <div className="empty-state">
             <div style={{ fontSize: '40px', lineHeight: 1 }}>📂</div>
-            <div style={{ color: '#a5a5aa', fontSize: '13px' }}>PSD / KRA を読み込んで始めます</div>
+            <div style={{ color: '#a5a5aa', fontSize: '13px' }}>
+                素材を読み込んで始めます<br />
+                <span style={{ fontSize: '11px', color: '#7d7d82' }}>ドラッグ&amp;ドロップでも追加できます</span>
+            </div>
             <button className="btn btn-primary" onClick={onLoadPsd} style={{ width: '100%', maxWidth: '220px' }}>
-                <FolderPlus size={16} /> PSD / KRA を開く
+                <FolderPlus size={16} /> ファイルを開く
             </button>
-            <div style={{ fontSize: '11px', color: '#5f5f64', lineHeight: 1.7 }}>
-                トップレベルのグループが 1 パーツになります。<br />
-                「@」で始まるグループは 1 つの差分としてまとまります。<br />
-                読み込んだ後、PSD や画像を <b>追加</b> して 1 つの .emg にまとめられます。
+            <button className="btn" onClick={() => onAddSheet?.()} style={{ width: '100%', maxWidth: '220px' }}>
+                <Grid3x3 size={14} /> スプライトシートから
+            </button>
+            <div style={{ fontSize: '11px', color: '#5f5f64', lineHeight: 1.8, textAlign: 'left' }}>
+                <b style={{ color: '#8a8a8e' }}>読み込めるもの</b><br />
+                PSD / KRA … トップレベルのグループが 1 パーツ<br />
+                画像（PNG・JPEG・WebP ほか）… 1 枚が 1 パーツ<br />
+                GIF / WebP / APNG … コマがそのまま差分＋アニメーション<br />
+                スプライトシート … 格子を指定して切り出し<br />
+                <br />
+                いずれも <b>1 枚のテクスチャ</b>にまとめて書き出されます。<br />
+                「@」で始まるグループは 1 つの差分としてまとまります。
             </div>
         </div>
     );
@@ -163,21 +174,25 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
 
     return (
         <div className="layer-tree" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #3e3e42', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {/* 素材の追加はツリーの編集操作とは別物なので、行を分けて目立たせる。
+                同じ行に 4 つ並べていたときは埋もれて気づかれなかった。 */}
+            <div className="add-bar">
                 <button
-                    className="btn btn-sm"
+                    className="btn btn-add"
                     onClick={() => onAddSource?.()}
-                    title="PSD / KRA / 画像を今の内容に追加する（1 枚のテクスチャにまとめて書き出されます）"
+                    title="PSD / KRA / 画像 / GIF を今の内容に追加する（1 枚のテクスチャにまとめて書き出されます）"
                 >
-                    <FilePlus size={13} /> 追加
+                    <FilePlus size={14} /> 素材を追加
                 </button>
                 <button
-                    className="btn btn-sm"
+                    className="btn"
                     onClick={() => onAddSheet?.()}
                     title="スプライトシートを格子で切り出して追加する"
                 >
-                    <Grid3x3 size={13} /> シート
+                    <Grid3x3 size={14} /> シート
                 </button>
+            </div>
+            <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #3e3e42', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button
                     className="btn btn-sm"
                     onClick={handleGroupSelected}

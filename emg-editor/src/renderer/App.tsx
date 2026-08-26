@@ -5,6 +5,7 @@ import { LayerTree } from './components/LayerTree';
 import { PreviewPanel } from './components/PreviewPanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
+import { FileDropOverlay } from './components/FileDropOverlay';
 import { findMappingControlledParts } from './services/MappingGenerator';
 import { SourceLoader } from './services/SourceLoader';
 import { SpriteSheetLoader } from './services/SpriteSheetLoader';
@@ -52,6 +53,14 @@ function App() {
     // スプライトシートは格子の指定が要るので、読み込んだ後に確認画面を挟む。
     const [sheetFile, setSheetFile] = useState<File | null>(null);
 
+    /**
+     * 複数ファイルは 1 つずつ順に取り込む。まとめて並行に走らせると、
+     * 合流処理が同じ木を同時に書き換えて取りこぼす。
+     */
+    const addFiles = async (files: File[]) => {
+        for (const f of files) await handleSourceAdd(f);
+    };
+
     const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
     const openAddPicker = () => document.getElementById('source-add-input')?.click();
     const openSheetPicker = () => document.getElementById('sheet-add-input')?.click();
@@ -77,10 +86,10 @@ function App() {
                 multiple
                 style={{ display: 'none' }}
                 id="source-add-input"
-                onChange={async (e) => {
+                onChange={(e) => {
                     const files = [...(e.target.files ?? [])];
                     e.target.value = '';
-                    for (const f of files) await handleSourceAdd(f);
+                    void addFiles(files);
                 }}
             />
             {/* スプライトシート: 画像なので拡張子からは判別できない。専用の入口にする */}
@@ -176,6 +185,7 @@ function App() {
                     }}
                 />
             )}
+            <FileDropOverlay onFiles={files => void addFiles(files)} />
             <Toast message={toast} onClose={() => setToast(null)} />
         </>
     );

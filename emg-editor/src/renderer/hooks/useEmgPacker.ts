@@ -336,20 +336,26 @@ export function useEmgPacker() {
             if (dx !== 0 || dy !== 0) shiftLayers(incoming, dx, dy);
 
             // 4. ソース 1 つ = グループ 1 つ。グループ名がそのまま partID になる。
-            const group: PsdLayer = {
+            //
+            // ただし何も開いていないところに PSD / KRA を入れたときは包まない。
+            // 包むと文書自身のトップレベルのグループがパーツの起点でなくなり、
+            // 「開く」で読んだ場合と構造が変わってしまう（ルート直下の単独レイヤーが
+            // 独立したパーツにならず、ファイル名のパーツに吸収される）。
+            const wrap = (base.children?.length ?? 0) > 0 || source.kind !== 'document';
+            const group: PsdLayer | null = wrap ? {
                 id: nextId++,
                 name: uniqueGroupName(base.children ?? [], source.name),
                 hidden: false,
                 children: incoming,
                 canvas: undefined,
-            };
+            } : null;
 
             // 前面に積む（ag-psd の children は背面 → 前面）。
             const newRoot: Psd = {
                 ...base,
                 width: canvasW,
                 height: canvasH,
-                children: [...(base.children ?? []), group],
+                children: group ? [...(base.children ?? []), group] : incoming,
             };
 
             applyTree(newRoot, recalculateMeta(newRoot, layerMetaRef.current));
@@ -357,7 +363,7 @@ export function useEmgPacker() {
             // アニメーションなら、そのまま再生できる状態にしておく。
             // フレームを取り込んだだけでは静止した差分パーツにしかならず、
             // 利用者が手で再生順を組み直すことになる。
-            if (source.kind === 'animation' && source.frameDurations) {
+            if (source.kind === 'animation' && source.frameDurations && group) {
                 const frames = incoming.map(l => l.name ?? '');
                 setPartAnimations(prev => ({
                     ...prev,
@@ -371,13 +377,14 @@ export function useEmgPacker() {
 
             // フレーム数が多いとアトラスを圧迫し、「1 枚に収める」が崩れる。
             // 書き出してから気づくのでは遅いので、取り込んだ時点で伝える。
+            const label = group?.name ?? source.name;
             setToast(source.kind === 'animation' && incoming.length > FRAME_COUNT_WARNING
                 ? {
                     title: `取り込み（フレームが多めです）`,
-                    body: `${group.name} — ${frameNote}。テクスチャ 1 枚に収まらない場合があります。`
+                    body: `${label} — ${frameNote}。テクスチャ 1 枚に収まらない場合があります。`
                         + `書き出し後の枚数を確認してください。`,
                 }
-                : { title: '取り込み', body: `${group.name}（${frameNote}）` });
+                : { title: '取り込み', body: `${label}（${frameNote}）` });
     };
 
     /** スプライトシートの切り出し結果を取り込む（格子と fps はダイアログで決める）。 */

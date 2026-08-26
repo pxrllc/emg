@@ -36,9 +36,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                             {hasFile && (
                                 <div style={{ display: 'flex', gap: '4px' }}>
                                     {onAddSource && (
-                                        <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像を追加する">
+                                        <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像 / GIF を追加する（ドラッグ&ドロップでも可）">
                                             <FilePlus size={13} />
-                                            追加
+                                            素材を追加
                                         </button>
                                     )}
                                     {onAddSheet && (
