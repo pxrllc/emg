@@ -17,6 +17,8 @@ function App() {
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
         mapping, setMapping,
+        presets, previewDelta, handlePresetSave, handlePresetApply,
+        handlePresetUpdate, handlePresetRename, handlePresetDelete,
         handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
@@ -141,6 +143,13 @@ function App() {
                         mapping={mapping}
                         onMappingChange={patch => setMapping(prev => ({ ...prev, ...patch }))}
                         unassigned={unassigned}
+                        presets={presets}
+                        previewDelta={previewDelta}
+                        onPresetSave={handlePresetSave}
+                        onPresetApply={handlePresetApply}
+                        onPresetUpdate={handlePresetUpdate}
+                        onPresetRename={handlePresetRename}
+                        onPresetDelete={handlePresetDelete}
                         parts={parts}
                         selectedPartId={selectedPartId}
                         previewFrame={previewFrame}

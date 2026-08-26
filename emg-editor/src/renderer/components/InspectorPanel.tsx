@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Download, Eye, FileJson, Layers, Sliders } from 'lucide-react';
+import { Bookmark, Download, Eye, FileJson, Layers, Sliders } from 'lucide-react';
 import { JsonViewer } from './JsonViewer';
 import { PartsPanel } from './PartsPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { MappingPanel } from './MappingPanel';
+import { PresetsPanel } from './PresetsPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
-import type { AvatarMapping, LayerMeta, PartAnimation } from '../types';
+import type { AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
 
-type Tab = 'parts' | 'mapping' | 'layer' | 'json';
+type Tab = 'parts' | 'mapping' | 'presets' | 'layer' | 'json';
 
 interface InspectorPanelProps {
     hasFile: boolean;
@@ -45,6 +46,14 @@ interface InspectorPanelProps {
     /** 未割り当てのスロット数。0 でなければ書き出し前に知らせる。 */
     unassigned: { blink: number; lipSync: number };
 
+    presets: AvatarPreset[];
+    previewDelta: Pick<AvatarPreset, 'parts' | 'toggles'>;
+    onPresetSave: (label: string) => void;
+    onPresetApply: (presetID: string) => void;
+    onPresetUpdate: (presetID: string) => void;
+    onPresetRename: (presetID: string, label: string) => void;
+    onPresetDelete: (presetID: string) => void;
+
     layerName?: string;
     layerId: number | null;
     meta?: LayerMeta;
@@ -59,6 +68,7 @@ interface InspectorPanelProps {
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'parts', label: 'パーツ', icon: <Layers size={13} /> },
     { id: 'mapping', label: '目と口', icon: <Eye size={13} /> },
+    { id: 'presets', label: '状態', icon: <Bookmark size={13} /> },
     { id: 'layer', label: 'レイヤー', icon: <Sliders size={13} /> },
     { id: 'json', label: 'JSON', icon: <FileJson size={13} /> },
 ];
@@ -133,6 +143,18 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         mapping={props.mapping}
                         onChange={props.onMappingChange}
                         onPreviewFrame={props.onPreviewFrame}
+                    />
+                )}
+                {activeTab === 'presets' && (
+                    <PresetsPanel
+                        presets={props.presets}
+                        previewDelta={props.previewDelta}
+                        hasFile={props.hasFile}
+                        onSave={props.onPresetSave}
+                        onApply={props.onPresetApply}
+                        onUpdate={props.onPresetUpdate}
+                        onRename={props.onPresetRename}
+                        onDelete={props.onPresetDelete}
                     />
                 )}
                 {activeTab === 'layer' && (

@@ -6,7 +6,7 @@ import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import { defaultPartAnimation, emptyMapping, type AvatarMapping, type LayerMeta, type PartAnimation } from '../types';
+import { defaultPartAnimation, emptyMapping, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 
@@ -294,6 +294,9 @@ export function useEmgPacker() {
     // 空のまま書き出すと消費側で目も口も動かないため、書き出し前に未割り当てを知らせる。
     const [mapping, setMapping] = useState<AvatarMapping>(emptyMapping);
 
+    // 状態の組（presets[]）。差分として持つ（types.ts の AvatarPreset を参照）。
+    const [presets, setPresets] = useState<AvatarPreset[]>([]);
+
     const handlePsdLoad = async (file: File) => {
         try {
             const root = await FileLoader.load(file);
@@ -301,6 +304,7 @@ export function useEmgPacker() {
             setPreviewFrame({});
             setPreviewOff({});
             setMapping(emptyMapping());
+            setPresets([]);
             applyTree(root, recalculateMeta(root, {}));
         } catch (e) {
             // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
@@ -764,6 +768,92 @@ export function useEmgPacker() {
         });
     };
 
+    // ---- 状態の組（presets[]） ---------------------------------------------
+    // 作り方は「プレビューで見た目を作る → 保存」。エディタは既にプリセットが
+    // 必要とする状態（previewFrame / previewOff）を持っているので、
+    // フォームに partID を打ち込ませる UI にはしない。
+
+    /**
+     * 今のプレビュー状態を、**既定との差分**として書き出す。
+     *
+     * 全パーツを列挙しないのは仕様 §5.2 のため。現れない partID の状態は
+     * 変更されないので、差分にしておくとプリセット同士を重ねられる
+     * （表情と衣装が別々のパーツに触れている限り衝突しない）。
+     */
+    const capturePreviewAsDelta = (): Pick<AvatarPreset, 'parts' | 'toggles'> => {
+        const partsOut: Record<string, string> = {};
+        const togglesOut: Record<string, boolean> = {};
+
+        for (const part of parts) {
+            if (part.exportedCount === 0) continue;   // 「使わない」パーツは対象外
+
+            const defaultOff = !part.defaultVisible;
+            const off = previewOff[part.partId] ?? defaultOff;
+            if (off !== defaultOff) togglesOut[part.partId] = !off;
+
+            // 伏せているパーツのフレームは記録しない（表示していないので意味が無い）
+            if (part.type === 'switch' && !off) {
+                const frame = previewFrame[part.partId] ?? part.defaultFrameId;
+                if (frame && frame !== part.defaultFrameId) partsOut[part.partId] = frame;
+            }
+        }
+        return { parts: partsOut, toggles: togglesOut };
+    };
+
+    /** 保存前に「何が記録されるか」を見せるため、UI からも同じ計算を使う。 */
+    const previewDelta = useMemo(capturePreviewAsDelta, [parts, previewFrame, previewOff]);
+
+    const handlePresetSave = (label: string, excluded: Set<string> = new Set()) => {
+        const name = label.trim();
+        if (!name) return;
+
+        // presetID はファイル内で一意にする。外部から呼ぶキーになるため。
+        let presetID = name;
+        let n = 2;
+        while (presets.some(p => p.presetID === presetID)) presetID = `${name}_${n++}`;
+
+        const delta = capturePreviewAsDelta();
+        // 記録から外された項目を落とす。プレビューは前のプリセットの状態を
+        // 引きずるので、これが無いと「怒り眉」に口の変更まで混ざる。
+        for (const key of excluded) {
+            const partId = key.slice(2);
+            if (key.startsWith('p:')) delete delta.parts[partId];
+            else delete delta.toggles[partId];
+        }
+
+        setPresets(prev => [...prev, { presetID, label: name, ...delta }]);
+        setToast({ title: '保存しました', body: name });
+    };
+
+    /** プレビューをそのプリセットの状態にする。差分なので、触れないパーツは今のまま。 */
+    const handlePresetApply = (presetID: string) => {
+        const preset = presets.find(p => p.presetID === presetID);
+        if (!preset) return;
+        setPreviewFrame(prev => ({ ...prev, ...preset.parts }));
+        setPreviewOff(prev => {
+            const next = { ...prev };
+            for (const [partId, visible] of Object.entries(preset.toggles)) next[partId] = !visible;
+            return next;
+        });
+    };
+
+    /** 今のプレビュー状態で上書きする。 */
+    const handlePresetUpdate = (presetID: string) => {
+        const delta = capturePreviewAsDelta();
+        setPresets(prev => prev.map(p => p.presetID === presetID ? { ...p, ...delta } : p));
+        setToast({ title: '更新しました', body: presetID });
+    };
+
+    const handlePresetRename = (presetID: string, label: string) => {
+        const name = label.trim();
+        if (!name) return;
+        setPresets(prev => prev.map(p => p.presetID === presetID ? { ...p, label: name } : p));
+    };
+
+    const handlePresetDelete = (presetID: string) => {
+        setPresets(prev => prev.filter(p => p.presetID !== presetID));
+    };
+
     /** v0.5.0 §4.3: プレビューを「どれも表示しない」にする。 */
     const handlePreviewNone = (partId: string) => {
         setPreviewOff(prev => ({ ...prev, [partId]: true }));
@@ -847,8 +937,8 @@ export function useEmgPacker() {
             }
         });
 
-        return EmgGenerator.createData(packResult, exportItems, psdRoot.width, psdRoot.height, partAnimations);
-    }, [packResult, psdRoot, layerMeta, partAnimations]);
+        return EmgGenerator.createData(packResult, exportItems, psdRoot.width, psdRoot.height, partAnimations, presets);
+    }, [packResult, psdRoot, layerMeta, partAnimations, presets]);
 
     const handleExport = async () => {
         if (!psdRoot) return;
@@ -917,7 +1007,8 @@ export function useEmgPacker() {
                 psdRoot.height,
                 partAnimations,
                 (phase, percent) => setExportProgress({ phase, percent }),
-                mapping
+                mapping,
+                presets
             );
 
             const link = document.createElement('a');
@@ -1064,6 +1155,13 @@ export function useEmgPacker() {
         partAnimations,
         mapping,
         setMapping,
+        presets,
+        previewDelta,
+        handlePresetSave,
+        handlePresetApply,
+        handlePresetUpdate,
+        handlePresetRename,
+        handlePresetDelete,
         handlePsdLoad,
         handleSourceAdd,
         handleSheetImport,

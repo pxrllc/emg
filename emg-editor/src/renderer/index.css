@@ -481,6 +481,33 @@ body,
   padding: 6px 8px;
 }
 
+/* ---- プリセットの記録内容 ------------------------------------------------- */
+.delta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 6px;
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #cfd8e8;
+}
+
+.delta-chip.on  { border-color: rgba(34, 197, 94, 0.4);  background: rgba(34, 197, 94, 0.1); }
+.delta-chip.off { border-color: rgba(107, 114, 128, 0.4); background: rgba(107, 114, 128, 0.12); color: #a5a5aa; }
+.delta-arrow { color: #7d7d82; }
+
+button.delta-chip { cursor: pointer; font: inherit; font-family: var(--mono, monospace); font-size: 11px; }
+button.delta-chip:hover { border-color: #2563eb; }
+.delta-chip.excluded {
+  opacity: 0.4;
+  text-decoration: line-through;
+  border-style: dashed;
+}
+
 /* ---- Action bar (bottom of right panel) ---------------------------------- */
 .action-bar {
   border-top: 1px solid var(--border-color);

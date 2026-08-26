@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import type { AvatarMapping, LayerMeta, PartAnimation } from '../types';
+import type { AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
 import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
@@ -14,6 +14,16 @@ export interface EmgData {
     textures: EmgTexture[];
     parts: EmgPart[];
     sprites: EmgSprite[];
+    /** v0.5.0 §5。複数パーツの状態をまとめて名前で呼ぶ。空なら出力しない。 */
+    presets?: EmgPreset[];
+}
+
+/** v0.5.0 §5。 */
+export interface EmgPreset {
+    presetID: string;
+    label?: string;
+    parts?: Record<string, string>;
+    toggles?: Record<string, boolean>;
 }
 
 export interface EmgTexture {
@@ -168,12 +178,53 @@ export class EmgGenerator {
         return sprites;
     }
 
+    /**
+     * 編集状態を `presets[]` に変換する。
+     *
+     * 参照先が実在するものだけを通す。仕様 0.5.2 §10.6 では読み込み側が
+     * 欠落項目を無視することになっているが、**生成側は書いてはならない**ので
+     * ここで落とす（`tools/emg-validate.js` も同じものを検査する）。
+     */
+    private static buildPresets(
+        parts: EmgPart[], presets: AvatarPreset[]
+    ): EmgPreset[] {
+        const byId = new Map(parts.map(p => [p.partID, p]));
+        const out: EmgPreset[] = [];
+
+        for (const src of presets) {
+            const partEntries: Record<string, string> = {};
+            for (const [partID, frameID] of Object.entries(src.parts)) {
+                const part = byId.get(partID);
+                if (!part || part.type !== 'switch') continue;
+                if (!part.layers.some(l => (l.frameName ?? l.textureID) === frameID)) continue;
+                partEntries[partID] = frameID;
+            }
+
+            const toggleEntries: Record<string, boolean> = {};
+            for (const [partID, visible] of Object.entries(src.toggles)) {
+                if (byId.has(partID)) toggleEntries[partID] = visible;
+            }
+
+            // 中身が空になったプリセットは書き出さない（適用しても何も起きない）。
+            if (Object.keys(partEntries).length === 0 && Object.keys(toggleEntries).length === 0) continue;
+
+            out.push({
+                presetID: src.presetID,
+                ...(src.label ? { label: src.label } : {}),
+                ...(Object.keys(partEntries).length > 0 ? { parts: partEntries } : {}),
+                ...(Object.keys(toggleEntries).length > 0 ? { toggles: toggleEntries } : {}),
+            });
+        }
+        return out;
+    }
+
     static createData(
         packResult: PackResult,
         items: ExportItem[],
         psdWidth: number,
         psdHeight: number,
-        animations: Record<string, PartAnimation> = {}
+        animations: Record<string, PartAnimation> = {},
+        presets: AvatarPreset[] = []
     ): EmgData {
         const partsMap = new Map<string, EmgPart>();
 
@@ -373,6 +424,8 @@ export class EmgGenerator {
         // 出続ける（= 誤った絵）ため。static のみの場合は宣言してはならない。
         const hasSwitchNone = emgParts.some(p => p.type === 'switch' && p.defaultVisible === false);
 
+        const builtPresets = EmgGenerator.buildPresets(emgParts, presets);
+
         const requiredExtensions = [
             ...(hasMultiLayerFrame ? ['EMG_frame_name'] : []),
             ...(hasSwitchNone ? ['EMG_switch_none'] : []),
@@ -389,7 +442,8 @@ export class EmgGenerator {
                 height: a.height
             })),
             parts: emgParts,
-            sprites: EmgGenerator.buildSprites(emgParts, animations)
+            sprites: EmgGenerator.buildSprites(emgParts, animations),
+            ...(builtPresets.length > 0 ? { presets: builtPresets } : {})
         };
     }
 
@@ -400,7 +454,8 @@ export class EmgGenerator {
         psdHeight: number,
         animations: Record<string, PartAnimation> = {},
         onProgress?: ExportProgressCallback,
-        mappingState?: AvatarMapping
+        mappingState?: AvatarMapping,
+        presets: AvatarPreset[] = []
     ): Promise<Blob> {
         const zip = new JSZip();
         const report = (phase: string, percent: number) => onProgress?.(phase, percent);
@@ -427,7 +482,7 @@ export class EmgGenerator {
 
         // 2. Generate JSON
         report('定義を生成中', 62);
-        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations);
+        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations, presets);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
 
         // 3. mapping.json（任意）。

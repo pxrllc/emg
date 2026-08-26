@@ -65,6 +65,26 @@ export interface PartAnimation {
 }
 
 /**
+ * 状態の組（`presets[]`）の編集状態。
+ *
+ * **差分として記録します。** 仕様 0.5 §5.2 が「プリセットに現れない partID の
+ * 状態は変更しない」と定めているため、既定と違うものだけを持ちます。
+ * 全パーツを列挙すると、
+ *   - プリセット同士を重ねられなくなる（表情と衣装が衝突する）
+ *   - パーツを 1 つ足すたびに全プリセットの意味が変わる
+ */
+export interface AvatarPreset {
+    /** 参照キー。ファイル内で一意。 */
+    presetID: string;
+    /** UI に出す名前。 */
+    label: string;
+    /** switch パーツ → フレーム識別子。 */
+    parts: Record<string, string>;
+    /** パーツ → 表示するか。 */
+    toggles: Record<string, boolean>;
+}
+
+/**
  * `mapping.json` の編集状態。
  *
  * `data.json` が構造を定めるのに対し、`mapping.json` は意味を与える —
