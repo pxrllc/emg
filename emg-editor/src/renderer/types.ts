@@ -18,6 +18,18 @@ export interface LayerMeta {
     visible: boolean;
     opacity: number;    // 0.0 - 1.0
     blendMode: string;  // 'normal' | 'multiply' | 'screen' | etc.
+    /**
+     * 明示的な `textureZIndex`。不在なら**ツリーの走査順**から決める。
+     *
+     * PSD / 画像 / GIF / シートから作った場合は不在で、今までどおり走査順が z になる。
+     * `.emg` を読み込んだ場合だけ、ファイルの値をここに持つ。
+     *
+     * これが要るのは、`.emg` の z が**パーツをまたいで入れ子にならないことがある**ため。
+     * 仕様 0.5 の `frameName` の例がまさにそれで（上着 z=20 / 体 z=10 / スカート z=5）、
+     * z が非連続な組を扱えることがあの機構の存在理由になっている。
+     * ツリーはパーツごとの塊なので、走査順からはこの並びを再現できない。
+     */
+    zIndex?: number;
 }
 
 /**
@@ -50,6 +62,54 @@ export interface PartAnimation {
     triggerType: 'auto_loop' | 'random_interval' | 'external';
     intervalMin: number;
     intervalMax: number;
+}
+
+/**
+ * `mapping.json` の編集状態。
+ *
+ * `data.json` が構造を定めるのに対し、`mapping.json` は意味を与える —
+ * 「どのパーツが目か」「どのフレームが閉じ目か」。存在しなくても `.emg` は有効。
+ *
+ * 値が空文字列のものは**未割り当て**。書き出し前に利用者へ知らせる。
+ * 埋まっていない mapping を書き出すと、まばたきも口パクも無反応になる。
+ */
+export interface AvatarMapping {
+    /** 識別用のラベル。解決には使わない（仕様 0.5.2 §10.10）。 */
+    avatarId: string;
+    /** まばたきを担当する partID。空なら blink を出力しない。 */
+    blinkPartId: string;
+    blink: { open: string; half: string; closed: string };
+    /** 口パクを担当する partID。空なら lipSync を出力しない。 */
+    lipSyncPartId: string;
+    lipSync: { a: string; i: string; u: string; e: string; o: string; n: string; open: string };
+}
+
+/** `blink` の割り当て先。キーは仕様で固定されており、利用者は変更できない。 */
+export const BLINK_SLOTS = [
+    { key: 'open', label: '開' },
+    { key: 'half', label: '半開' },
+    { key: 'closed', label: '閉' },
+] as const;
+
+/** `lipSync` の割り当て先。同じくキーは固定。 */
+export const LIPSYNC_SLOTS = [
+    { key: 'a', label: 'あ' },
+    { key: 'i', label: 'い' },
+    { key: 'u', label: 'う' },
+    { key: 'e', label: 'え' },
+    { key: 'o', label: 'お' },
+    { key: 'n', label: 'ん（閉）' },
+    { key: 'open', label: '開（任意）' },
+] as const;
+
+export function emptyMapping(): AvatarMapping {
+    return {
+        avatarId: 'avatar',
+        blinkPartId: '',
+        blink: { open: '', half: '', closed: '' },
+        lipSyncPartId: '',
+        lipSync: { a: '', i: '', u: '', e: '', o: '', n: '', open: '' },
+    };
 }
 
 /** パーツにアニメーションを付けるときの初期値。 */

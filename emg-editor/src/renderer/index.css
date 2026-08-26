@@ -416,6 +416,71 @@ body,
   color: #7d7d82;
 }
 
+/* ---- mapping.json の編集面 ------------------------------------------------ */
+.map-block {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: #232326;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e4e4e6;
+}
+
+.slot-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* 未割り当てはひと目で分かるようにする。空のまま書き出すと動かないため。 */
+.slot-label {
+  min-width: 52px;
+  font-size: 11px;
+  padding-top: 5px;
+  color: #a5a5aa;
+}
+
+.slot-label.missing {
+  color: #f08a76;
+}
+
+.slot-label.missing::after {
+  content: ' ●';
+  font-size: 8px;
+}
+
+.slot-label.optional {
+  color: #6b7480;
+}
+
+.fld-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: #8a8a8e;
+}
+
+/* 書き出しバーの警告。無効化はしない（未割り当てでも書き出せてよい）。 */
+.action-warn {
+  font-size: 11px;
+  line-height: 1.6;
+  color: #f0b37e;
+  background: rgba(240, 179, 126, 0.1);
+  border: 1px solid rgba(240, 179, 126, 0.3);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
 /* ---- Action bar (bottom of right panel) ---------------------------------- */
 .action-bar {
   border-top: 1px solid var(--border-color);

@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { Download, FileJson, Layers, Sliders } from 'lucide-react';
+import { Download, Eye, FileJson, Layers, Sliders } from 'lucide-react';
 import { JsonViewer } from './JsonViewer';
 import { PartsPanel } from './PartsPanel';
 import { PropertiesPanel } from './PropertiesPanel';
+import { MappingPanel } from './MappingPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
-import type { LayerMeta, PartAnimation } from '../types';
+import type { AvatarMapping, LayerMeta, PartAnimation } from '../types';
 
-type Tab = 'parts' | 'layer' | 'json';
+type Tab = 'parts' | 'mapping' | 'layer' | 'json';
 
 interface InspectorPanelProps {
     hasFile: boolean;
@@ -39,6 +40,11 @@ interface InspectorPanelProps {
     onAnimationRemoveFrame: (partId: string, index: number) => void;
     onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
 
+    mapping: AvatarMapping;
+    onMappingChange: (patch: Partial<AvatarMapping>) => void;
+    /** 未割り当てのスロット数。0 でなければ書き出し前に知らせる。 */
+    unassigned: { blink: number; lipSync: number };
+
     layerName?: string;
     layerId: number | null;
     meta?: LayerMeta;
@@ -52,6 +58,7 @@ interface InspectorPanelProps {
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'parts', label: 'パーツ', icon: <Layers size={13} /> },
+    { id: 'mapping', label: '目と口', icon: <Eye size={13} /> },
     { id: 'layer', label: 'レイヤー', icon: <Sliders size={13} /> },
     { id: 'json', label: 'JSON', icon: <FileJson size={13} /> },
 ];
@@ -120,6 +127,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onAnimationDurationChange={props.onAnimationDurationChange}
                     />
                 )}
+                {activeTab === 'mapping' && (
+                    <MappingPanel
+                        parts={props.parts}
+                        mapping={props.mapping}
+                        onChange={props.onMappingChange}
+                        onPreviewFrame={props.onPreviewFrame}
+                    />
+                )}
                 {activeTab === 'layer' && (
                     <PropertiesPanel
                         layerName={props.layerName}
@@ -144,6 +159,15 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                     <Download size={15} />
                     {props.exportProgress ? '書き出し中…' : '.emg を書き出す'}
                 </button>
+                {!props.exportProgress && props.hasFile
+                    && (props.unassigned.blink + props.unassigned.lipSync) > 0 && (
+                    <div className="action-warn">
+                        未割り当て:
+                        {props.unassigned.blink > 0 && ` まばたき ${props.unassigned.blink}`}
+                        {props.unassigned.lipSync > 0 && ` 口パク ${props.unassigned.lipSync}`}
+                        {' '}— このまま書き出すと動きません
+                    </div>
+                )}
                 {props.exportProgress ? (
                     <>
                         <div className="progress-track">

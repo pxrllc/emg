@@ -1,9 +1,9 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import type { LayerMeta, PartAnimation } from '../types';
+import type { AvatarMapping, LayerMeta, PartAnimation } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
-import { findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
+import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
 
 export interface EmgData {
     version: string;
@@ -399,7 +399,8 @@ export class EmgGenerator {
         psdWidth: number,
         psdHeight: number,
         animations: Record<string, PartAnimation> = {},
-        onProgress?: ExportProgressCallback
+        onProgress?: ExportProgressCallback,
+        mappingState?: AvatarMapping
     ): Promise<Blob> {
         const zip = new JSZip();
         const report = (phase: string, percent: number) => onProgress?.(phase, percent);
@@ -429,8 +430,13 @@ export class EmgGenerator {
         const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
 
-        // 3. Generate mapping.json draft (optional, only when blink/lipSync candidates are found)
-        const mapping = generateDraftMapping(emgData);
+        // 3. mapping.json（任意）。
+        //    利用者が割り当てを持っていればそれを書き、無ければ従来どおり
+        //    キーワード推測のドラフトを出す。推測は初期値のためのものなので、
+        //    割り当てがある限り推測結果で上書きしない。
+        const mapping = mappingState
+            ? buildMapping(emgData, mappingState)
+            : generateDraftMapping(emgData);
         if (mapping) {
             zip.file('mapping.json', JSON.stringify(mapping, null, 2));
         }

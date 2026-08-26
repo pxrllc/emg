@@ -1,4 +1,5 @@
 import type { EmgData, EmgPart } from './EmgGenerator';
+import type { AvatarMapping } from '../types';
 
 export interface EmgSemanticMapping {
     avatarId: string;
@@ -94,4 +95,88 @@ export function generateDraftMapping(emgData: EmgData): EmgSemanticMapping | nul
             default: {}
         }
     };
+}
+
+/** フレーム識別子。`frameName` があればそれ、無ければ `textureID`（0.5 §1.1）。 */
+const frameId = (l: { frameName?: string; textureID: string }) => l.frameName ?? l.textureID;
+
+/**
+ * 編集状態から `mapping.json` を組み立てる。
+ *
+ * 推測ではなく利用者の指定をそのまま書く。`generateDraftMapping` の
+ * キーワード推測は**初期値を作るときだけ**に使い、書き出しには使わない。
+ *
+ * 役割パーツが 1 つも指定されていなければ `null`（`mapping.json` を出さない）。
+ * 未割り当てのスロットは書き出さない — 空文字列を書くと、消費側が
+ * 「そのフレームを表示せよ」と解釈しかねないため。
+ */
+export function buildMapping(emgData: EmgData, state: AvatarMapping): EmgSemanticMapping | null {
+    const find = (partID: string) => emgData.parts.find(p => p.partID === partID);
+
+    // 指定されたパーツが実在し、かつ switch であるものだけを採用する。
+    // static パーツはフレームを持たないので役割を担えない。
+    const blinkPart = state.blinkPartId ? find(state.blinkPartId) : undefined;
+    const lipPart = state.lipSyncPartId ? find(state.lipSyncPartId) : undefined;
+    const useBlink = !!blinkPart && blinkPart.type === 'switch';
+    const useLip = !!lipPart && lipPart.type === 'switch';
+
+    if (!useBlink && !useLip) return null;
+
+    /** 対象パーツに実在するフレームだけを通す。存在しない値は落とす。 */
+    const keep = (part: EmgPart | undefined, value: string) => {
+        if (!part || !value) return '';
+        return part.layers.some(l => frameId(l) === value) ? value : '';
+    };
+
+    const baseMapping: EmgSemanticMapping['baseMapping'] = {
+        blink: { open: '', half: '', closed: '' },
+        lipSync: { open: '', a: '', i: '', u: '', e: '', o: '', n: '' },
+    };
+
+    if (useBlink) {
+        baseMapping.blinkPartKey = blinkPart!.partID;
+        baseMapping.blink = {
+            open: keep(blinkPart, state.blink.open),
+            half: keep(blinkPart, state.blink.half),
+            closed: keep(blinkPart, state.blink.closed),
+        };
+    }
+
+    if (useLip) {
+        baseMapping.lipSyncPartKey = lipPart!.partID;
+        baseMapping.lipSync = {
+            open: keep(lipPart, state.lipSync.open),
+            a: keep(lipPart, state.lipSync.a),
+            i: keep(lipPart, state.lipSync.i),
+            u: keep(lipPart, state.lipSync.u),
+            e: keep(lipPart, state.lipSync.e),
+            o: keep(lipPart, state.lipSync.o),
+            n: keep(lipPart, state.lipSync.n),
+        };
+    }
+
+    return {
+        avatarId: state.avatarId.trim() || 'avatar',
+        baseMapping,
+        expressions: { default: {} },
+    };
+}
+
+/**
+ * 未割り当てのスロットを数える。書き出し前に利用者へ知らせるため。
+ *
+ * 空のまま書き出すと、まばたきも口パクも無反応になる。`textureID` は
+ * `"14"` のような番号のことが多く名前から当てられないので、
+ * **推測で埋めずに未割り当てとして見せる**のが正しい。
+ */
+export function countUnassigned(state: AvatarMapping): { blink: number; lipSync: number } {
+    const blink = state.blinkPartId
+        ? [state.blink.open, state.blink.half, state.blink.closed].filter(v => !v).length
+        : 0;
+    // `open` は任意なので数えない。
+    const lipSync = state.lipSyncPartId
+        ? [state.lipSync.a, state.lipSync.i, state.lipSync.u,
+           state.lipSync.e, state.lipSync.o, state.lipSync.n].filter(v => !v).length
+        : 0;
+    return { blink, lipSync };
 }

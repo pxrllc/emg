@@ -6,7 +6,7 @@ import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import { defaultPartAnimation, type LayerMeta, type PartAnimation } from '../types';
+import { defaultPartAnimation, emptyMapping, type AvatarMapping, type LayerMeta, type PartAnimation } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 
@@ -95,6 +95,30 @@ const uniqueGroupName = (siblings: PsdLayer[], base: string): string => {
     let n = 2;
     while (used.has(`${base}_${n}`)) n++;
     return `${base}_${n}`;
+};
+
+/**
+ * 書き出す `textureZIndex` を決める。
+ *
+ * 明示的な z を持つレイヤー（`.emg` から読み込んだもの）はその値を保ち、
+ * 持たないレイヤー（PSD などから作ったもの）は**その上に**走査順で積む。
+ *
+ * 明示的な z が 1 つも無ければ baseline は 0 になり、結果は走査順そのもの
+ * ＝ 従来と完全に同じになる。
+ */
+const resolveZIndices = (layers: PsdLayer[], meta: Record<number, LayerMeta>): number[] => {
+    let maxExplicit = -1;
+    for (const l of layers) {
+        const z = meta[l.id!]?.zIndex;
+        if (typeof z === 'number' && z > maxExplicit) maxExplicit = z;
+    }
+    const baseline = maxExplicit + 1;
+
+    let n = 0;
+    return layers.map(l => {
+        const z = meta[l.id!]?.zIndex;
+        return typeof z === 'number' ? z : baseline + n++;
+    });
 };
 
 const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Record<number, LayerMeta> => {
@@ -246,6 +270,8 @@ export function useEmgPacker() {
     // 同期しておかないと、それらの編集内容が次の取り込みで失われる。
     useEffect(() => { psdRootRef.current = psdRoot; }, [psdRoot]);
     useEffect(() => { layerMetaRef.current = layerMeta; }, [layerMeta]);
+
+
     const [toast, setToast] = useState<ToastMessage | null>(null);
 
     // 書き出しの進捗。4096x8192 の PNG エンコードで十数秒かかるため、
@@ -264,12 +290,17 @@ export function useEmgPacker() {
     // フレームを切り替える仕様だから。
     const [partAnimations, setPartAnimations] = useState<Record<string, PartAnimation>>({});
 
+    // mapping.json の編集状態。まばたき・口パクの役割パーツとフレーム割り当て。
+    // 空のまま書き出すと消費側で目も口も動かないため、書き出し前に未割り当てを知らせる。
+    const [mapping, setMapping] = useState<AvatarMapping>(emptyMapping);
+
     const handlePsdLoad = async (file: File) => {
         try {
             const root = await FileLoader.load(file);
             setPartAnimations({});
             setPreviewFrame({});
             setPreviewOff({});
+            setMapping(emptyMapping());
             applyTree(root, recalculateMeta(root, {}));
         } catch (e) {
             // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
@@ -414,6 +445,34 @@ export function useEmgPacker() {
         for (const p of parts) m.set(p.partId, p);
         return m;
     }, [parts]);
+
+    /**
+     * 役割パーツの初期値をキーワードから推測する。
+     *
+     * **推測は初期値を作るときだけに使います。** 書き出しは利用者の指定
+     * （`mapping` の状態）をそのまま書きます。`textureID` は `"14"` のような
+     * 番号のことが多く、名前からフレームは当てられないため、
+     * フレームの割り当ては空のままにして利用者に選ばせます。
+     *
+     * 一度でも利用者が触ったら上書きしません（指定を消さないため）。
+     */
+    useEffect(() => {
+        if (parts.length === 0) return;
+        setMapping(prev => {
+            if (prev.blinkPartId || prev.lipSyncPartId) return prev;   // 触られている
+
+            const match = (kws: string[], exclude?: string) => parts.find(p =>
+                p.type === 'switch' && p.partId !== exclude &&
+                kws.some(k => p.partId.toLowerCase().includes(k)));
+
+            const blink = match(['eye', 'blink', '瞳', '目']);
+            const lip = match(['mouth', 'lip', '口'], blink?.partId);
+            if (!blink && !lip) return prev;
+
+            return { ...prev, blinkPartId: blink?.partId ?? '', lipSyncPartId: lip?.partId ?? '' };
+        });
+    }, [parts]);
+
 
     /**
      * プレビューの合成。**書き出される .emg と同じ規則で描く**。
@@ -770,7 +829,11 @@ export function useEmgPacker() {
         };
         traverse(psdRoot as PsdLayer);
 
-        const totalLayers = allExportableLayers.length;
+        // ag-psd の children は「下から上」（index 0 = 最背面）。textureZIndex は
+        // 仕様上「大きいほど前面」なので、走査順をそのまま z にすればよい。
+        // 以前は totalLayers-1-index として最背面に最大値を与えており、
+        // 書き出した .emg の重なり順が全て前後逆になっていた。
+        const zIndices = resolveZIndices(allExportableLayers, layerMeta);
 
         allExportableLayers.forEach((layer, index) => {
             const packed = packResult.items.find(p => p.id === layer.id!.toString());
@@ -779,11 +842,7 @@ export function useEmgPacker() {
                     packed: packed,
                     meta: layerMeta[layer.id!],
                     originalLayer: layer,
-                    // ag-psd の children は「下から上」（index 0 = 最背面）。textureZIndex は
-                    // 仕様上「大きいほど前面」なので、走査順をそのまま z にすればよい。
-                    // 以前は totalLayers-1-index として最背面に最大値を与えており、
-                    // 書き出した .emg の重なり順が全て前後逆になっていた。
-                    zIndex: index
+                    zIndex: zIndices[index]
                 });
             }
         });
@@ -829,17 +888,15 @@ export function useEmgPacker() {
             await step('テクスチャに詰めています', 18);
             const result = await TexturePacker.pack(packItems);
             const exportItems: ExportItem[] = [];
-            const totalLayers = allExportableLayers.length;
+            // ag-psd の children は「下から上」（index 0 = 最背面）。
+            // textureZIndex は「大きいほど前面」なので走査順がそのまま z になる。
+            const zIndices = resolveZIndices(allExportableLayers, layerMeta);
 
-            console.log('--- Exporting Layers ---');
             allExportableLayers.forEach((layer, index) => {
                 const packed = result.items.find(p => p.id === layer.id!.toString());
                 const meta = layerMeta[layer.id!];
                 if (packed && meta) {
-                    // ag-psd の children は「下から上」（index 0 = 最背面）。
-                    // textureZIndex は「大きいほど前面」なので走査順がそのまま z になる。
-                    const zIndex = index;
-                    console.log(`Layer: ${layer.name}, Index: ${index}, Z-Index: ${zIndex}`);
+                    const zIndex = zIndices[index];
                     exportItems.push({
                         packed: packed,
                         meta: meta,
@@ -859,7 +916,8 @@ export function useEmgPacker() {
                 psdRoot.width,
                 psdRoot.height,
                 partAnimations,
-                (phase, percent) => setExportProgress({ phase, percent })
+                (phase, percent) => setExportProgress({ phase, percent }),
+                mapping
             );
 
             const link = document.createElement('a');
@@ -1004,6 +1062,8 @@ export function useEmgPacker() {
         previewFrame,
         previewOff,
         partAnimations,
+        mapping,
+        setMapping,
         handlePsdLoad,
         handleSourceAdd,
         handleSheetImport,

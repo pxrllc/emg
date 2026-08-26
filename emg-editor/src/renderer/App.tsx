@@ -6,7 +6,7 @@ import { PreviewPanel } from './components/PreviewPanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
 import { FileDropOverlay } from './components/FileDropOverlay';
-import { findMappingControlledParts } from './services/MappingGenerator';
+import { countUnassigned, findMappingControlledParts } from './services/MappingGenerator';
 import { SourceLoader } from './services/SourceLoader';
 import { SpriteSheetLoader } from './services/SpriteSheetLoader';
 import { SpriteSheetDialog } from './components/SpriteSheetDialog';
@@ -16,6 +16,7 @@ function App() {
         psdRoot, atlasUrls, selectedLayer, layerMeta,
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
+        mapping, setMapping,
         handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
@@ -60,6 +61,8 @@ function App() {
     const addFiles = async (files: File[]) => {
         for (const f of files) await handleSourceAdd(f);
     };
+
+    const unassigned = useMemo(() => countUnassigned(mapping), [mapping]);
 
     const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
     const openAddPicker = () => document.getElementById('source-add-input')?.click();
@@ -135,6 +138,9 @@ function App() {
                         hasFile={!!psdRoot}
                         exportableCount={exportableCount}
                         exportProgress={exportProgress}
+                        mapping={mapping}
+                        onMappingChange={patch => setMapping(prev => ({ ...prev, ...patch }))}
+                        unassigned={unassigned}
                         parts={parts}
                         selectedPartId={selectedPartId}
                         previewFrame={previewFrame}
