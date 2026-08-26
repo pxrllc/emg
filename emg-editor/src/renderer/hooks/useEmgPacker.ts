@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
-import { SourceLoader } from '../services/SourceLoader';
+import { SourceLoader, type LoadedSource } from '../services/SourceLoader';
 import { FRAME_COUNT_WARNING } from '../services/AnimationLoader';
-import { Psd } from 'ag-psd';
+import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
@@ -287,11 +287,25 @@ export function useEmgPacker() {
      */
     const handleSourceAdd = async (file: File) => {
         try {
-            const source = await SourceLoader.load(file);
-            if (source.children.length === 0) {
-                setToast({ title: '取り込めませんでした', body: `${file.name} にレイヤーがありません。`, tone: 'error' });
-                return;
-            }
+            mergeSource(await SourceLoader.load(file), file.name);
+        } catch (e) {
+            console.error('Failed to add source:', e);
+            setToast({ title: `${file.name} を取り込めませんでした`, body: String(e instanceof Error ? e.message : e), tone: 'error' });
+        }
+    };
+
+    /**
+     * 読み込んだソースを今の木に合流させる。
+     *
+     * ファイルの読み方（PSD / 画像 / GIF / スプライトシート）によらず、
+     * ここから先は同じ処理にする。経路が分かれると ID の採番やアニメーション設定の
+     * 登録を片方だけ書き忘れる（実際に起きた）。
+     */
+    const mergeSource = (source: LoadedSource, fileName: string) => {
+        if (source.children.length === 0) {
+            setToast({ title: '取り込めませんでした', body: `${fileName} にレイヤーがありません。`, tone: 'error' });
+            return;
+        }
 
             // 何も開いていない場合も同じ経路を通す。分けると、ID の採番や
             // アニメーション設定の登録を片方だけ書き忘れる（実際に起きた:
@@ -364,10 +378,21 @@ export function useEmgPacker() {
                         + `書き出し後の枚数を確認してください。`,
                 }
                 : { title: '取り込み', body: `${group.name}（${frameNote}）` });
-        } catch (e) {
-            console.error('Failed to add source:', e);
-            setToast({ title: `${file.name} を取り込めませんでした`, body: String(e instanceof Error ? e.message : e), tone: 'error' });
-        }
+    };
+
+    /** スプライトシートの切り出し結果を取り込む（格子と fps はダイアログで決める）。 */
+    const handleSheetImport = (
+        sheetName: string,
+        sliced: { width: number; height: number; children: Layer[]; frameDurations: number[] }
+    ) => {
+        mergeSource({
+            name: sheetName,
+            width: sliced.width,
+            height: sliced.height,
+            children: sliced.children,
+            kind: 'animation',
+            frameDurations: sliced.frameDurations,
+        }, sheetName);
     };
 
     const handlePsdUpdate = (newRoot: Psd) => {
@@ -974,6 +999,7 @@ export function useEmgPacker() {
         partAnimations,
         handlePsdLoad,
         handleSourceAdd,
+        handleSheetImport,
         handlePsdUpdate,
         handleLayerVisibilityChange,
         handleExport,

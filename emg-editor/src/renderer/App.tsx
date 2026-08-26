@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useEmgPacker } from './hooks/useEmgPacker';
 import { MainLayout } from './components/MainLayout';
 import { LayerTree } from './components/LayerTree';
@@ -7,13 +7,15 @@ import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
 import { findMappingControlledParts } from './services/MappingGenerator';
 import { SourceLoader } from './services/SourceLoader';
+import { SpriteSheetLoader } from './services/SpriteSheetLoader';
+import { SpriteSheetDialog } from './components/SpriteSheetDialog';
 
 function App() {
     const {
         psdRoot, atlasUrls, selectedLayer, layerMeta,
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
-        handlePsdLoad, handleSourceAdd, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
@@ -47,8 +49,12 @@ function App() {
         [emgData]
     );
 
+    // スプライトシートは格子の指定が要るので、読み込んだ後に確認画面を挟む。
+    const [sheetFile, setSheetFile] = useState<File | null>(null);
+
     const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
     const openAddPicker = () => document.getElementById('source-add-input')?.click();
+    const openSheetPicker = () => document.getElementById('sheet-add-input')?.click();
 
     return (
         <>
@@ -77,6 +83,18 @@ function App() {
                     for (const f of files) await handleSourceAdd(f);
                 }}
             />
+            {/* スプライトシート: 画像なので拡張子からは判別できない。専用の入口にする */}
+            <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                id="sheet-add-input"
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) setSheetFile(file);
+                }}
+            />
             <MainLayout
                 hasFile={!!psdRoot}
                 leftPanel={
@@ -91,6 +109,7 @@ function App() {
                         onVisibilityAll={handleVisibilityAll}
                         onLoadPsd={openFilePicker}
                         onAddSource={openAddPicker}
+                        onAddSheet={openSheetPicker}
                         onGroupSelected={handleGroupSelected}
                     />
                 }
@@ -144,7 +163,19 @@ function App() {
                 }
                 onLoadPsd={openFilePicker}
                 onAddSource={openAddPicker}
+                onAddSheet={openSheetPicker}
             />
+            {sheetFile && (
+                <SpriteSheetDialog
+                    file={sheetFile}
+                    onCancel={() => setSheetFile(null)}
+                    onImport={(source, grid, fps) => {
+                        const name = sheetFile.name.replace(/\.[^.]+$/, '') || 'sheet';
+                        handleSheetImport(name, SpriteSheetLoader.slice(source, grid, fps, name));
+                        setSheetFile(null);
+                    }}
+                />
+            )}
             <Toast message={toast} onClose={() => setToast(null)} />
         </>
     );

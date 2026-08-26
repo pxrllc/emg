@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Layer, Psd } from 'ag-psd';
-import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FilePlus, FolderPlus, Group } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FilePlus, FolderPlus, Grid3x3, Group } from 'lucide-react';
 import type { LayerMeta } from '../types';
 
 // Module-level variable for reliable drag tracking in Electron
@@ -17,6 +17,7 @@ interface LayerTreeProps {
     onVisibilityAll?: (visible: boolean) => void;
     onLoadPsd?: () => void;
     onAddSource?: () => void;
+    onAddSheet?: () => void;
     onGroupSelected?: () => void;
 }
 
@@ -31,6 +32,7 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     onVisibilityAll,
     onLoadPsd,
     onAddSource,
+    onAddSheet,
     onGroupSelected
 }) => {
     if (!psd || !psd.children) return (
@@ -168,6 +170,13 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
                     title="PSD / KRA / 画像を今の内容に追加する（1 枚のテクスチャにまとめて書き出されます）"
                 >
                     <FilePlus size={13} /> 追加
+                </button>
+                <button
+                    className="btn btn-sm"
+                    onClick={() => onAddSheet?.()}
+                    title="スプライトシートを格子で切り出して追加する"
+                >
+                    <Grid3x3 size={13} /> シート
                 </button>
                 <button
                     className="btn btn-sm"

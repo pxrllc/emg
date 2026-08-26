@@ -1,5 +1,5 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Grid3x3 } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
@@ -7,6 +7,7 @@ interface MainLayoutProps {
     rightPanel?: React.ReactNode;
     onLoadPsd?: () => void;
     onAddSource?: () => void;
+    onAddSheet?: () => void;
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
 }
@@ -19,7 +20,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, hasFile }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -38,6 +39,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                         <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像を追加する">
                                             <FilePlus size={13} />
                                             追加
+                                        </button>
+                                    )}
+                                    {onAddSheet && (
+                                        <button className="btn btn-sm btn-ghost" onClick={onAddSheet} title="スプライトシートを切り出して追加する">
+                                            <Grid3x3 size={13} />
+                                            シート
                                         </button>
                                     )}
                                     {onLoadPsd && (
