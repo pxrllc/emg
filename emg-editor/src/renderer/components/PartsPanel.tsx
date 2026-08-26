@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Pencil, RotateCcw } from 'lucide-react';
 import type { PartInfo } from '../parts';
+import type { PartAnimation } from '../types';
+import { AnimationEditor } from './AnimationEditor';
 
 interface PartsPanelProps {
     parts: PartInfo[];
@@ -19,6 +21,16 @@ interface PartsPanelProps {
     onPreviewReset: () => void;
     onRenamePart: (partId: string, newName: string) => void;
     onTypeAll: (type: 'static' | 'switch') => void;
+
+    /** partID -> アニメーション設定（emg-json-spec.md 7 章）。 */
+    partAnimations: Record<string, PartAnimation>;
+    /** mapping.json が blink/lipSync として掌握する partID（7.3）。 */
+    mappingControlled: Set<string>;
+    onAnimationToggle: (partId: string, enabled: boolean) => void;
+    onAnimationChange: (partId: string, patch: Partial<PartAnimation>) => void;
+    onAnimationAddFrame: (partId: string, frameId: string) => void;
+    onAnimationRemoveFrame: (partId: string, index: number) => void;
+    onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
 }
 
 /**
@@ -36,6 +48,9 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     parts, selectedPartId, previewFrame, previewOff,
     onSelectPart, onTypeChange, onExportChange, onDefaultFrameChange, onDefaultVisibleChange,
     onPreviewFrame, onPreviewNone, onPreviewToggle, onPreviewReset, onRenamePart, onTypeAll,
+    partAnimations, mappingControlled,
+    onAnimationToggle, onAnimationChange, onAnimationAddFrame,
+    onAnimationRemoveFrame, onAnimationDurationChange,
 }) => {
     const [renaming, setRenaming] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -208,6 +223,16 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                             </button>
                                         ))}
                                     </div>
+                                    <AnimationEditor
+                                        part={part}
+                                        animation={partAnimations[part.partId]}
+                                        mappingControlled={mappingControlled.has(part.partId)}
+                                        onToggle={onAnimationToggle}
+                                        onChange={onAnimationChange}
+                                        onAddFrame={onAnimationAddFrame}
+                                        onRemoveFrame={onAnimationRemoveFrame}
+                                        onDurationChange={onAnimationDurationChange}
+                                    />
                                     <div className="part-meta">
                                         {part.frames.length} 差分 / {part.layerIds.length} レイヤー
                                         {part.initiallyNone && <span> · 初期状態は「なし」</span>}

@@ -1,9 +1,9 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import type { LayerMeta } from '../types';
+import type { LayerMeta, PartAnimation } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
-import { generateDraftMapping } from './MappingGenerator';
+import { findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
 
 export interface EmgData {
     version: string;
@@ -51,8 +51,32 @@ export interface EmgPartLayer {
     blendMode: string;
 }
 
+/** emg-json-spec.md 7.1 / v0.5.0 6 章。 */
+export interface EmgSequence {
+    type: 'ordered' | 'random_hold';
+    /** 等間隔。`fps` の間隔で 1 フレームずつ進む。`keys` と排他。 */
+    frames?: string[];
+    /** v0.5.0 6 章。不等間隔。`t` は再生開始からの秒数（昇順）。`frames` と排他。 */
+    keys?: { t: number; frame: string }[];
+}
+
+/** emg-json-spec.md 7.2。 */
+export interface EmgTrigger {
+    type: 'auto_loop' | 'random_interval' | 'external';
+    intervalMin?: number;
+    intervalMax?: number;
+}
+
+/** emg-json-spec.md 7 章。partID 単位のフレーム切り替えアニメーション。 */
 export interface EmgSprite {
-    // Placeholder for future
+    spriteID: string;
+    /** 対象パーツ。**その type は switch でなければならない**（7 章）。 */
+    targetPartID: string;
+    /** v0.4.0 で任意化（不在時 12）。`sequence.keys` を使う場合は不要（v0.5.0 6.1）。 */
+    fps?: number;
+    sequence: EmgSequence;
+    /** 不在時、プレイヤーは自律再生してはならない（7 章）。 */
+    trigger?: EmgTrigger;
 }
 
 export type ExportItem = {
@@ -63,11 +87,87 @@ export type ExportItem = {
 };
 
 export class EmgGenerator {
+    /**
+     * 編集状態のアニメーション設定を `sprites[]` に変換する。
+     *
+     * 仕様上の制約をここで強制する。UI 側の抜け漏れで不正なファイルが出ないよう、
+     * 書き出しの直前で必ず通す。
+     *   - `targetPartID` のパーツは switch でなければならない（7 章）
+     *   - `frames` の要素は対象パーツに実在するフレーム識別子でなければならない（7.1）
+     *   - mapping.json が掌握するパーツは自律発火してはならない（7.3）
+     */
+    private static buildSprites(
+        parts: EmgPart[],
+        animations: Record<string, PartAnimation>
+    ): EmgSprite[] {
+        const controlled = findMappingControlledParts(parts);
+        const sprites: EmgSprite[] = [];
+        const usedIds = new Set<string>();
+
+        for (const part of parts) {
+            const anim = animations[part.partID];
+            if (!anim || !anim.enabled) continue;
+            // static パーツはフレームを持たないので対象外（7 章）。
+            if (part.type !== 'switch') continue;
+
+            const available = new Set(part.layers.map(l => l.frameName ?? l.textureID));
+            const frames = anim.frames.filter(f => available.has(f));
+            if (frames.length === 0) continue;
+
+            // spriteID はファイル内で一意にする。外部から再生を指示するキーになるため。
+            let spriteID = anim.spriteID || part.partID;
+            let n = 1;
+            while (usedIds.has(spriteID)) spriteID = `${anim.spriteID || part.partID}_${n++}`;
+            usedIds.add(spriteID);
+
+            const sequence: EmgSequence = { type: anim.sequenceType };
+            if (anim.timing === 'keys') {
+                // durations は「そのフレームの表示秒数」。keys は累積時刻なので積算する（6.1）。
+                let t = 0;
+                sequence.keys = frames.map((frame, i) => {
+                    const key = { t: Math.round(t * 1000) / 1000, frame };
+                    t += Math.max(0.001, anim.durations[i] ?? 0.1);
+                    return key;
+                });
+            } else {
+                sequence.frames = frames;
+            }
+
+            const sprite: EmgSprite = {
+                spriteID,
+                targetPartID: part.partID,
+                sequence,
+            };
+            // keys を使う場合 fps は不要（6.1）。書くと解釈が二重になる。
+            if (anim.timing === 'fps') sprite.fps = anim.fps;
+
+            // 7.3: mapping.json が blink/lipSync として明示指定するパーツは、
+            // mapping 側が表示を掌握する。trigger を書かなければ
+            // 「プレイヤーは自律再生してはならない」になる（7 章）。
+            if (!controlled.has(part.partID)) {
+                if (anim.triggerType === 'random_interval') {
+                    sprite.trigger = {
+                        type: 'random_interval',
+                        intervalMin: anim.intervalMin,
+                        intervalMax: anim.intervalMax,
+                    };
+                } else {
+                    sprite.trigger = { type: anim.triggerType };
+                }
+            }
+
+            sprites.push(sprite);
+        }
+
+        return sprites;
+    }
+
     static createData(
         packResult: PackResult,
         items: ExportItem[],
         psdWidth: number,
-        psdHeight: number
+        psdHeight: number,
+        animations: Record<string, PartAnimation> = {}
     ): EmgData {
         const partsMap = new Map<string, EmgPart>();
 
@@ -283,7 +383,7 @@ export class EmgGenerator {
                 height: a.height
             })),
             parts: emgParts,
-            sprites: []
+            sprites: EmgGenerator.buildSprites(emgParts, animations)
         };
     }
 
@@ -291,7 +391,8 @@ export class EmgGenerator {
         packResult: PackResult,
         items: ExportItem[], // This items array needs to have Z-info or be re-sorted?
         psdWidth: number,
-        psdHeight: number
+        psdHeight: number,
+        animations: Record<string, PartAnimation> = {}
     ): Promise<Blob> {
         const zip = new JSZip();
 
@@ -307,7 +408,7 @@ export class EmgGenerator {
         }
 
         // 2. Generate JSON
-        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight);
+        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
 
         // 3. Generate mapping.json draft (optional, only when blink/lipSync candidates are found)

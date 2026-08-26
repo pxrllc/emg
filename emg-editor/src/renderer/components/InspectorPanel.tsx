@@ -5,7 +5,7 @@ import { PartsPanel } from './PartsPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
-import type { LayerMeta } from '../types';
+import type { LayerMeta, PartAnimation } from '../types';
 
 type Tab = 'parts' | 'layer' | 'json';
 
@@ -28,6 +28,14 @@ interface InspectorPanelProps {
     onPreviewReset: () => void;
     onRenamePart: (partId: string, newName: string) => void;
     onTypeAll: (type: 'static' | 'switch') => void;
+
+    partAnimations: Record<string, PartAnimation>;
+    mappingControlled: Set<string>;
+    onAnimationToggle: (partId: string, enabled: boolean) => void;
+    onAnimationChange: (partId: string, patch: Partial<PartAnimation>) => void;
+    onAnimationAddFrame: (partId: string, frameId: string) => void;
+    onAnimationRemoveFrame: (partId: string, index: number) => void;
+    onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
 
     layerName?: string;
     layerId: number | null;
@@ -101,6 +109,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onPreviewReset={props.onPreviewReset}
                         onRenamePart={props.onRenamePart}
                         onTypeAll={props.onTypeAll}
+                        partAnimations={props.partAnimations}
+                        mappingControlled={props.mappingControlled}
+                        onAnimationToggle={props.onAnimationToggle}
+                        onAnimationChange={props.onAnimationChange}
+                        onAnimationAddFrame={props.onAnimationAddFrame}
+                        onAnimationRemoveFrame={props.onAnimationRemoveFrame}
+                        onAnimationDurationChange={props.onAnimationDurationChange}
                     />
                 )}
                 {activeTab === 'layer' && (

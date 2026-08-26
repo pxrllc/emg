@@ -28,7 +28,7 @@ const MAX_ATLAS = 8192;
 /** レイヤーのフレーム識別子（emg-json-spec-0.5.0.md 1.1） */
 const frameId = layer => layer.frameName ?? layer.textureID;
 
-function validate(data, entryNames) {
+function validate(data, entryNames, mapping) {
     const errors = [];
     const warnings = [];
     const E = m => errors.push(m);
@@ -165,6 +165,28 @@ function validate(data, entryNames) {
         }
     }
 
+    // --- 7.3: mapping.json が掌握するパーツは自律発火してはならない ---
+    // blinkPartKey / blinkParts / lipSyncPartKey / lipSyncParts による「明示的」な指定のみ。
+    // partID のキーワード一致で解決されただけのものは該当しない。
+    if (mapping) {
+        const base = mapping.baseMapping ?? {};
+        const controlled = new Set([
+            base.blinkPartKey,
+            base.lipSyncPartKey,
+            ...Object.values(base.blinkParts ?? {}),
+            ...Object.values(base.lipSyncParts ?? {}),
+        ].filter(Boolean));
+
+        for (const s of data.sprites ?? []) {
+            if (!controlled.has(s.targetPartID)) continue;
+            const t = s.trigger?.type;
+            if (t && t !== 'external') {
+                E(`sprite '${s.spriteID}' は mapping.json が掌握する '${s.targetPartID}' を対象にしていますが、`
+                  + `trigger.type が '${t}' です。自律発火してはなりません（7.3）`);
+            }
+        }
+    }
+
     // --- presets（v0.5.0 5 章）---
     for (const p of data.presets ?? []) {
         for (const [pid, fid] of Object.entries(p.parts ?? {})) {
@@ -200,7 +222,11 @@ async function main() {
         if (!jsonName) { console.error(`${path.basename(file)}: メイン JSON が見つかりません`); failed++; continue; }
 
         const data = JSON.parse(await zip.files[jsonName].async('text'));
-        const { errors, warnings } = validate(data, names);
+                // mapping.json があれば 7.3 の検査に使う
+        const mappingName = names.find(n => /mapping\.json$/i.test(n));
+        const mapping = mappingName ? JSON.parse(await zip.files[mappingName].async('text')) : null;
+
+        const { errors, warnings } = validate(data, names, mapping);
 
         const label = path.basename(file);
         if (errors.length === 0 && warnings.length === 0) {

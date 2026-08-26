@@ -4,7 +4,7 @@ import { Psd } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import type { LayerMeta } from '../types';
+import { defaultPartAnimation, type LayerMeta, type PartAnimation } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 
@@ -151,6 +151,11 @@ export function useEmgPacker() {
     const [previewFrame, setPreviewFrame] = useState<Record<string, string>>({});
     const [previewOff, setPreviewOff] = useState<Record<string, boolean>>({});
     const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+
+    // partID -> アニメーション設定。sprites[] の元になる（emg-json-spec.md 7 章）。
+    // レイヤーではなくパーツ単位で持つのは、sprites[] が targetPartID を単位に
+    // フレームを切り替える仕様だから。
+    const [partAnimations, setPartAnimations] = useState<Record<string, PartAnimation>>({});
 
     const handlePsdLoad = async (file: File) => {
         try {
@@ -394,6 +399,80 @@ export function useEmgPacker() {
         setPreviewOff(prev => ({ ...prev, [partId]: false }));
     };
 
+    // ---- アニメーション（emg-json-spec.md 7 章） ------------------------------
+
+    /**
+     * パーツにアニメーションを付ける / 外す。
+     * 初期値は「そのパーツの全フレームを並び順どおり 12fps でループ」。
+     */
+    const handleAnimationToggle = (partId: string, enabled: boolean) => {
+        const part = partById.get(partId);
+        if (!part) return;
+        setPartAnimations(prev => {
+            const cur = prev[partId];
+            if (cur) return { ...prev, [partId]: { ...cur, enabled } };
+            if (!enabled) return prev;
+            return {
+                ...prev,
+                [partId]: defaultPartAnimation(partId, part.frames.map(f => f.frameId)),
+            };
+        });
+    };
+
+    const handleAnimationChange = (partId: string, patch: Partial<PartAnimation>) => {
+        setPartAnimations(prev => {
+            const cur = prev[partId];
+            if (!cur) return prev;
+            const next = { ...cur, ...patch };
+            // frames と durations は同じ長さでなければならない（keys の組み立てで対応が崩れる）。
+            if (patch.frames) {
+                next.durations = patch.frames.map((_, i) => cur.durations[i] ?? 0.1);
+            }
+            return { ...prev, [partId]: next };
+        });
+    };
+
+    /** 再生順の末尾にフレームを足す。同じフレームを何度でも置ける（まばたきの往復など）。 */
+    const handleAnimationAddFrame = (partId: string, frameId: string) => {
+        setPartAnimations(prev => {
+            const cur = prev[partId];
+            if (!cur) return prev;
+            return {
+                ...prev,
+                [partId]: {
+                    ...cur,
+                    frames: [...cur.frames, frameId],
+                    durations: [...cur.durations, cur.durations[cur.durations.length - 1] ?? 0.1],
+                },
+            };
+        });
+    };
+
+    const handleAnimationRemoveFrame = (partId: string, index: number) => {
+        setPartAnimations(prev => {
+            const cur = prev[partId];
+            if (!cur) return prev;
+            return {
+                ...prev,
+                [partId]: {
+                    ...cur,
+                    frames: cur.frames.filter((_, i) => i !== index),
+                    durations: cur.durations.filter((_, i) => i !== index),
+                },
+            };
+        });
+    };
+
+    const handleAnimationDurationChange = (partId: string, index: number, seconds: number) => {
+        setPartAnimations(prev => {
+            const cur = prev[partId];
+            if (!cur) return prev;
+            const durations = [...cur.durations];
+            durations[index] = seconds;
+            return { ...prev, [partId]: { ...cur, durations } };
+        });
+    };
+
     /** v0.5.0 §4.3: プレビューを「どれも表示しない」にする。 */
     const handlePreviewNone = (partId: string) => {
         setPreviewOff(prev => ({ ...prev, [partId]: true }));
@@ -477,8 +556,8 @@ export function useEmgPacker() {
             }
         });
 
-        return EmgGenerator.createData(packResult, exportItems, psdRoot.width, psdRoot.height);
-    }, [packResult, psdRoot, layerMeta]);
+        return EmgGenerator.createData(packResult, exportItems, psdRoot.width, psdRoot.height, partAnimations);
+    }, [packResult, psdRoot, layerMeta, partAnimations]);
 
     const handleExport = async () => {
         if (!psdRoot) return;
@@ -536,7 +615,8 @@ export function useEmgPacker() {
                 result,
                 exportItems,
                 psdRoot.width,
-                psdRoot.height
+                psdRoot.height,
+                partAnimations
             );
 
             const link = document.createElement('a');
@@ -664,6 +744,7 @@ export function useEmgPacker() {
         selectedPartId,
         previewFrame,
         previewOff,
+        partAnimations,
         handlePsdLoad,
         handlePsdUpdate,
         handleLayerVisibilityChange,
@@ -676,6 +757,11 @@ export function useEmgPacker() {
         handlePartDefaultFrameChange,
         handlePartExportChange,
         handlePartDefaultVisibleChange,
+        handleAnimationToggle,
+        handleAnimationChange,
+        handleAnimationAddFrame,
+        handleAnimationRemoveFrame,
+        handleAnimationDurationChange,
         handlePreviewFrame,
         handlePreviewNone,
         handlePreviewToggle,

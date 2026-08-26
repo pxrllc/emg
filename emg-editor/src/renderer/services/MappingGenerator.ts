@@ -29,6 +29,36 @@ function findPartByKeyword(parts: EmgPart[], keywords: string[]): EmgPart | unde
     );
 }
 
+/** blink / lipSync に選ばれるパーツを求める。generateDraftMapping と同じ判定。 */
+function resolveRolePairs(parts: EmgPart[]): { blink?: EmgPart; lipSync?: EmgPart } {
+    const blink = findPartByKeyword(parts, BLINK_KEYWORDS);
+    const lipSync = blink
+        ? findPartByKeyword(parts.filter(p => p !== blink), LIP_SYNC_KEYWORDS)
+        : findPartByKeyword(parts, LIP_SYNC_KEYWORDS);
+    return { blink, lipSync };
+}
+
+/**
+ * 生成される mapping.json が **明示的に**掌握する partID。
+ *
+ * emg-json-spec.md 7.3: `blinkPartKey` / `lipSyncPartKey` で指定された partID を
+ * `targetPartID` に持つ `sprites[]` は自律発火してはならない。mapping.json 側が
+ * そのパーツの表示を決めるため、両方が動くと取り合いになる。
+ *
+ * 判定を generateDraftMapping と共有するのは、片方だけ変えると
+ * 「mapping は掌握しているのに sprite も自律再生する」ファイルが出てしまうため。
+ */
+export function findMappingControlledParts(parts: EmgPart[]): Set<string> {
+    const { blink, lipSync } = resolveRolePairs(parts);
+    // 候補が片方も無ければ mapping.json 自体を出さない（generateDraftMapping と同じ条件）。
+    if (!blink && !lipSync) return new Set();
+
+    const out = new Set<string>();
+    if (blink) out.add(blink.partID);
+    if (lipSync) out.add(lipSync.partID);
+    return out;
+}
+
 /**
  * emg-mapping-spec.md の「自動生成ヒューリスティック」節（非規範的・推奨アルゴリズム）に基づき、
  * partID のキーワードから最小限の mapping.json ドラフトを生成する。
@@ -41,10 +71,7 @@ function findPartByKeyword(parts: EmgPart[], keywords: string[]): EmgPart | unde
  * 空文字列のプレースホルダーとして残し、ユーザーの手動編集を前提としたドラフトにする。
  */
 export function generateDraftMapping(emgData: EmgData): EmgSemanticMapping | null {
-    const blinkPart = findPartByKeyword(emgData.parts, BLINK_KEYWORDS);
-    const lipSyncPart = blinkPart
-        ? findPartByKeyword(emgData.parts.filter(p => p !== blinkPart), LIP_SYNC_KEYWORDS)
-        : findPartByKeyword(emgData.parts, LIP_SYNC_KEYWORDS);
+    const { blink: blinkPart, lipSync: lipSyncPart } = resolveRolePairs(emgData.parts);
 
     if (!blinkPart && !lipSyncPart) return null;
 

@@ -336,6 +336,86 @@ body,
   font-size: 9px;
 }
 
+/* ---- Animation editor（sprites[]） --------------------------------------- */
+.anim-block {
+  border-top: 1px solid var(--border-color);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.anim-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #a5a5aa;
+  cursor: pointer;
+}
+
+.anim-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #8a8a8e;
+}
+
+.anim-row > label {
+  min-width: 42px;
+}
+
+.anim-note {
+  line-height: 1.6;
+  color: #93b4fd;
+}
+
+/* 再生順の 1 コマ。差分チップ（frame-chip）とは役割が違うので見た目を分ける。 */
+.seq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  padding: 3px 4px 3px 3px;
+  border: 1px solid rgba(37, 99, 235, 0.5);
+  border-radius: 4px;
+  background: rgba(37, 99, 235, 0.14);
+  color: #cfd8e8;
+}
+
+.seq-index {
+  font-size: 9px;
+  color: #8a8a8e;
+  background: #1a1a1c;
+  border-radius: 2px;
+  padding: 1px 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.seq-remove {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: #8a8a8e;
+  cursor: pointer;
+  padding: 0;
+}
+
+.seq-remove:hover {
+  color: #fff;
+}
+
+/* 再生順に足せるフレーム。差分の切り替え用チップと紛れないよう控えめにする。 */
+.frame-chip.frame-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-style: dashed;
+  color: #7d7d82;
+}
+
 /* ---- Action bar (bottom of right panel) ---------------------------------- */
 .action-bar {
   border-top: 1px solid var(--border-color);
