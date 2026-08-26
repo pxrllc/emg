@@ -1,0 +1,1285 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMG 0.5 リファレンス</title>
+<meta name="description" content="EMG 0.5 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap">
+
+<style>
+/* ── トークン ───────────────────────────────────────────────
+   明るい側を完全に定義し、暗い側はトークンだけを差し替える。
+   色をメディアクエリの中だけで定義しない（未指定テーマで色が落ちる）。 */
+:root {
+  --ground:      #fbfbfc;
+  --surface:     #ffffff;
+  --surface-2:   #f4f5f7;
+  --ink:         #1a1d21;
+  --ink-2:       #3d444d;
+  --muted:       #656d78;
+  --faint:       #939ba5;
+  --line:        #e3e6ea;
+  --line-2:      #eceef1;
+
+  --accent:      #9a6208;   /* 琥珀。フレーム識別子と v0.5.0 の標 */
+  --accent-soft: #fdf6e6;
+  --accent-line: #e8d49a;
+
+  --blue:        #2455c0;   /* v0.4.0 */
+  --blue-soft:   #eef3fd;
+  --blue-line:   #c6d8f6;
+
+  --grey-soft:   #f0f1f3;
+  --grey-line:   #dcdfe4;
+
+  --danger:      #a4331f;
+  --danger-soft: #fdf1ef;
+  --danger-line: #f0cdc6;
+
+  --ok:          #1f6b45;
+
+  --sans: "IBM Plex Sans JP", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+
+  --nav-w: 268px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:      #16181b;
+    --surface:     #1d2024;
+    --surface-2:   #23272c;
+    --ink:         #dfe3e9;
+    --ink-2:       #b9c0c9;
+    --muted:       #8b939e;
+    --faint:       #6b7480;
+    --line:        #2e3339;
+    --line-2:      #262b31;
+
+    --accent:      #e3c15b;
+    --accent-soft: #2b2618;
+    --accent-line: #55492a;
+
+    --blue:        #7ba6f2;
+    --blue-soft:   #1a2130;
+    --blue-line:   #2f3f5c;
+
+    --grey-soft:   #24282d;
+    --grey-line:   #363b42;
+
+    --danger:      #f08a76;
+    --danger-soft: #2c1d1a;
+    --danger-line: #593630;
+
+    --ok:          #6fc79b;
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground:      #16181b;
+  --surface:     #1d2024;
+  --surface-2:   #23272c;
+  --ink:         #dfe3e9;
+  --ink-2:       #b9c0c9;
+  --muted:       #8b939e;
+  --faint:       #6b7480;
+  --line:        #2e3339;
+  --line-2:      #262b31;
+
+  --accent:      #e3c15b;
+  --accent-soft: #2b2618;
+  --accent-line: #55492a;
+
+  --blue:        #7ba6f2;
+  --blue-soft:   #1a2130;
+  --blue-line:   #2f3f5c;
+
+  --grey-soft:   #24282d;
+  --grey-line:   #363b42;
+
+  --danger:      #f08a76;
+  --danger-soft: #2c1d1a;
+  --danger-line: #593630;
+
+  --ok:          #6fc79b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
+
+/* ── レイアウト ───────────────────────────────────────────── */
+.shell { display: grid; grid-template-columns: var(--nav-w) minmax(0, 1fr); }
+
+.nav {
+  position: sticky; top: 0; align-self: start;
+  height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  padding: 26px 0 40px;
+}
+
+.nav-head { padding: 0 22px 18px; border-bottom: 1px solid var(--line-2); }
+.nav-title {
+  font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+  display: flex; align-items: baseline; gap: 7px;
+}
+.nav-title .ver-inline {
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  color: var(--accent); letter-spacing: 0;
+}
+.nav-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+
+.filter {
+  width: 100%; margin-top: 14px; padding: 7px 10px;
+  font: 400 12.5px/1.4 var(--sans);
+  color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 5px;
+}
+.filter::placeholder { color: var(--faint); }
+
+.nav-group { padding: 16px 12px 0; }
+.nav-label {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--faint);
+  padding: 0 10px 6px;
+}
+.nav a {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 10px; border-radius: 5px;
+  font-size: 13px; color: var(--ink-2);
+  border-left: 2px solid transparent;
+}
+.nav a:hover { background: var(--surface-2); text-decoration: none; color: var(--ink); }
+.nav a.on {
+  background: var(--accent-soft); color: var(--ink);
+  border-left-color: var(--accent); font-weight: 500;
+}
+.nav a code { font-family: var(--mono); font-size: 12px; }
+.nav a.hidden { display: none; }
+.nav-group.hidden { display: none; }
+
+.main { padding: 46px 56px 140px; }
+.wrap { max-width: 880px; }
+
+/* ── 見出し ───────────────────────────────────────────────── */
+h1 {
+  font-size: 30px; font-weight: 700; letter-spacing: -0.02em;
+  margin: 0 0 10px; text-wrap: balance;
+}
+.lede { font-size: 16px; color: var(--ink-2); margin: 0 0 30px; max-width: 62ch; }
+
+section { scroll-margin-top: 24px; padding-top: 34px; }
+section + section { border-top: 1px solid var(--line-2); margin-top: 30px; }
+
+h2 {
+  font-size: 21px; font-weight: 600; letter-spacing: -0.01em;
+  margin: 0 0 6px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+h2 code { font-family: var(--mono); font-size: 19px; font-weight: 500; }
+h3 {
+  font-size: 14px; font-weight: 600; margin: 28px 0 8px;
+  letter-spacing: 0.01em; color: var(--ink);
+}
+.sec-note { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; max-width: 62ch; }
+p { margin: 0 0 14px; max-width: 68ch; }
+
+/* ── バージョンバッジ ─────────────────────────────────────── */
+.ver {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+  border: 1px solid var(--grey-line); background: var(--grey-soft); color: var(--muted);
+  line-height: 1.5;
+}
+.ver.v4 { border-color: var(--blue-line);   background: var(--blue-soft);   color: var(--blue); }
+.ver.v5 { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+
+/* ── テーブル ─────────────────────────────────────────────── */
+.tbl-scroll { overflow-x: auto; margin: 0 0 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td {
+  text-align: left; padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--line-2); vertical-align: top;
+}
+th {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--faint); border-bottom-color: var(--line); white-space: nowrap;
+}
+td code, th code { font-family: var(--mono); font-size: 12.5px; }
+td:first-child { white-space: nowrap; padding-right: 20px; }
+.t-type { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.req { color: var(--ok); font-weight: 600; }
+.opt { color: var(--faint); }
+.dfl { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+table.matrix td, table.matrix th { text-align: center; }
+table.matrix td:first-child, table.matrix th:first-child { text-align: left; }
+.yes { color: var(--ok); font-weight: 600; }
+.no  { color: var(--faint); }
+.tabnum { font-variant-numeric: tabular-nums; }
+
+/* ── コード ───────────────────────────────────────────────── */
+pre {
+  margin: 0 0 18px; padding: 14px 16px; overflow-x: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--ink-2);
+}
+pre .k { color: var(--accent); }
+pre .s { color: var(--blue); }
+pre .n { color: var(--ink); }
+pre .c { color: var(--faint); font-style: italic; }
+code.inl {
+  font-family: var(--mono); font-size: 0.88em;
+  background: var(--surface-2); border: 1px solid var(--line-2);
+  border-radius: 4px; padding: 1px 5px;
+}
+
+/* ── 注記 ─────────────────────────────────────────────────── */
+.note, .warn {
+  border-left: 3px solid var(--line); background: var(--surface);
+  padding: 12px 16px; margin: 0 0 18px; border-radius: 0 6px 6px 0;
+  font-size: 13.5px; color: var(--ink-2);
+}
+.note { border-left-color: var(--accent); }
+.warn { border-left-color: var(--danger); background: var(--danger-soft); }
+.note p:last-child, .warn p:last-child { margin-bottom: 0; }
+.note strong, .warn strong { color: var(--ink); }
+
+.legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 26px; font-size: 13px; }
+.legend div { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+
+ul { margin: 0 0 14px; padding-left: 20px; max-width: 68ch; }
+li { margin-bottom: 5px; }
+
+/* ── 狭い画面 ─────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .shell { grid-template-columns: 1fr; }
+  .nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+  .main { padding: 30px 22px 90px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* ── フッタ（公開ページ用） ─────────────────────────────────── */
+.foot {
+  margin-top: 56px; padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.foot-links { display: flex; flex-wrap: wrap; gap: 18px; }
+.foot-links a { color: var(--muted); }
+.foot-links a:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+
+<div class="shell">
+  <nav class="nav">
+    <div class="nav-head">
+      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.1</span></div>
+      <div class="nav-sub">パーツ分割 2D アバターの配布形式</div>
+      <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">はじめに</div>
+      <a href="#overview">概要</a>
+      <a href="#container">コンテナ</a>
+      <a href="#frameid">フレーム識別子</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">オブジェクト</div>
+      <a href="#root"><code>root</code></a>
+      <a href="#textures"><code>textures[]</code></a>
+      <a href="#parts"><code>parts[]</code></a>
+      <a href="#layers"><code>layers[]</code></a>
+      <a href="#sprites"><code>sprites[]</code></a>
+      <a href="#sequence"><code>sequence</code></a>
+      <a href="#trigger"><code>trigger</code></a>
+      <a href="#tracks"><code>tracks[]</code></a>
+      <a href="#presets"><code>presets[]</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">コンパニオン</div>
+      <a href="#mapping"><code>mapping.json</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">規則</div>
+      <a href="#drawmodel">描画モデル</a>
+      <a href="#compat">互換性</a>
+      <a href="#extensions"><code>requiredExtensions</code></a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">実務</div>
+      <a href="#support">実装対応表</a>
+      <a href="#pitfalls">落とし穴</a>
+      <a href="#sample">完全なサンプル</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="wrap">
+
+      <h1>EMG 0.5 リファレンス</h1>
+      <p class="lede">
+        <code class="inl">.emg</code> は、パーツに分割した 2D キャラクター素材を配布するための
+        エンジン非依存の形式です。ZIP の中に <code class="inl">data.json</code> と
+        テクスチャアトラスの PNG が入っています。
+      </p>
+
+      <div class="legend">
+        <div><span class="ver">0.3.0</span> 基準となる版</div>
+        <div><span class="ver v4">0.4.0</span> 互換性の規則を追加</div>
+        <div><span class="ver v5">0.5.0</span> 表現力を追加</div>
+        <div><span class="ver v5">0.5.1</span> switch の「どれも出さない」</div>
+      </div>
+
+      <div class="note">
+        <p><strong>本書は参考文書です。</strong> 規範は
+        <a href="https://github.com/pxrllc/emg/blob/main/emg-json-spec.md"><code class="inl">emg-json-spec.md</code></a>（v0.3.0）、
+        <a href="https://github.com/pxrllc/emg/blob/main/emg-json-spec-0.4.0.md"><code class="inl">emg-json-spec-0.4.0.md</code></a>、
+        <a href="https://github.com/pxrllc/emg/blob/main/emg-json-spec-0.5.0.md"><code class="inl">emg-json-spec-0.5.0.md</code></a> の 3 文書にあり、
+        食い違った場合はそちらが優先します。各項目の「導入」列が、どの版で入った規定かを示します。</p>
+      </div>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="overview">
+        <h2>概要</h2>
+        <p class="sec-note">v0.5.0 の全体像を、まず 1 画面で。</p>
+
+        <p>
+          1 つの <code class="inl">.emg</code> は <strong>パーツの集まり</strong>です。
+          パーツは <code class="inl">static</code>（常に全レイヤーを描く。体・背景）か
+          <code class="inl">switch</code>（フレームを 1 つだけ描く。目・口）のどちらかで、
+          この区別が全実装の分岐点になっています。
+        </p>
+
+<pre><span class="c">// data.json の骨格</span>
+{
+  <span class="k">"version"</span>: <span class="s">"0.5.1"</span>,
+  <span class="k">"requiredExtensions"</span>: [],          <span class="c">// 0.4.0</span>
+  <span class="k">"baseCanvasWidth"</span>: 2894,
+  <span class="k">"baseCanvasHeight"</span>: 4093,
+  <span class="k">"textures"</span>: [ { … } ],              <span class="c">// アトラス PNG の宣言</span>
+  <span class="k">"parts"</span>:    [ { … } ],              <span class="c">// パーツとレイヤー</span>
+  <span class="k">"sprites"</span>:  [ { … } ],              <span class="c">// フレーム切り替え・変換</span>
+  <span class="k">"presets"</span>:  [ { … } ]               <span class="c">// 0.5.0</span>
+}</pre>
+
+        <h3>v0.5.0 で増えたもの</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>追加</th><th>何ができるようになるか</th></tr>
+          <tr><td><code>layers[].frameName</code></td><td>複数レイヤーを 1 つの差分として同時に切り替える</td></tr>
+          <tr><td><code>parts[].control</code></td><td>UI 側での出し分けのヒント（描画には影響しない）</td></tr>
+          <tr><td><code>parts[].defaultVisible</code></td><td>初期非表示のトグル。<code>switch</code> では「どれも出さない」</td></tr>
+          <tr><td><code>presets[]</code></td><td>複数パーツの状態をまとめて名前で呼ぶ</td></tr>
+          <tr><td><code>sequence.keys[]</code></td><td>コマごとに表示時間が違うアニメーション</td></tr>
+          <tr><td><code>sprites[].tracks[]</code></td><td>移動・回転・拡縮・不透明度のアニメーション</td></tr>
+        </table>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="container">
+        <h2>コンテナ</h2>
+        <p class="sec-note"><code class="inl">.emg</code> は拡張子を変えた ZIP です。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>エントリ</th><th>必須</th><th>内容</th></tr>
+          <tr><td><code>data.json</code></td><td><span class="req">必須</span></td>
+              <td>定義本体。<code>model.json</code> という名前のファイルも実在するため、読み込みは<strong>末尾一致</strong>で探す</td></tr>
+          <tr><td><code>texture.png</code></td><td><span class="req">必須</span></td>
+              <td>テクスチャアトラス。分割された場合は <code>texture_0.png</code>, <code>texture_1.png</code>…</td></tr>
+          <tr><td><code>mapping.json</code></td><td><span class="opt">任意</span></td>
+              <td>まばたき・口パク・表情の意味づけ（<a href="#mapping">後述</a>）</td></tr>
+          <tr><td><code>LICENSE.txt</code></td><td><span class="opt">任意</span></td>
+              <td>素材のライセンス</td></tr>
+        </table>
+        </div>
+
+        <h3>アトラスの分割</h3>
+        <p>
+          全素材を <strong>1 枚のテクスチャ</strong>に詰めます。1 辺 8192px に収まらない場合に限り複数枚へ分割し、
+          レイヤーはそれぞれ <code class="inl">textureFile</code> で参照先を指します。
+        </p>
+
+        <div class="note">
+          <p><strong>PNG は無圧縮で格納します。</strong> PNG は既に deflate 済みなので、
+          ZIP 側で再圧縮しても 0.3% 程度しか縮まず、読み込みのたびに展開コストがかかります。
+          JSZip なら <code class="inl">compression</code> を指定しない（STORE）のが正解です。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="frameid">
+        <h2>フレーム識別子 <span class="ver v5">0.5.0</span></h2>
+        <p class="sec-note">v0.5.0 の中心概念。ここを理解すると残りが繋がります。</p>
+
+        <p>
+          <code class="inl">switch</code> パーツが「今どれを表示するか」を指す値を<strong>フレーム識別子</strong>と呼びます。
+        </p>
+
+<pre>フレーム識別子 = layer.frameName ?? layer.textureID</pre>
+
+        <p>
+          <code class="inl">parts[].default</code>、<code class="inl">sequence.frames[]</code>、
+          <code class="inl">sequence.keys[].frame</code>、<code class="inl">presets[].parts</code>、
+          <code class="inl">mapping.json</code> の参照 — <strong>すべてがこの値で解決されます</strong>。
+        </p>
+
+        <p>
+          <code class="inl">frameName</code> を持たないファイルでは <code class="inl">textureID</code> と同一になるため、
+          v0.3.0 / v0.4.0 のファイルの意味は一切変わりません。これが、既存ファイルを壊さずに
+          「複数レイヤーで 1 つの差分」を表現できる理由です。
+        </p>
+
+<pre>{ <span class="k">"textureID"</span>: <span class="s">"上着"</span>,     <span class="k">"frameName"</span>: <span class="s">"制服"</span> }   <span class="c">// ┐ 同時に表示される</span>
+{ <span class="k">"textureID"</span>: <span class="s">"スカート"</span>, <span class="k">"frameName"</span>: <span class="s">"制服"</span> }   <span class="c">// ┘</span>
+{ <span class="k">"textureID"</span>: <span class="s">"シャツ"</span>,   <span class="k">"frameName"</span>: <span class="s">"私服"</span> }
+{ <span class="k">"textureID"</span>: <span class="s">"ズボン"</span>,   <span class="k">"frameName"</span>: <span class="s">"私服"</span> }</pre>
+
+        <div class="warn">
+          <p><strong>1 フレームに 2 枚以上が属する場合、<code class="inl">requiredExtensions</code> に
+          <code class="inl">EMG_frame_name</code> の宣言が必須です。</strong>
+          未対応の実装は <code class="inl">default</code> を <code class="inl">textureID</code> として探し、
+          一致するレイヤーが無いため<strong>何も描画できません</strong>。しかもそれを失敗として検知できません。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="root">
+        <h2><code>root</code></h2>
+        <p class="sec-note"><code class="inl">data.json</code> の最上位オブジェクト。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>不在時</th><th>導入</th></tr>
+          <tr><td><code>version</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>baseCanvasWidth</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>baseCanvasHeight</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>textures</code></td><td class="t-type">Texture[]</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>parts</code></td><td class="t-type">Part[]</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>sprites</code></td><td class="t-type">Sprite[]</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>requiredExtensions</code></td><td class="t-type">string[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v4">0.4.0</span></td></tr>
+          <tr><td><code>presets</code></td><td class="t-type">Preset[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <div class="warn">
+          <p><strong><code class="inl">version</code> を解釈の分岐に使ってはいけません</strong>（規則 B1）。
+          構造の判定はフィールドの有無で行います。実データには <code class="inl">version</code> が
+          <code class="inl">"0.2.2"</code> と書かれているのに v0.2 以前の平坦な構造を持つファイルが存在します。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="textures">
+        <h2><code>textures[]</code></h2>
+        <p class="sec-note">アトラス PNG の宣言。1 枚に収まらない場合のみ複数。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th><th>導入</th></tr>
+          <tr><td><code>textureFile</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>ZIP 内のエントリ名</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>width</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>アトラスの幅（px）</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>height</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>アトラスの高さ（px）</td><td><span class="ver">0.3.0</span></td></tr>
+        </table>
+        </div>
+
+<pre>{ <span class="k">"textures"</span>: [
+  { <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>, <span class="k">"width"</span>: 4096, <span class="k">"height"</span>: 8192 }
+] }</pre>
+
+        <p>8 bit / sRGB。1 辺の上限は 8192px です <span class="ver v4">0.4.0</span>。</p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="parts">
+        <h2><code>parts[]</code></h2>
+        <p class="sec-note">描画の単位。<code class="inl">type</code> が全実装の分岐点です。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>不在時</th><th>導入</th></tr>
+          <tr><td><code>partID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>type</code></td><td class="t-type">"static" | "switch"</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>default</code></td><td class="t-type">string</td><td><span class="req">switch では必須</span></td><td>先頭フレーム</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>layers</code></td><td class="t-type">Layer[]</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>control</code></td><td class="t-type">"animated" | "user"</td><td><span class="opt">任意</span></td><td class="dfl">"animated"</td><td><span class="ver v5">0.5.0</span></td></tr>
+          <tr><td><code>defaultVisible</code></td><td class="t-type">boolean</td><td><span class="opt">任意</span></td><td class="dfl">true</td><td><span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <h3><code>type</code> の意味</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>値</th><th>描画</th><th>例</th></tr>
+          <tr><td><code>static</code></td><td><code>layers</code> を<strong>すべて</strong>描く</td><td>体、背景、髪</td></tr>
+          <tr><td><code>switch</code></td><td>フレームを<strong>1 つだけ</strong>描く</td><td>目、口、眉</td></tr>
+        </table>
+        </div>
+
+<pre><span class="c">// static — 体は 3 枚が重なって 1 つの体になる</span>
+{ <span class="k">"partID"</span>: <span class="s">"Body"</span>, <span class="k">"type"</span>: <span class="s">"static"</span>,
+  <span class="k">"layers"</span>: [ { <span class="k">"textureID"</span>: <span class="s">"胴"</span>, … },
+              { <span class="k">"textureID"</span>: <span class="s">"腕"</span>, … },
+              { <span class="k">"textureID"</span>: <span class="s">"脚"</span>, … } ] }
+
+<span class="c">// switch — 目は 6 枚のうち 1 枚だけが出る</span>
+{ <span class="k">"partID"</span>: <span class="s">"Eyes"</span>, <span class="k">"type"</span>: <span class="s">"switch"</span>,
+  <span class="k">"default"</span>: <span class="s">"01"</span>,               <span class="c">// 初期表示のフレーム識別子</span>
+  <span class="k">"control"</span>: <span class="s">"animated"</span>,
+  <span class="k">"layers"</span>: [ { <span class="k">"textureID"</span>: <span class="s">"01"</span>, … },
+              { <span class="k">"textureID"</span>: <span class="s">"02"</span>, … }, … ] }</pre>
+
+        <h3>表示フレームの決定順序</h3>
+        <p>優先順に、次で決めます。</p>
+        <ul>
+          <li>外部制御（ホストの指定、再生中の <code class="inl">sprites[]</code>、<code class="inl">mapping.json</code> の解決結果）</li>
+          <li><code class="inl">default</code> と一致するフレーム識別子を持つレイヤー</li>
+          <li>いずれも解決できなければ <code class="inl">layers</code> の先頭</li>
+        </ul>
+
+        <h3><code>defaultVisible</code> <span class="ver v5">0.5.0</span> <span class="ver v5">switch は 0.5.1</span></h3>
+        <p>型によって意味が変わります。</p>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>型</th><th><code>false</code> のときの意味</th><th>用途</th></tr>
+          <tr><td><code>static</code></td><td>パーツ全体が初期非表示。独立して on/off できる</td><td>眼鏡、帽子、小物</td></tr>
+          <tr><td><code>switch</code></td><td>初期状態で<strong>どのフレームも表示しない</strong></td><td>チーク、青ざめ、汗、涙</td></tr>
+        </table>
+        </div>
+        <p>
+          <code class="inl">switch</code> の場合も <code class="inl">default</code> は必須のままで、意味が変わります —
+          「表示状態にされたときに選ばれるフレーム」です。
+        </p>
+
+        <div class="warn">
+          <p><strong><code class="inl">switch</code> で <code class="inl">defaultVisible: false</code> を使う場合、
+          <code class="inl">EMG_switch_none</code> の宣言が必須です。</strong>
+          未対応の実装は <code class="inl">default</code> のフレームを描いてしまい、
+          出ないはずのチークが出続けます。<code class="inl">static</code> のみでの使用では
+          <strong>宣言してはいけません</strong>（常に表示されるだけで絵は成立するため）。</p>
+        </div>
+
+        <h3><code>control</code> <span class="ver v5">0.5.0</span></h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>値</th><th>意味</th><th>例</th></tr>
+          <tr><td><code>animated</code></td>
+              <td>主に <code>sprites[]</code> や <code>mapping.json</code> が<strong>時間軸に沿って</strong>切り替える</td>
+              <td>目、口</td></tr>
+          <tr><td><code>user</code></td>
+              <td>主に<strong>利用者が選ぶ</strong></td>
+              <td>衣装、髪型</td></tr>
+        </table>
+        </div>
+        <p>
+          <strong>制約ではなくヒントです。</strong> <code class="inl">control: "user"</code> のパーツを
+          <code class="inl">sprites[]</code> が切り替えても、<code class="inl">animated</code> のパーツを
+          利用者が固定してもかまいません。制約にすると「演出で衣装を切り替える」といった
+          正当な用途を禁じることになるためです。
+        </p>
+        <p>
+          実装は<strong>無視してよく</strong>、描画には影響しません。用途は UI で、
+          「衣装」を表情の切り替え欄ではなく設定欄に出す、といった提示の分岐に使います。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="layers">
+        <h2><code>parts[].layers[]</code></h2>
+        <p class="sec-note">アトラスの矩形 1 つと、それをキャンバスのどこへ描くか。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>不在時</th><th>導入</th></tr>
+          <tr><td><code>textureID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>textureFile</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>x</code> / <code>y</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>width</code> / <code>height</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>basePosition_x</code> / <code>_y</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>textureZIndex</code></td><td class="t-type">number</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>opacity</code></td><td class="t-type">number</td><td><span class="opt">任意</span></td><td class="dfl">1.0</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>blendMode</code></td><td class="t-type">string</td><td><span class="opt">任意</span></td><td class="dfl">"normal"</td><td><span class="ver">0.3.0</span> <span class="ver v4">値は 0.4.0</span></td></tr>
+          <tr><td><code>anchor_x</code> / <code>_y</code></td><td class="t-type">number</td><td><span class="opt">任意</span></td><td class="dfl">basePosition_*</td><td><span class="ver v4">0.4.0</span></td></tr>
+          <tr><td><code>frameName</code></td><td class="t-type">string</td><td><span class="opt">任意</span></td><td class="dfl">textureID</td><td><span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <h3>サンプル</h3>
+        <p>目パーツの <code class="inl">layers[]</code>。開き目と閉じ目が 1 枚ずつ入っています。</p>
+
+<pre><span class="k">"layers"</span>: [
+  {
+    <span class="k">"textureID"</span>: <span class="s">"01"</span>,                 <span class="c">// パーツ内で一意</span>
+    <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+    <span class="k">"x"</span>: 194, <span class="k">"y"</span>: 497,                <span class="c">// ← アトラスのどこを切るか</span>
+    <span class="k">"width"</span>: 238, <span class="k">"height"</span>: 82,
+    <span class="k">"basePosition_x"</span>: 244,           <span class="c">// ← キャンバスのどこへ置くか</span>
+    <span class="k">"basePosition_y"</span>: 342,
+    <span class="k">"textureZIndex"</span>: 24,             <span class="c">// 大きいほど手前</span>
+    <span class="k">"opacity"</span>: 1,
+    <span class="k">"blendMode"</span>: <span class="s">"normal"</span>
+  },
+  {
+    <span class="k">"textureID"</span>: <span class="s">"04"</span>,
+    <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+    <span class="k">"x"</span>: 194, <span class="k">"y"</span>: 579,
+    <span class="k">"width"</span>: 238, <span class="k">"height"</span>: 82,
+    <span class="k">"basePosition_x"</span>: 244,           <span class="c">// 同じ位置に重なるので値は同じ</span>
+    <span class="k">"basePosition_y"</span>: 342,
+    <span class="k">"textureZIndex"</span>: 24
+  }
+]</pre>
+
+        <div class="warn">
+          <p><strong>座標系が 2 つあります。</strong>
+          <code class="inl">x</code> / <code class="inl">y</code> / <code class="inl">width</code> / <code class="inl">height</code>
+          は<strong>アトラス上の切り出し位置</strong>、
+          <code class="inl">basePosition_x</code> / <code class="inl">_y</code> は
+          <strong>キャンバス上の描画位置</strong>です。混同すると絵が崩れます。</p>
+        </div>
+
+        <h3><code>frameName</code> を使う場合 <span class="ver v5">0.5.0</span></h3>
+        <p>
+          同じ <code class="inl">frameName</code> を持つレイヤーは<strong>同時に表示されます</strong>。
+          <code class="inl">textureID</code> は引き続きパーツ内で一意である必要があります。
+        </p>
+
+<pre><span class="k">"layers"</span>: [
+  { <span class="k">"textureID"</span>: <span class="s">"上着"</span>,     <span class="k">"frameName"</span>: <span class="s">"制服"</span>, <span class="k">"textureZIndex"</span>: 30, … },
+  { <span class="k">"textureID"</span>: <span class="s">"スカート"</span>, <span class="k">"frameName"</span>: <span class="s">"制服"</span>, <span class="k">"textureZIndex"</span>: 28, … },
+  { <span class="k">"textureID"</span>: <span class="s">"シャツ"</span>,   <span class="k">"frameName"</span>: <span class="s">"私服"</span>, <span class="k">"textureZIndex"</span>: 30, … },
+  { <span class="k">"textureID"</span>: <span class="s">"ズボン"</span>,   <span class="k">"frameName"</span>: <span class="s">"私服"</span>, <span class="k">"textureZIndex"</span>: 28, … }
+]
+<span class="c">// この場合 parts[].default は "制服" / "私服"（textureID ではない）</span></pre>
+
+        <h3><code>textureZIndex</code></h3>
+        <p>
+          <strong>ファイル全体で 1 本の順序</strong>です。パーツ単位ではありません。
+          値が大きいほど手前で、描画は昇順（奥から手前）に行います。
+          同じ値が複数ある場合の順序は<strong>未定義</strong>です。
+        </p>
+
+        <h3><code>blendMode</code> <span class="ver v4">0.4.0</span></h3>
+        <p>
+          許容値は CSS の <code class="inl">mix-blend-mode</code> と同じ集合です —
+          <code class="inl">normal</code>, <code class="inl">multiply</code>, <code class="inl">screen</code>,
+          <code class="inl">overlay</code>, <code class="inl">darken</code>, <code class="inl">lighten</code>,
+          <code class="inl">color-dodge</code>, <code class="inl">color-burn</code>,
+          <code class="inl">hard-light</code>, <code class="inl">soft-light</code>,
+          <code class="inl">difference</code>, <code class="inl">exclusion</code>,
+          <code class="inl">hue</code>, <code class="inl">saturation</code>,
+          <code class="inl">color</code>, <code class="inl">luminosity</code>。
+          未知の値は <code class="inl">normal</code> として描画します。
+        </p>
+
+        <h3><code>anchor_x</code> / <code>anchor_y</code> <span class="ver v4">0.4.0</span></h3>
+        <p>
+          回転と拡縮の基準点（キャンバス座標）。<a href="#tracks"><code class="inl">tracks[]</code></a> でのみ使います。
+          不在時は <code class="inl">basePosition_*</code> と同値です。
+        </p>
+
+        <div class="warn">
+          <p><strong><code class="inl">textureID</code> はパーツ内でのみ一意です。</strong>
+          実データでは <code class="inl">"01"</code> が <code class="inl">Mouth</code>・
+          <code class="inl">Eyes</code>・<code class="inl">Eyebrows</code> に同時に存在します。
+          レイヤーを一意に指すには <strong><code class="inl">(partID, フレーム識別子)</code> の組</strong>が必要です。
+          裸の <code class="inl">textureID</code> を保存すると、列挙順で先に来たパーツが選ばれます
+          （「眉がまばたきする」不具合の原因です）。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="sprites">
+        <h2><code>sprites[]</code></h2>
+        <p class="sec-note">フレームの切り替え（<code class="inl">sequence</code>）と座標変換（<code class="inl">tracks</code>）。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>不在時</th><th>導入</th></tr>
+          <tr><td><code>spriteID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>targetPartID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>sequence</code></td><td class="t-type">Sequence</td><td><span class="opt">任意</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>fps</code></td><td class="t-type">number</td><td><span class="opt">任意</span></td><td class="dfl">12</td><td><span class="ver v4">0.4.0 で任意化</span></td></tr>
+          <tr><td><code>trigger</code></td><td class="t-type">Trigger</td><td><span class="opt">任意</span></td><td>自律再生しない</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>tracks</code></td><td class="t-type">Track[]</td><td><span class="opt">任意</span></td><td>—</td><td><span class="ver v5">0.5.0</span></td></tr>
+          <tr><td><code>duration</code></td><td class="t-type">number</td><td><span class="req">tracks では必須</span></td><td>—</td><td><span class="ver v5">0.5.0</span></td></tr>
+          <tr><td><code>loop</code></td><td class="t-type">"once" | "loop" | "pingpong"</td><td><span class="opt">任意</span></td><td class="dfl">"loop"</td><td><span class="ver v5">0.5.0</span></td></tr>
+          <tr><td><code>phaseOffset</code></td><td class="t-type">number</td><td><span class="opt">任意</span></td><td class="dfl">0</td><td><span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <div class="note">
+          <p><strong><code class="inl">trigger</code> が無ければ、プレイヤーは自律再生してはいけません。</strong>
+          外部から <code class="inl">spriteID</code> で明示的に再生させます。</p>
+        </div>
+
+        <h3><code>loop</code> <span class="ver v5">0.5.0</span></h3>
+        <p><code class="inl">tracks</code> の再生の仕方。<code class="inl">duration</code> を 1 周期として扱います。</p>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>値</th><th>挙動</th><th>使いどころ</th></tr>
+          <tr><td><code>once</code></td><td><code>duration</code> まで再生して<strong>末尾の値で止まる</strong></td><td>登場演出</td></tr>
+          <tr><td><code>loop</code></td><td>末尾まで行ったら<strong>先頭へ飛ぶ</strong>（不連続になりうる）</td><td>回転、点滅</td></tr>
+          <tr><td><code>pingpong</code></td><td>末尾まで行ったら<strong>逆再生で戻る</strong>（つなぎ目が滑らか）</td><td>揺れ、呼吸</td></tr>
+        </table>
+        </div>
+        <p>
+          <code class="inl">phaseOffset</code> は再生開始位置のずれ（秒）です。
+          同じ動きを複数パーツに付けるとき、値をずらすと揃って動く不自然さを避けられます。
+        </p>
+
+        <h3><code>targetPartID</code> の制約</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>sprite の中身</th><th>対象にできるパーツ</th></tr>
+          <tr><td><code>sequence</code> を持つ</td><td><code>switch</code> のみ</td></tr>
+          <tr><td><code>tracks</code> のみ</td><td><code>static</code> / <code>switch</code> どちらでも <span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <div class="warn">
+          <p><strong><code class="inl">mapping.json</code> が掌握するパーツは自律発火してはいけません。</strong>
+          <code class="inl">blinkPartKey</code> / <code class="inl">blinkParts</code> /
+          <code class="inl">lipSyncPartKey</code> / <code class="inl">lipSyncParts</code> で
+          <strong>明示的に</strong>指定された <code class="inl">partID</code> を
+          <code class="inl">targetPartID</code> に持つ sprite が対象です。
+          キーワード一致で解決されただけのものは該当しません。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="sequence">
+        <h2><code>sequence</code></h2>
+        <p class="sec-note">フレームの並びと再生順。<code class="inl">frames</code> と <code class="inl">keys</code> は排他です。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th><th>導入</th></tr>
+          <tr><td><code>type</code></td><td class="t-type">"ordered" | "random_hold"</td><td><span class="req">必須</span></td><td>再生順の種別</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>frames</code></td><td class="t-type">string[]</td><td><span class="opt">任意</span></td><td>等間隔。<code>fps</code> の間隔で 1 つずつ進む</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>keys</code></td><td class="t-type">Key[]</td><td><span class="opt">任意</span></td><td>不等間隔。<code>{ t, frame }</code> の配列</td><td><span class="ver v5">0.5.0</span></td></tr>
+        </table>
+        </div>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><code>type</code></th><th>挙動</th></tr>
+          <tr><td><code>ordered</code></td><td>先頭から順に再生する</td></tr>
+          <tr><td><code>random_hold</code></td><td>1 つをランダムに選んで表示し続ける。<code>trigger</code> のたびに再抽選</td></tr>
+        </table>
+        </div>
+
+        <h3><code>keys[]</code> <span class="ver v5">0.5.0</span></h3>
+        <p>
+          <code class="inl">t</code> は<strong>再生開始からの累積秒数</strong>（各コマの長さではありません）。
+          昇順に並んでいる必要があります。時刻 <code class="inl">t</code> の表示フレームは
+          <strong><code class="inl">key.t &lt;= t</code> を満たす最後のキー</strong>です。
+        </p>
+
+<pre>{ <span class="k">"spriteID"</span>: <span class="s">"blink"</span>, <span class="k">"targetPartID"</span>: <span class="s">"Eyes"</span>,
+  <span class="k">"sequence"</span>: { <span class="k">"type"</span>: <span class="s">"ordered"</span>, <span class="k">"keys"</span>: [
+    { <span class="k">"t"</span>: 0.00, <span class="k">"frame"</span>: <span class="s">"01"</span> },
+    { <span class="k">"t"</span>: 0.06, <span class="k">"frame"</span>: <span class="s">"03"</span> },
+    { <span class="k">"t"</span>: 0.10, <span class="k">"frame"</span>: <span class="s">"04"</span> },
+    { <span class="k">"t"</span>: 0.18, <span class="k">"frame"</span>: <span class="s">"03"</span> },
+    { <span class="k">"t"</span>: 0.24, <span class="k">"frame"</span>: <span class="s">"01"</span> }
+  ] } }</pre>
+
+        <p><code class="inl">keys</code> を使う場合、<code class="inl">fps</code> は不要です。書くと解釈が二重になります。</p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="trigger">
+        <h2><code>trigger</code></h2>
+        <p class="sec-note">いつ発火するか。不在なら自律再生しません。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+          <tr><td><code>type</code></td><td class="t-type">"auto_loop" | "random_interval" | "external"</td><td><span class="req">必須</span></td><td>発火の種別</td></tr>
+          <tr><td><code>intervalMin</code></td><td class="t-type">number</td><td><span class="req">random_interval では必須</span></td><td>最小の間隔（秒）</td></tr>
+          <tr><td><code>intervalMax</code></td><td class="t-type">number</td><td><span class="req">random_interval では必須</span></td><td>最大の間隔（秒）</td></tr>
+        </table>
+        </div>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>値</th><th>挙動</th></tr>
+          <tr><td><code>auto_loop</code></td><td>再生が終わったらすぐ次を始める</td></tr>
+          <tr><td><code>random_interval</code></td><td><code>intervalMin</code>〜<code>intervalMax</code> 秒のランダムな間隔で発火</td></tr>
+          <tr><td><code>external</code></td><td>自律発火しない。<code>spriteID</code> で外部から再生させる</td></tr>
+        </table>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="tracks">
+        <h2><code>sprites[].tracks[]</code> <span class="ver v5">0.5.0</span></h2>
+        <p class="sec-note">移動・回転・拡縮・不透明度のアニメーション。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>不在時</th></tr>
+          <tr><td><code>path</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>—</td></tr>
+          <tr><td><code>keys</code></td><td class="t-type">{ t, v }[]</td><td><span class="req">必須</span></td><td>—</td></tr>
+          <tr><td><code>interpolation</code></td><td class="t-type">"step" | "linear" | "cubic"</td><td><span class="opt">任意</span></td><td class="dfl">"linear"</td></tr>
+        </table>
+        </div>
+
+        <h3><code>path</code> — 対象プロパティ</h3>
+        <p><strong>この 6 種のみです。</strong> メッシュ変形・色調補正・<code class="inl">textureZIndex</code> の変更は範囲外です。</p>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th><code>path</code></th><th>単位</th><th>既定値</th></tr>
+          <tr><td><code>translate_x</code></td><td>px（キャンバス座標）</td><td class="dfl">0</td></tr>
+          <tr><td><code>translate_y</code></td><td>px（キャンバス座標）</td><td class="dfl">0</td></tr>
+          <tr><td><code>rotation</code></td><td>度。<strong>時計回りが正</strong></td><td class="dfl">0</td></tr>
+          <tr><td><code>scale_x</code></td><td>倍率</td><td class="dfl">1.0</td></tr>
+          <tr><td><code>scale_y</code></td><td>倍率</td><td class="dfl">1.0</td></tr>
+          <tr><td><code>opacity</code></td><td>0.0〜1.0</td><td class="dfl">1.0</td></tr>
+        </table>
+        </div>
+        <p>
+          この集合に限ることで、CSS transform・OS コンポジタ・GPU・CPU 合成の
+          どの経路でも実現できます。これを超えると、いずれの経路でも自前描画が必要になります。
+        </p>
+
+        <h3>適用順序</h3>
+<pre>1. アンカー点（anchor_x, anchor_y）を原点へ移動
+2. scale_x / scale_y
+3. rotation
+4. アンカー点を元の位置へ戻す
+5. translate_x / translate_y
+6. opacity を layer.opacity に乗じる</pre>
+
+        <h3><code>interpolation</code> — キーとキーの間をどう埋めるか</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>値</th><th>挙動</th><th>使いどころ</th></tr>
+          <tr><td><code>step</code></td>
+              <td>直前のキーの値を<strong>保持</strong>する。次のキーで不連続に飛ぶ</td>
+              <td>点滅、パラパラした動き</td></tr>
+          <tr><td><code>linear</code></td>
+              <td>2 つのキーを<strong>直線で</strong>つなぐ。既定値</td>
+              <td>ほとんどの用途</td></tr>
+          <tr><td><code>cubic</code></td>
+              <td><strong>Catmull-Rom</strong> で滑らかにつなぐ。キーの前後を見て曲線を作る</td>
+              <td>揺れ、加減速のある動き</td></tr>
+        </table>
+        </div>
+        <p>
+          <code class="inl">cubic</code> を <strong>Catmull-Rom に固定</strong>しているのは、
+          制御点を持たないため追加データが不要で、実装間で結果が一意に定まるからです。
+          端点は最初／最後のキーを複製して計算します。
+        </p>
+        <p>
+          キーは <code class="inl">t</code> の昇順である必要があります。
+          範囲外の時刻では端のキーの値を保持します。
+        </p>
+
+<pre>{ <span class="k">"spriteID"</span>: <span class="s">"hair_sway"</span>, <span class="k">"targetPartID"</span>: <span class="s">"hair_back"</span>,
+  <span class="k">"duration"</span>: 3.0, <span class="k">"loop"</span>: <span class="s">"pingpong"</span>,
+  <span class="k">"tracks"</span>: [
+    { <span class="k">"path"</span>: <span class="s">"rotation"</span>,
+      <span class="k">"keys"</span>: [ { <span class="k">"t"</span>: 0.0, <span class="k">"v"</span>: 0 },
+                 { <span class="k">"t"</span>: 1.5, <span class="k">"v"</span>: 2.5 },
+                 { <span class="k">"t"</span>: 3.0, <span class="k">"v"</span>: 0 } ],
+      <span class="k">"interpolation"</span>: <span class="s">"linear"</span> }
+  ] }</pre>
+
+        <div class="note">
+          <p><strong>§7 は分離可能です。</strong> <code class="inl">tracks</code> を実装せず
+          §2〜§6 のみを実装しても v0.5.0 として整合します。<code class="inl">emg-renpy</code> は
+          方針として非対応です。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="presets">
+        <h2><code>presets[]</code> <span class="ver v5">0.5.0</span></h2>
+        <p class="sec-note">複数パーツの状態をまとめて名前で呼ぶ。</p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+          <tr><td><code>presetID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>参照キー</td></tr>
+          <tr><td><code>label</code></td><td class="t-type">string</td><td><span class="opt">任意</span></td><td>UI に出す名前</td></tr>
+          <tr><td><code>parts</code></td><td class="t-type">{ partID: frameID }</td><td><span class="opt">任意</span></td><td>switch パーツのフレーム指定</td></tr>
+          <tr><td><code>toggles</code></td><td class="t-type">{ partID: boolean }</td><td><span class="opt">任意</span></td><td>パーツの表示 / 非表示</td></tr>
+        </table>
+        </div>
+
+        <div class="note">
+          <p><strong>プリセットに現れない <code class="inl">partID</code> の状態は変更しません。</strong>
+          「この表情のときはこれだけ変える」を表現するためで、全パーツを列挙する必要はありません。</p>
+        </div>
+
+<pre>{ <span class="k">"presetID"</span>: <span class="s">"happy_look"</span>,
+  <span class="k">"label"</span>: <span class="s">"にこやか"</span>,
+  <span class="k">"parts"</span>:   { <span class="k">"Eyebrows"</span>: <span class="s">"01"</span>, <span class="k">"Blushs"</span>: <span class="s">"01"</span> },
+  <span class="k">"toggles"</span>: { <span class="k">"arms"</span>: true } }</pre>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="mapping">
+        <h2><code>mapping.json</code></h2>
+        <p class="sec-note">任意のコンパニオンファイル。まばたき・口パク・表情の意味づけ。</p>
+
+        <p>
+          <code class="inl">data.json</code> が<strong>構造</strong>を定めるのに対し、
+          <code class="inl">mapping.json</code> は<strong>意味</strong>を与えます —
+          「どのパーツが目か」「どのフレームが閉じ目か」。
+          存在しなくても <code class="inl">.emg</code> は有効で、対応しない実装は無視してかまいません。
+        </p>
+
+<pre>{
+  <span class="k">"avatarId"</span>: <span class="s">"avatar"</span>,
+  <span class="k">"baseMapping"</span>: {
+    <span class="k">"blinkPartKey"</span>: <span class="s">"Eyes"</span>,
+    <span class="k">"blink"</span>: { <span class="k">"open"</span>: <span class="s">"01"</span>, <span class="k">"half"</span>: <span class="s">"03"</span>, <span class="k">"closed"</span>: <span class="s">"04"</span> },
+    <span class="k">"lipSyncPartKey"</span>: <span class="s">"Mouth"</span>,
+    <span class="k">"lipSync"</span>: { <span class="k">"a"</span>: <span class="s">"02"</span>, <span class="k">"i"</span>: <span class="s">"03"</span>, <span class="k">"u"</span>: <span class="s">"04"</span>,
+                 <span class="k">"e"</span>: <span class="s">"05"</span>, <span class="k">"o"</span>: <span class="s">"06"</span>, <span class="k">"n"</span>: <span class="s">"01"</span> }
+  },
+  <span class="k">"expressions"</span>: {
+    <span class="k">"default"</span>: {},
+    <span class="k">"angry"</span>: { <span class="k">"parts"</span>: { <span class="k">"Eyebrows"</span>: [<span class="s">"04"</span>] },
+               <span class="k">"overrides"</span>: { <span class="k">"blink"</span>: { <span class="k">"open"</span>: <span class="s">"05"</span>, <span class="k">"half"</span>: <span class="s">"06"</span>, <span class="k">"closed"</span>: <span class="s">"04"</span> } } }
+  }
+}</pre>
+
+        <div class="warn">
+          <p><strong>表情から目・口のパーツを直接指定することはできません。</strong>
+          解決は <code class="inl">expressions[].parts</code> を先に適用し、
+          そのあと blink と lipSync が自分のパーツを上書きします。
+          <code class="inl">parts</code> に <code class="inl">Eyes</code> を書いても黙って無効になります。
+          目と口は <code class="inl">overrides.blink</code> / <code class="inl">overrides.lipSync</code> を使ってください。</p>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="drawmodel">
+        <h2>描画モデル</h2>
+        <p class="sec-note">1 フレーム分の描画手順（規範）。</p>
+
+        <ul>
+          <li><strong>対象を集める。</strong> <code class="inl">static</code> は全レイヤー、
+              <code class="inl">switch</code> は解決した 1 フレーム分のみ</li>
+          <li><strong><code class="inl">textureZIndex</code> の昇順に並べ替える。</strong>
+              パーツ単位でまとめて描いてはいけません（パーツをまたぐ重なりが壊れます）</li>
+          <li><strong>順に描く。</strong> アトラスの矩形をキャンバスの位置へ、<code class="inl">opacity</code> を乗じて合成</li>
+        </ul>
+
+<pre>draw = []
+<span class="k">for</span> part <span class="k">in</span> data.parts:
+    <span class="k">if</span> part.defaultVisible == <span class="n">False</span>: <span class="k">continue</span>      <span class="c"># 0.5.0</span>
+    <span class="k">if</span> part.type == <span class="s">"static"</span>:
+        draw += part.layers
+    <span class="k">else</span>:
+        fid = resolve_switch(part)
+        draw += [l <span class="k">for</span> l <span class="k">in</span> part.layers <span class="k">if</span> frame_id(l) == fid]
+
+<span class="k">for</span> layer <span class="k">in</span> sorted(draw, key=<span class="k">lambda</span> l: l.textureZIndex):
+    blit(src=(layer.x, layer.y, layer.width, layer.height),
+         dst=(layer.basePosition_x, layer.basePosition_y, layer.width, layer.height),
+         alpha=layer.opacity)</pre>
+
+        <p>キャンバスの背景は<strong>透明</strong>です。<code class="inl">.emg</code> は背景色を持ちません。</p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="compat">
+        <h2>互換性の規則 <span class="ver v4">0.4.0</span></h2>
+        <p class="sec-note">v0.3.0 にはこれに相当する規定がありませんでした。</p>
+
+        <h3>前方互換 — 古い実装が新しいファイルを読む</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>#</th><th>規則</th></tr>
+          <tr><td><code>F1</code></td><td><strong>未知のキー・未知のフィールドは無視して読み進める。</strong> 存在を理由にエラーとしてはならない</td></tr>
+          <tr><td><code>F2</code></td><td><code>parts[].type</code> が未知の値なら、<strong><code>default</code> を持つなら <code>switch</code>、持たないなら <code>static</code></strong> として扱う</td></tr>
+          <tr><td><code>F3</code></td><td><code>sequence.type</code> が未知の値なら <code>ordered</code> として扱う</td></tr>
+          <tr><td><code>F4</code></td><td><code>trigger.type</code> が未知の値なら<strong>自律発火してはならない</strong>（<code>external</code> と同じ扱い）</td></tr>
+          <tr><td><code>F5</code></td><td><code>requiredExtensions[]</code> に未知の識別子があれば<strong>読み込みを拒否する</strong></td></tr>
+        </table>
+        </div>
+
+        <div class="note">
+          <p><strong>F1 と F5 は矛盾しません。</strong> 対象が違います。
+          知らなくても表示が成立する追加は無視して読み進め（F1）、
+          知らないと表示が成立しない追加は明示的に失敗する（F5）。
+          沈黙して誤った絵を出すより、検知できる状態を優先します。</p>
+        </div>
+
+        <h3>後方互換 — 新しい実装が古いファイルを読む</h3>
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>#</th><th>規則</th></tr>
+          <tr><td><code>B1</code></td><td><code>version</code> を解釈の分岐に使わない。構造の判定はフィールドの有無で行う</td></tr>
+          <tr><td><code>B2</code></td><td>既存キーの意味を変更しない。異なる意味で再利用もしない</td></tr>
+          <tr><td><code>B3</code></td><td>任意のフィールドを必須へ変更しない</td></tr>
+          <tr><td><code>B4</code></td><td>新規フィールドには必ず「不在時の意味」を定義する</td></tr>
+          <tr><td><code>B5</code></td><td>読み込みの対応は維持する。引退させるのは書き出し側のみ</td></tr>
+        </table>
+        </div>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="extensions">
+        <h2><code>requiredExtensions[]</code> <span class="ver v4">0.4.0</span></h2>
+        <p class="sec-note">理解できない実装に読ませてはならない機能の宣言。</p>
+
+        <div class="note">
+          <p><strong>宣言してよいのは「その機能を理解しない実装が、誤った絵を描いてしまう」場合だけです。</strong>
+          動かない・切り替えられない・初期状態のまま、といった劣化に対して宣言してはいけません。
+          不必要に古い実装を締め出すことになります。</p>
+        </div>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>識別子</th><th>対象</th><th>宣言が必要な条件</th></tr>
+          <tr><td><code>EMG_frame_name</code> <span class="ver v5">0.5.0</span></td><td><code>layers[].frameName</code></td>
+              <td>1 つのフレーム識別子に <strong>2 枚以上</strong>のレイヤーが属する場合</td></tr>
+          <tr><td><code>EMG_switch_none</code> <span class="ver v5">0.5.1</span></td><td><code>parts[].defaultVisible</code></td>
+              <td><code>type: "switch"</code> のパーツに <code>defaultVisible: false</code> を指定した場合</td></tr>
+        </table>
+        </div>
+
+        <h3>宣言が不要なもの</h3>
+        <p>
+          <code class="inl">control</code>、<code class="inl">presets[]</code>、
+          <code class="inl">sequence.keys[]</code>、<code class="inl">tracks[]</code>、
+          <code class="inl">anchor_*</code>、<code class="inl">static</code> での
+          <code class="inl">defaultVisible</code> — いずれも無視されても絵は成立します。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="support">
+        <h2>実装対応表</h2>
+        <p class="sec-note">2026-08-25 時点。</p>
+
+        <div class="tbl-scroll">
+        <table class="matrix">
+          <tr>
+            <th>実装</th>
+            <th><code>frameName</code></th>
+            <th><code>control</code>〜<code>presets</code></th>
+            <th>switch none</th>
+            <th><code>keys</code></th>
+            <th><code>tracks</code></th>
+          </tr>
+          <tr><td>emg-ymm4（Emg.Core）</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>emg-cdn プレイヤー</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>emg-godot</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>emg-unity-importer</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td></tr>
+          <tr><td>emg-web-runtime</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td></tr>
+          <tr><td>emg-renpy</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="no">方針として非対応</td></tr>
+        </table>
+        </div>
+
+        <p>
+          「一部」は <code class="inl">presets</code> 未実装を指します。
+          「評価器」は値の解決まで実装済みで、描画への適用はホスト側に委ねている状態です。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="pitfalls">
+        <h2>落とし穴</h2>
+        <p class="sec-note">実データで実際に踏んだもの。</p>
+
+        <h3><code>textureID</code> は一意ではない</h3>
+        <p>
+          パーツ内でのみ一意です。実ファイルでは <code class="inl">"1"</code>〜<code class="inl">"5"</code> が
+          眉・口・目に、<code class="inl">"6"</code>〜<code class="inl">"14"</code> が口・目に存在します。
+          参照は <code class="inl">(partID, フレーム識別子)</code> の組で持ってください。
+        </p>
+
+        <h3>名前から意味を推測しない</h3>
+        <p>
+          <code class="inl">textureID</code> は単なる番号のことが多く
+          （<code class="inl">"14"</code>, <code class="inl">"24"</code>, <code class="inl">"15_1"</code>）、
+          名前から母音や閉じ目を当てることはできません。推測が働かない場合は
+          <strong>無効に倒す</strong>べきで、誤った推測をしてはいけません。
+        </p>
+
+        <h3>z 順が反転しているファイルがある</h3>
+        <p>
+          ある時期より前に書き出されたファイルは <code class="inl">textureZIndex</code> が
+          前後逆です（体が最前面になっています）。原因は生成側が
+          <code class="inl">ag-psd</code> のレイヤー順を逆に仮定していたことで、既に修正されています。
+          古いファイルは再書き出しするか、<code class="inl">z' = maxZ - z</code> で正規化してください。
+        </p>
+
+        <h3>アバター全体が 1 つのパーツになっているファイルがある</h3>
+        <p>
+          生成側の不具合で、入れ子のグループが 1 つのパーツに潰れたファイルが存在します
+          （36 レイヤーで 1 パーツ）。これは<strong>再書き出しで直すべき</strong>もので、
+          消費側で対処しようとすると <code class="inl">static</code> パーツ内のレイヤー単位フィルタが必要になり、
+          どの実装もそれを持っていません。
+        </p>
+
+        <h3><code>version</code> は嘘をつくことがある</h3>
+        <p>
+          <code class="inl">"0.2.2"</code> と書かれているのに v0.2 以前の平坦な構造を持つファイルが実在します。
+          構造の判定はフィールドの有無で行ってください（規則 B1）。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
+      <section id="sample">
+        <h2>完全なサンプル</h2>
+        <p class="sec-note">最小構成の <code class="inl">data.json</code>。</p>
+
+<pre>{
+  <span class="k">"version"</span>: <span class="s">"0.5.1"</span>,
+  <span class="k">"requiredExtensions"</span>: [<span class="s">"EMG_switch_none"</span>],
+  <span class="k">"baseCanvasWidth"</span>: 1024,
+  <span class="k">"baseCanvasHeight"</span>: 1024,
+
+  <span class="k">"textures"</span>: [
+    { <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>, <span class="k">"width"</span>: 1024, <span class="k">"height"</span>: 1024 }
+  ],
+
+  <span class="k">"parts"</span>: [
+    { <span class="k">"partID"</span>: <span class="s">"Body"</span>, <span class="k">"type"</span>: <span class="s">"static"</span>,
+      <span class="k">"layers"</span>: [
+        { <span class="k">"textureID"</span>: <span class="s">"body"</span>, <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+          <span class="k">"x"</span>: 0, <span class="k">"y"</span>: 0, <span class="k">"width"</span>: 400, <span class="k">"height"</span>: 600,
+          <span class="k">"basePosition_x"</span>: 312, <span class="k">"basePosition_y"</span>: 300,
+          <span class="k">"textureZIndex"</span>: 0, <span class="k">"opacity"</span>: 1, <span class="k">"blendMode"</span>: <span class="s">"normal"</span> }
+      ] },
+
+    { <span class="k">"partID"</span>: <span class="s">"Eyes"</span>, <span class="k">"type"</span>: <span class="s">"switch"</span>, <span class="k">"default"</span>: <span class="s">"open"</span>,
+      <span class="k">"control"</span>: <span class="s">"animated"</span>,
+      <span class="k">"layers"</span>: [
+        { <span class="k">"textureID"</span>: <span class="s">"open"</span>,   <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+          <span class="k">"x"</span>: 400, <span class="k">"y"</span>: 0, <span class="k">"width"</span>: 120, <span class="k">"height"</span>: 40,
+          <span class="k">"basePosition_x"</span>: 452, <span class="k">"basePosition_y"</span>: 380,
+          <span class="k">"textureZIndex"</span>: 10 },
+        { <span class="k">"textureID"</span>: <span class="s">"closed"</span>, <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+          <span class="k">"x"</span>: 400, <span class="k">"y"</span>: 40, <span class="k">"width"</span>: 120, <span class="k">"height"</span>: 40,
+          <span class="k">"basePosition_x"</span>: 452, <span class="k">"basePosition_y"</span>: 380,
+          <span class="k">"textureZIndex"</span>: 10 }
+      ] },
+
+    <span class="c">// 差分を持ちながら「どれも出さない」のが常態のパーツ</span>
+    { <span class="k">"partID"</span>: <span class="s">"Blush"</span>, <span class="k">"type"</span>: <span class="s">"switch"</span>,
+      <span class="k">"default"</span>: <span class="s">"cheek"</span>, <span class="k">"defaultVisible"</span>: <span class="n">false</span>,
+      <span class="k">"layers"</span>: [
+        { <span class="k">"textureID"</span>: <span class="s">"cheek"</span>, <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+          <span class="k">"x"</span>: 400, <span class="k">"y"</span>: 80, <span class="k">"width"</span>: 160, <span class="k">"height"</span>: 30,
+          <span class="k">"basePosition_x"</span>: 432, <span class="k">"basePosition_y"</span>: 400,
+          <span class="k">"textureZIndex"</span>: 20 },
+        { <span class="k">"textureID"</span>: <span class="s">"pale"</span>,  <span class="k">"textureFile"</span>: <span class="s">"texture.png"</span>,
+          <span class="k">"x"</span>: 400, <span class="k">"y"</span>: 110, <span class="k">"width"</span>: 160, <span class="k">"height"</span>: 30,
+          <span class="k">"basePosition_x"</span>: 432, <span class="k">"basePosition_y"</span>: 400,
+          <span class="k">"textureZIndex"</span>: 20 }
+      ] }
+  ],
+
+  <span class="k">"sprites"</span>: [
+    { <span class="k">"spriteID"</span>: <span class="s">"blink"</span>, <span class="k">"targetPartID"</span>: <span class="s">"Eyes"</span>,
+      <span class="k">"sequence"</span>: { <span class="k">"type"</span>: <span class="s">"ordered"</span>, <span class="k">"keys"</span>: [
+        { <span class="k">"t"</span>: 0.00, <span class="k">"frame"</span>: <span class="s">"open"</span> },
+        { <span class="k">"t"</span>: 0.06, <span class="k">"frame"</span>: <span class="s">"closed"</span> },
+        { <span class="k">"t"</span>: 0.14, <span class="k">"frame"</span>: <span class="s">"open"</span> }
+      ] },
+      <span class="k">"trigger"</span>: { <span class="k">"type"</span>: <span class="s">"random_interval"</span>,
+                   <span class="k">"intervalMin"</span>: 3.0, <span class="k">"intervalMax"</span>: 8.0 } }
+  ],
+
+  <span class="k">"presets"</span>: [
+    { <span class="k">"presetID"</span>: <span class="s">"shy"</span>, <span class="k">"label"</span>: <span class="s">"照れ"</span>,
+      <span class="k">"parts"</span>: { <span class="k">"Blush"</span>: <span class="s">"cheek"</span> },
+      <span class="k">"toggles"</span>: { <span class="k">"Blush"</span>: <span class="n">true</span> } }
+  ]
+}</pre>
+      </section>
+
+      <footer class="foot">
+        <div>
+          <strong>EMG</strong> — パーツ分割 2D アバターの配布形式。
+          Apache License 2.0。
+        </div>
+        <div class="foot-links">
+          <a href="https://github.com/pxrllc/emg">リポジトリ</a>
+          <a href="https://github.com/pxrllc/emg/blob/main/emg-json-spec.md">仕様 v0.3.0</a>
+          <a href="https://github.com/pxrllc/emg/blob/main/emg-json-spec-0.5.0.md">仕様 0.5 系列</a>
+          <a href="https://github.com/pxrllc/emg/blob/main/emg-extensions-registry.md">機能識別子 登録簿</a>
+          <a href="../">プレイヤー</a>
+          <a href="../packer/">Web パッカー</a>
+          <a href="../editor/">エディタ</a>
+        </div>
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+<script>
+// 現在位置の追従。見出しが上端付近に来たものを選ぶ。
+const links = [...document.querySelectorAll('.nav a')];
+const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+const seen = new Map();
+
+const io = new IntersectionObserver(entries => {
+  for (const e of entries) seen.set(e.target.id, e);
+  let best = null;
+  for (const [, e] of seen) {
+    if (!e.isIntersecting) continue;
+    if (!best || e.boundingClientRect.top < best.boundingClientRect.top) best = e;
+  }
+  if (!best) return;
+  links.forEach(a => a.classList.remove('on'));
+  byId.get(best.target.id)?.classList.add('on');
+}, { rootMargin: '0px 0px -70% 0px', threshold: 0 });
+
+document.querySelectorAll('section[id]').forEach(s => io.observe(s));
+
+// フィールド名での絞り込み。該当が無くなったグループは見出しごと隠す。
+const filter = document.getElementById('filter');
+filter.addEventListener('input', () => {
+  const q = filter.value.trim().toLowerCase();
+  document.querySelectorAll('.nav-group').forEach(g => {
+    let hit = 0;
+    g.querySelectorAll('a').forEach(a => {
+      const match = !q || a.textContent.toLowerCase().includes(q);
+      a.classList.toggle('hidden', !match);
+      if (match) hit++;
+    });
+    g.classList.toggle('hidden', hit === 0);
+  });
+});
+</script>
+
+</body>
+</html>

@@ -21,6 +21,7 @@ There is no root build system — each subdirectory below is an **independent np
 | `emg-ymm4/` | YMM4 (ゆっくりムービーメーカー4) Tachie plugin loading `.emg` — **builds and runs; verified in the real app** (display, blink, vowel lip-sync, layer-picker UI). See "emg-ymm4" below | C# `net10.0-windows`; `Emg.Core/` sub-library is YMM4-independent |
 | `emg-web-packer/` | Browser-only PSD/KRA → `.emg` converter (no server, no install). Reuses **`emg-packer`**'s services via a Vite alias rather than copying them — it stays on `emg-packer`, not `emg-editor` — see its `README.md` | Vite + React + TypeScript |
 | `aviutl-for-egml/` | Electron/React app that imports EMG-lite assets and exports AviUtl `.exo` project/timeline data | Electron + Vite + React + TypeScript + Tailwind + Zustand |
+| `emg-reference/` | Single self-contained HTML page: the field reference for the 0.5 series, deployed to `/spec/`. No build step | Vanilla HTML/CSS/JS |
 | `develop/` | Standalone integration/dev HTML+CSS+JS sandbox (no build) | Vanilla |
 | `doc/` | Spec/design docs (packer, Ren'Py, Unity importer, upstream contribution plans, YMM4 verification) — **intentionally gitignored, local-only**, not part of the tracked repo for other clones | Markdown |
 | `samples/` | Sample EMG data (`avatar.json`, `states.json`, `senti.emg`, assets) | Data |
@@ -36,7 +37,7 @@ Top-level spec docs: `emg-json-spec.md` (full EMG v0.3.0 JSON schema, normative 
 
 - **0.5.0** adds the expressiveness: `frameName` (layers that switch together), `control`, `defaultVisible` (independent toggles), `presets[]`, `sequence.keys[]` (non-uniform timing), and `tracks[]` (transforms). Its load-bearing idea is the **frame identifier** — `frameName` if present, else `textureID` — which every reference resolves against, including `mapping.json`'s; that is what lets `frameName` exist without changing the meaning of any older file. §7 (transforms) is separable and costs more to implement than §2–6 combined, so shipping §2–6 alone is still conformant.
 
-A consolidated, non-normative field reference for the whole v0.5.0 surface (every field with the version that introduced it) is published as an artifact rather than kept in the repo; ask the user for the link if you need it.
+`emg-reference/index.html` is a consolidated, **non-normative** field reference for the whole 0.5 surface — every field with the version that introduced it, in one page. It exists because answering "what does `layers[]` contain in 0.5" otherwise means reading four sections across three documents. It is deployed to `/spec/` and **must be updated in the same pass as any spec change** (see below); a reference that drifts from the spec is worse than none.
 
 ## Read this first — the spec facts everything depends on
 
@@ -67,6 +68,7 @@ Consequences of an increment:
 - **Amend `emg-json-spec-0.5.0.md`**: update the §0 "現行版" line and add a row to §11 saying what changed *and what was retracted*. `0.5.1` retracted 0.5.0's "MUST ignore `defaultVisible` on `switch`" — exactly the kind of change that becomes impossible after alpha.
 - **Bump what producers emit.** `EmgGenerator` in **both** `emg-packer` and `emg-editor` hardcodes the version string; `emg-web-packer` follows `emg-packer` through the alias. Consumers still must not branch on it (rule 6 above).
 - **A revision that changes rendering behaviour must land in all six consumers plus both packers in the same pass.** There is no build-time check for this drift, and `emg-packer` / `emg-editor` / `emg-web-packer` are three separate producer code paths (see "Two packer codebases").
+- `emg-reference/index.html` is part of the same pass — its version legend, the "導入" column of the affected field, and the current-version note all move together.
 - `tools/emg-validate.js` and `emg-extensions-registry.md` are part of the same pass — a new rule the validator does not check is a rule that will be broken silently. Registry entries record the version that introduced the identifier (`EMG_frame_name` → 0.5.0, `EMG_switch_none` → 0.5.1).
 
 ## Common commands
@@ -120,6 +122,7 @@ One workflow (`.github/workflows/github-pages.yml`) handles GitHub Pages. It pub
 
 ```
 /          → emg-cdn        /runtime/  → emg-web-runtime        /packer/  → emg-web-packer
+/spec/     → emg-reference  /editor/   → emg-editor（ブラウザ版）
 ```
 
 To take the site down again, swap the build steps for the "準備中" placeholder

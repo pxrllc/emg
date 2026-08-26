@@ -5,6 +5,7 @@ name: Deploy to GitHub Pages
 #   /runtime/  → emg-web-runtime
 #   /packer/   → emg-web-packer（PSD → .emg 変換）
 #   /editor/   → emg-editor（アバター編集。Electron 版と同一のコード）
+#   /spec/     → emg-reference（0.5 系列のフィールドリファレンス。ビルド不要）
 #
 # サイトを一時的に閉じたい場合は、下の各ビルドステップを
 # 「Build placeholder only」に差し替える（.github/pages-placeholder/index.html を配信する）。
@@ -66,10 +67,12 @@ jobs:
 
       - name: Place built apps
         run: |
-          mkdir -p _site/runtime _site/packer _site/editor
+          mkdir -p _site/runtime _site/packer _site/editor _site/spec
           cp -r emg-web-runtime/dist/. _site/runtime/
           cp -r emg-web-packer/dist/. _site/packer/
           cp -r emg-editor/dist-web/. _site/editor/
+          # emg-reference は自己完結した HTML 1 枚。ビルド手順を持たない。
+          cp -r emg-reference/. _site/spec/
 
       - uses: actions/configure-pages@v5
 
