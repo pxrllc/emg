@@ -44,7 +44,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                     {onAddSheet && (
                                         <button className="btn btn-sm btn-ghost" onClick={onAddSheet} title="スプライトシートを切り出して追加する">
                                             <Grid3x3 size={13} />
-                                            シート
+                                            スプライトを追加
                                         </button>
                                     )}
                                     {onLoadPsd && (

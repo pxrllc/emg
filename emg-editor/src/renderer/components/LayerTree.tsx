@@ -46,7 +46,7 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
                 <FolderPlus size={16} /> ファイルを開く
             </button>
             <button className="btn" onClick={() => onAddSheet?.()} style={{ width: '100%', maxWidth: '220px' }}>
-                <Grid3x3 size={14} /> スプライトシートから
+                <Grid3x3 size={14} /> スプライトを追加
             </button>
             <div style={{ fontSize: '11px', color: '#5f5f64', lineHeight: 1.8, textAlign: 'left' }}>
                 <b style={{ color: '#8a8a8e' }}>読み込めるもの</b><br />
@@ -189,7 +189,7 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
                     onClick={() => onAddSheet?.()}
                     title="スプライトシートを格子で切り出して追加する"
                 >
-                    <Grid3x3 size={14} /> シート
+                    <Grid3x3 size={14} /> スプライトを追加
                 </button>
             </div>
             <div className="toolbar" style={{ padding: '8px', borderBottom: '1px solid #3e3e42', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
