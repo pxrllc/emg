@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
 import { SourceLoader } from '../services/SourceLoader';
+import { FRAME_COUNT_WARNING } from '../services/AnimationLoader';
 import { Psd } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
@@ -50,6 +51,41 @@ const shiftLayers = (layers: PsdLayer[], dx: number, dy: number): void => {
         if (typeof l.bottom === 'number') l.bottom += dy;
         if (l.children) shiftLayers(l.children, dx, dy);
     }
+};
+
+/**
+ * アニメーション画像のフレーム遅延から、再生設定を組み立てる。
+ *
+ * GIF はフレームごとに遅延が違うのが普通で、v0.3.0 の `fps`（等間隔）では
+ * 表現できない。v0.5.0 6 章の `keys` がそのための仕組み。
+ * 全フレームが同じ遅延なら、素直に `fps` + `frames` に落とす
+ * （出力が読みやすく、6 章に未対応の実装でも動く）。
+ */
+const buildAnimationFromDurations = (
+    partId: string, frames: string[], durations: number[]
+): PartAnimation => {
+    const first = durations[0] ?? 0.1;
+    const uniform = durations.every(d => Math.abs(d - first) < 0.005);
+
+    // fps は整数なので、1/遅延 が整数から離れていると再現できない
+    // （0.08 秒 → 12.5fps を 13 に丸めると 4% 速くなる）。
+    // その場合は keys にして、元の遅延をそのまま保つ。
+    const rawFps = first > 0 ? 1 / first : 12;
+    const roundedFps = Math.max(1, Math.round(rawFps));
+    const exact = Math.abs(1 / roundedFps - first) < 0.002;
+
+    return {
+        enabled: true,
+        spriteID: partId,
+        frames,
+        timing: uniform && exact ? 'fps' : 'keys',
+        fps: roundedFps,
+        durations,
+        sequenceType: 'ordered',
+        triggerType: 'auto_loop',
+        intervalMin: 3,
+        intervalMax: 8,
+    };
 };
 
 /** partID はファイル全体で一意でなければならない（emg-json-spec.md 6 章）。 */
@@ -190,7 +226,31 @@ export function useEmgPacker() {
     const [selectedLayer, setSelectedLayer] = useState<PsdLayer | null>(null);
     const [layerMeta, setLayerMeta] = useState<Record<number, LayerMeta>>({});
     const [packResult, setPackResult] = useState<PackResult | null>(null);
+
+    // 複数ファイルを続けて取り込むとき、state はまだ前回の値を返す
+    // （setPsdRoot は同じ関数内では反映されない）。そのまま次のファイルを
+    // 処理すると 1 つ前の木に合流させてしまい、先に入れたものが消える。
+    // 同期的に読める控えを持ち、取り込み処理はこちらを見る。
+    const psdRootRef = useRef<Psd | null>(null);
+    const layerMetaRef = useRef<Record<number, LayerMeta>>({});
+
+    /** psdRoot と layerMeta は必ず対で更新する（片方だけだとメタが欠ける）。 */
+    const applyTree = (root: Psd | null, meta: Record<number, LayerMeta>) => {
+        psdRootRef.current = root;
+        layerMetaRef.current = meta;
+        setPsdRoot(root);
+        setLayerMeta(meta);
+    };
+
+    // layerMeta はパーツ操作など applyTree を通らない経路でも更新される。
+    // 同期しておかないと、それらの編集内容が次の取り込みで失われる。
+    useEffect(() => { psdRootRef.current = psdRoot; }, [psdRoot]);
+    useEffect(() => { layerMetaRef.current = layerMeta; }, [layerMeta]);
     const [toast, setToast] = useState<ToastMessage | null>(null);
+
+    // 書き出しの進捗。4096x8192 の PNG エンコードで十数秒かかるため、
+    // 押した直後に無反応に見えてしまう。割合は目安で、正確さは求めていない。
+    const [exportProgress, setExportProgress] = useState<{ phase: string; percent: number } | null>(null);
 
     // プレビュー専用の状態。書き出し結果には一切影響しない。
     //   previewFrame : switch パーツで今どの差分を見ているか（既定は part.default）
@@ -207,15 +267,14 @@ export function useEmgPacker() {
     const handlePsdLoad = async (file: File) => {
         try {
             const root = await FileLoader.load(file);
-            const initialMeta = recalculateMeta(root, {});
-            setLayerMeta(initialMeta);
             setPartAnimations({});
             setPreviewFrame({});
             setPreviewOff({});
-            setPsdRoot(root);
+            applyTree(root, recalculateMeta(root, {}));
         } catch (e) {
+            // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
             console.error('Failed to load file:', e);
-            alert(String(e instanceof Error ? e.message : e));
+            setToast({ title: '読み込めませんでした', body: String(e instanceof Error ? e.message : e), tone: 'error' });
         }
     };
 
@@ -230,22 +289,20 @@ export function useEmgPacker() {
         try {
             const source = await SourceLoader.load(file);
             if (source.children.length === 0) {
-                alert(`${file.name} に取り込めるレイヤーがありませんでした。`);
+                setToast({ title: '取り込めませんでした', body: `${file.name} にレイヤーがありません。`, tone: 'error' });
                 return;
             }
 
-            // 何も開いていなければ通常の読み込みと同じ扱いにする。
-            if (!psdRoot) {
-                const root: Psd = { width: source.width, height: source.height, children: source.children };
-                setLayerMeta(recalculateMeta(root, {}));
-                setPsdRoot(root);
-                setToast({ title: '取り込み', body: `${source.name}（${source.children.length} レイヤー）` });
-                return;
-            }
+            // 何も開いていない場合も同じ経路を通す。分けると、ID の採番や
+            // アニメーション設定の登録を片方だけ書き忘れる（実際に起きた:
+            // 画像・GIF のレイヤーは ID を持たないため、ID を振らない経路では
+            // recalculateMeta がメタを作れず、パーツが 0 個になっていた）。
+            const base: Psd = psdRootRef.current ?? { width: 0, height: 0, children: [] };
 
-            // 1. ID を振り直す。PsdLoader.ensureIds は読み込みごとに 1 から数え直すため、
-            //    そのまま混ぜると layerMeta（id がキー）で設定が混線する。
-            let nextId = maxLayerId(psdRoot.children ?? []) + 1;
+            // 1. ID を振り直す。PsdLoader.ensureIds は読み込みごとに 1 から数え直すうえ、
+            //    ImageLoader / AnimationLoader のレイヤーはそもそも ID を持たない。
+            //    ここで必ず一意な ID を与える（layerMeta のキーになる）。
+            let nextId = maxLayerId(base.children ?? []) + 1;
             const reid = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => ({
                 ...l,
                 id: nextId++,
@@ -255,8 +312,8 @@ export function useEmgPacker() {
 
             // 2. キャンバスは大きい方に合わせて広げる。既存レイヤーは動かさない
             //    （動かすと今まで書き出していた座標が変わってしまう）。
-            const canvasW = Math.max(psdRoot.width ?? 0, source.width);
-            const canvasH = Math.max(psdRoot.height ?? 0, source.height);
+            const canvasW = Math.max(base.width ?? 0, source.width);
+            const canvasH = Math.max(base.height ?? 0, source.height);
 
             // 3. 取り込んだ素材は新しいキャンバスの中央に置く。
             //    左上に積むと既存の絵と重なって何が入ったのか分からない。
@@ -267,7 +324,7 @@ export function useEmgPacker() {
             // 4. ソース 1 つ = グループ 1 つ。グループ名がそのまま partID になる。
             const group: PsdLayer = {
                 id: nextId++,
-                name: uniqueGroupName(psdRoot.children ?? [], source.name),
+                name: uniqueGroupName(base.children ?? [], source.name),
                 hidden: false,
                 children: incoming,
                 canvas: undefined,
@@ -275,28 +332,46 @@ export function useEmgPacker() {
 
             // 前面に積む（ag-psd の children は背面 → 前面）。
             const newRoot: Psd = {
-                ...psdRoot,
+                ...base,
                 width: canvasW,
                 height: canvasH,
-                children: [...(psdRoot.children ?? []), group],
+                children: [...(base.children ?? []), group],
             };
 
-            setLayerMeta(recalculateMeta(newRoot, layerMeta));
-            setPsdRoot(newRoot);
-            setToast({
-                title: '取り込み',
-                body: `${group.name}（${countLeaves(incoming)} レイヤー）`,
-            });
+            applyTree(newRoot, recalculateMeta(newRoot, layerMetaRef.current));
+
+            // アニメーションなら、そのまま再生できる状態にしておく。
+            // フレームを取り込んだだけでは静止した差分パーツにしかならず、
+            // 利用者が手で再生順を組み直すことになる。
+            if (source.kind === 'animation' && source.frameDurations) {
+                const frames = incoming.map(l => l.name ?? '');
+                setPartAnimations(prev => ({
+                    ...prev,
+                    [group.name!]: buildAnimationFromDurations(group.name!, frames, source.frameDurations!),
+                }));
+            }
+
+            const frameNote = source.kind === 'animation'
+                ? `${incoming.length} フレーム`
+                : `${countLeaves(incoming)} レイヤー`;
+
+            // フレーム数が多いとアトラスを圧迫し、「1 枚に収める」が崩れる。
+            // 書き出してから気づくのでは遅いので、取り込んだ時点で伝える。
+            setToast(source.kind === 'animation' && incoming.length > FRAME_COUNT_WARNING
+                ? {
+                    title: `取り込み（フレームが多めです）`,
+                    body: `${group.name} — ${frameNote}。テクスチャ 1 枚に収まらない場合があります。`
+                        + `書き出し後の枚数を確認してください。`,
+                }
+                : { title: '取り込み', body: `${group.name}（${frameNote}）` });
         } catch (e) {
             console.error('Failed to add source:', e);
-            alert(String(e instanceof Error ? e.message : e));
+            setToast({ title: `${file.name} を取り込めませんでした`, body: String(e instanceof Error ? e.message : e), tone: 'error' });
         }
     };
 
     const handlePsdUpdate = (newRoot: Psd) => {
-        const newMeta = recalculateMeta(newRoot, layerMeta);
-        setLayerMeta(newMeta);
-        setPsdRoot(newRoot);
+        applyTree(newRoot, recalculateMeta(newRoot, layerMetaRef.current));
     };
 
     /** psdRoot + layerMeta から導出したパーツ一覧（parts.ts）。 */
@@ -686,7 +761,16 @@ export function useEmgPacker() {
 
     const handleExport = async () => {
         if (!psdRoot) return;
+
+        // 進捗表示を描画させてから重い処理に入る。React の state 更新だけでは
+        // 同期処理の前に描画が挟まらず、バーが出ないまま固まったように見える。
+        const step = async (phase: string, percent: number) => {
+            setExportProgress({ phase, percent });
+            await new Promise(r => setTimeout(r, 0));
+        };
+
         try {
+            await step('レイヤーを集めています', 5);
             const packItems: PackItem[] = [];
             const allExportableLayers: PsdLayer[] = [];
 
@@ -706,10 +790,11 @@ export function useEmgPacker() {
             traverse(psdRoot as PsdLayer);
 
             if (packItems.length === 0) {
-                alert('No visible layers to export');
+                setToast({ title: '書き出せません', body: '書き出し対象のレイヤーがありません。', tone: 'error' });
                 return;
             }
 
+            await step('テクスチャに詰めています', 18);
             const result = await TexturePacker.pack(packItems);
             const exportItems: ExportItem[] = [];
             const totalLayers = allExportableLayers.length;
@@ -741,7 +826,8 @@ export function useEmgPacker() {
                 exportItems,
                 psdRoot.width,
                 psdRoot.height,
-                partAnimations
+                partAnimations,
+                (phase, percent) => setExportProgress({ phase, percent })
             );
 
             const link = document.createElement('a');
@@ -769,7 +855,9 @@ export function useEmgPacker() {
                 });
         } catch (e) {
             console.error('Export failed:', e);
-            alert('Export failed: ' + e);
+            setToast({ title: '書き出しに失敗しました', body: String(e instanceof Error ? e.message : e), tone: 'error' });
+        } finally {
+            setExportProgress(null);
         }
     };
 
@@ -859,11 +947,11 @@ export function useEmgPacker() {
                     const data = JSON.parse(re.target?.result as string);
                     if (data.layerMeta) {
                         setLayerMeta(data.layerMeta);
-                        alert('Project settings loaded.');
+                        setToast({ title: '設定を読み込みました' });
                     }
                 } catch (err) {
                     console.error(err);
-                    alert('Failed to load project file');
+                    setToast({ title: '設定を読み込めませんでした', body: String(err), tone: 'error' });
                 }
             };
             reader.readAsText(file);
@@ -911,6 +999,7 @@ export function useEmgPacker() {
         setSelectedPartId,
         setSelectedLayer,
         setLayerMeta,
+        exportProgress,
         toast,
         setToast,
     };

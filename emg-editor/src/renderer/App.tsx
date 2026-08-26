@@ -23,7 +23,7 @@ function App() {
         handleAnimationRemoveFrame, handleAnimationDurationChange,
         handleGroupSelected, handleRenamePart,
         setSelectedPartId, setSelectedLayer, setLayerMeta,
-        toast, setToast,
+        exportProgress, toast, setToast,
     } = useEmgPacker();
 
     const visibility = useMemo(
@@ -106,6 +106,7 @@ function App() {
                     <InspectorPanel
                         hasFile={!!psdRoot}
                         exportableCount={exportableCount}
+                        exportProgress={exportProgress}
                         parts={parts}
                         selectedPartId={selectedPartId}
                         previewFrame={previewFrame}

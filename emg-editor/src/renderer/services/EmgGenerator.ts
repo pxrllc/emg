@@ -79,6 +79,12 @@ export interface EmgSprite {
     trigger?: EmgTrigger;
 }
 
+/**
+ * 書き出しの進捗。割合は目安で、正確な残り時間を表すものではない。
+ * 押した直後に無反応に見える（アトラスの PNG 生成で十数秒かかる）のを避けるのが目的。
+ */
+export type ExportProgressCallback = (phase: string, percent: number) => void;
+
 export type ExportItem = {
     packed: PackedItem;
     meta: LayerMeta;
@@ -392,14 +398,25 @@ export class EmgGenerator {
         items: ExportItem[], // This items array needs to have Z-info or be re-sorted?
         psdWidth: number,
         psdHeight: number,
-        animations: Record<string, PartAnimation> = {}
+        animations: Record<string, PartAnimation> = {},
+        onProgress?: ExportProgressCallback
     ): Promise<Blob> {
         const zip = new JSZip();
+        const report = (phase: string, percent: number) => onProgress?.(phase, percent);
 
         // 1. Save Textures
         // アトラスは複数枚になりうる（emg-json-spec.md 1.3）。エントリ名は
         // createData が textures[] に書くものと一致させる必要がある。
-        for (const atlas of packResult.atlases) {
+        //
+        // 4096x8192 の PNG エンコードは数秒かかるため、ここが体感上いちばん長い。
+        for (let i = 0; i < packResult.atlases.length; i++) {
+            const atlas = packResult.atlases[i];
+            report(
+                packResult.atlases.length > 1
+                    ? `テクスチャを書き出し中（${i + 1}/${packResult.atlases.length}）`
+                    : 'テクスチャを書き出し中',
+                35 + Math.round(25 * i / packResult.atlases.length)
+            );
             const textureBlob = await new Promise<Blob | null>(resolve =>
                 atlas.canvas.toBlob(resolve, 'image/png')
             );
@@ -408,6 +425,7 @@ export class EmgGenerator {
         }
 
         // 2. Generate JSON
+        report('定義を生成中', 62);
         const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
 
@@ -417,7 +435,11 @@ export class EmgGenerator {
             zip.file('mapping.json', JSON.stringify(mapping, null, 2));
         }
 
-        return await zip.generateAsync({ type: 'blob' });
+        // JSZip は onUpdate で実際の進捗を返すので、ここだけは推測ではない値になる。
+        report('パッケージ中', 65);
+        return await zip.generateAsync({ type: 'blob' }, meta => {
+            report('パッケージ中', 65 + Math.round(0.35 * (meta.percent ?? 0)));
+        });
     }
 }
 

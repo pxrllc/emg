@@ -12,6 +12,8 @@ type Tab = 'parts' | 'layer' | 'json';
 interface InspectorPanelProps {
     hasFile: boolean;
     exportableCount: number;
+    /** 書き出し中の進捗。null なら実行中でない。 */
+    exportProgress: { phase: string; percent: number } | null;
 
     parts: PartInfo[];
     selectedPartId: string | null;
@@ -137,12 +139,24 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                 <button
                     className="btn btn-primary btn-block"
                     onClick={props.onExport}
-                    disabled={!props.hasFile || props.exportableCount === 0}
+                    disabled={!props.hasFile || props.exportableCount === 0 || !!props.exportProgress}
                 >
                     <Download size={15} />
-                    .emg を書き出す
+                    {props.exportProgress ? '書き出し中…' : '.emg を書き出す'}
                 </button>
-                {props.hasFile && (
+                {props.exportProgress ? (
+                    <>
+                        <div className="progress-track">
+                            <div
+                                className="progress-fill"
+                                style={{ width: `${Math.min(100, Math.max(0, props.exportProgress.percent))}%` }}
+                            />
+                        </div>
+                        <div className="action-hint">
+                            {props.exportProgress.phase} — {Math.round(props.exportProgress.percent)}%
+                        </div>
+                    </>
+                ) : props.hasFile && (
                     <div className="action-hint">
                         {props.exportableCount > 0
                             ? `${props.parts.length} パーツ / ${props.exportableCount} レイヤー`
@@ -150,8 +164,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                     </div>
                 )}
                 <div className="action-bar-row">
-                    <button className="btn" onClick={props.onSaveProject} disabled={!props.hasFile}>設定を保存</button>
-                    <button className="btn" onClick={props.onLoadProject}>設定を読込</button>
+                    <button className="btn" onClick={props.onSaveProject} disabled={!props.hasFile || !!props.exportProgress}>設定を保存</button>
+                    <button className="btn" onClick={props.onLoadProject} disabled={!!props.exportProgress}>設定を読込</button>
                 </div>
             </div>
         </div>

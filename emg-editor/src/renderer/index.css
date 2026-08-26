@@ -442,6 +442,22 @@ body,
   text-align: center;
 }
 
+/* ---- Progress ------------------------------------------------------------
+   割合は目安。押した直後に無反応に見えるのを避けるのが目的で、
+   残り時間を正確に示すものではない。 */
+.progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #2c2c2f;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #2563eb;
+  transition: width 0.2s ease;
+}
+
 /* ---- Preview toolbar / minimap ------------------------------------------- */
 .preview-toolbar {
   display: flex;
