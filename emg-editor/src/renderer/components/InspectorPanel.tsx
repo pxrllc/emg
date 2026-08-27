@@ -49,6 +49,9 @@ interface InspectorPanelProps {
     onPlayToggle: (scope: string | 'all') => void;
     onTransformReset: () => void;
     onSeek: (t: number) => void;
+    /** 再生できるものが 1 つでもあるか（コマ送り・変形の両方）。 */
+    anyPlayable: boolean;
+    partPlayable: (partId: string) => boolean;
 
     mapping: AvatarMapping;
     onMappingChange: (patch: Partial<AvatarMapping>) => void;
@@ -159,6 +162,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onPlayToggle={props.onPlayToggle}
                         onTransformReset={props.onTransformReset}
                         onSeek={props.onSeek}
+                        anyPlayable={props.anyPlayable}
+                        partPlayable={props.partPlayable}
                     />
                 )}
                 {activeTab === 'mapping' && (

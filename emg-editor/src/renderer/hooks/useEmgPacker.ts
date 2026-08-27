@@ -7,10 +7,12 @@ import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import { defaultPartAnimation, emptyExpression, emptyMapping, emptyTransform, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform } from '../types';
+import { defaultPartAnimation, emptyExpression, emptyMapping, emptyTransform, parseTransformKey, transformKey, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 import { useHistory, type DocumentSnapshot } from './useHistory';
+import { isPlayable, sequenceFrameAt } from '../services/sequence';
+import { hasAnimation } from '../services/transform';
 import {
     applyTemplate, buildTemplate, isTemplate, TEMPLATE_EXT,
     type EditorTemplate, type TemplateReport,
@@ -479,6 +481,26 @@ export function useEmgPacker() {
 
     const handleTransformReset = () => { setPlayScope(null); setTransformTime(0); };
 
+    /**
+     * 再生できるものが 1 つでもあるか。
+     *
+     * **コマ送り（`sequence`）と座標変換（`tracks`）の両方**を見る。以前は
+     * `tracks` しか見ていなかったので、GIF を読み込んだだけの状態では
+     * 「全体」ボタンが押せず、再生する手段が無かった。
+     */
+    const anyPlayable = useMemo(
+        () => Object.values(partAnimations).some(isPlayable)
+            || Object.values(partTransforms).some(hasAnimation),
+        [partAnimations, partTransforms]
+    );
+
+    /** そのパーツに再生できるものがあるか（単体再生ボタンの有効・無効）。 */
+    const partPlayable = useCallback((partId: string) => {
+        if (isPlayable(partAnimations[partId])) return true;
+        return Object.entries(partTransforms).some(([k, t]) =>
+            parseTransformKey(k).partId === partId && hasAnimation(t));
+    }, [partAnimations, partTransforms]);
+
     // ---- 取り消し / やり直し ------------------------------------------------
     // 対象は「書き出しに影響する状態」だけ。プレビューの差分選択や再生位置は
     // 含めない（useHistory の DocumentSnapshot を参照）。
@@ -524,8 +546,11 @@ export function useEmgPacker() {
             if (isEmgFile(file.name)) {
                 await importEmg(file);
             } else {
-                const root = await FileLoader.load(file);
-                applyTree(root, recalculateMeta(root, {}));
+                // **SourceLoader を通す。** 以前はここで FileLoader（PSD / KRA 専用）を
+                // 直接呼んでいたため、選択ダイアログが受け付ける GIF や PNG を選ぶと
+                // 「Invalid signature: 'GIF8'」で失敗していた。「素材を追加」でしか
+                // 読めないという状態で、GIF を再生できない原因もこれだった。
+                mergeSource(await SourceLoader.load(file), file.name);
             }
             // 読み込み完了。**「開く」のときだけ**履歴を捨てる。
             // 「素材を追加」は普通の編集なので、取り消せなければならない。
@@ -780,6 +805,26 @@ export function useEmgPacker() {
      *   - switch : プレビュー中のフレーム 1 つだけを描く（既定は part.default）
      *   - static : defaultVisible が false のパーツは初期状態で描かない（v0.5.0 §4）
      */
+    /**
+     * 再生中に各 switch パーツが出しているコマ。
+     *
+     * **これが無いと、GIF もスプライトシートもまばたきも 1 コマ目で止まったまま**
+     * になります（トランスフォームだけが動いていました）。
+     *
+     * 対象の絞り方はトランスフォームと同じ — 単体再生ならそのパーツだけ、
+     * 「全体」なら全部。止まっているときは空で、手で選んだ差分がそのまま出ます。
+     */
+    const playingFrame = useMemo<Record<string, string>>(() => {
+        if (!playScope) return {};
+        const out: Record<string, string> = {};
+        for (const [partId, anim] of Object.entries(partAnimations)) {
+            if (playScope !== 'all' && parseTransformKey(playScope).partId !== partId) continue;
+            const frame = sequenceFrameAt(anim, transformTime);
+            if (frame !== undefined) out[partId] = frame;
+        }
+        return out;
+    }, [partAnimations, playScope, transformTime]);
+
     const compositionItems = useMemo<PreviewItem[]>(() => {
         const items: (PreviewItem & { z: number })[] = [];
         const layers = flattenLayers(psdRoot);
@@ -801,7 +846,9 @@ export function useEmgPacker() {
             if (off) continue;
 
             if (part.type === 'switch') {
-                const active = previewFrame[part.partId] ?? part.defaultFrameId;
+                // 再生中はコマ送りが優先。手で選んだ差分は再生を止めたら戻る。
+                const active = playingFrame[part.partId]
+                    ?? previewFrame[part.partId] ?? part.defaultFrameId;
                 if (frameIdOf(layer, meta) !== active) continue;
             }
 
@@ -818,7 +865,7 @@ export function useEmgPacker() {
         }
         items.sort((a, b) => a.z - b.z);
         return items;
-    }, [psdRoot, layerMeta, partById, previewFrame, previewOff]);
+    }, [psdRoot, layerMeta, partById, previewFrame, previewOff, playingFrame]);
 
     useEffect(() => {
         if (!psdRoot) return;
@@ -1516,6 +1563,8 @@ export function useEmgPacker() {
         handleTransformChange,
         handlePlayToggle,
         handleTransformReset,
+        anyPlayable,
+        partPlayable,
         setTransformTime,
         mapping,
         setMapping,

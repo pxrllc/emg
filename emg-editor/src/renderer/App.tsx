@@ -20,6 +20,7 @@ function App() {
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
         partTransforms, transformTime, playScope,
         handleTransformChange, handlePlayToggle, handleTransformReset, setTransformTime,
+        anyPlayable, partPlayable,
         mapping, setMapping,
         presets, expressions, handleExpressionAdd, handleExpressionChange,
         handleExpressionRename, handleExpressionDelete,
@@ -191,6 +192,10 @@ function App() {
                         onTransformChange={handleTransformChange}
                         time={transformTime}
                         playing={!!playScope}
+                        onPlayAll={() => handlePlayToggle('all')}
+                        onRewind={handleTransformReset}
+                        playingAll={playScope === 'all'}
+                        canPlay={anyPlayable}
                     />
                 }
                 rightPanel={
@@ -236,6 +241,8 @@ function App() {
                         onPlayToggle={handlePlayToggle}
                         onTransformReset={handleTransformReset}
                         onSeek={setTransformTime}
+                        anyPlayable={anyPlayable}
+                        partPlayable={partPlayable}
                         mappingControlled={mappingControlled}
                         onAnimationToggle={handleAnimationToggle}
                         onAnimationChange={handleAnimationChange}

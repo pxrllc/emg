@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Pause, Pencil, Play, RotateCcw } from 'lucide-react';
 import type { PartInfo } from '../parts';
 import { emptyTransform, transformKey, type PartAnimation, type PartTransform } from '../types';
-import { hasAnimation } from '../services/transform';
 import { AnimationEditor } from './AnimationEditor';
 import { TransformTimeline } from './TransformTimeline';
 
@@ -44,6 +43,8 @@ interface PartsPanelProps {
     onPlayToggle: (scope: string | 'all') => void;
     onTransformReset: () => void;
     onSeek: (t: number) => void;
+    anyPlayable: boolean;
+    partPlayable: (partId: string) => boolean;
 }
 
 /**
@@ -66,9 +67,8 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     onAnimationRemoveFrame, onAnimationDurationChange,
     partTransforms, transformTime, playScope,
     onTransformChange, onPlayToggle, onTransformReset, onSeek,
+    anyPlayable, partPlayable,
 }) => {
-    // 「全体」ボタンは、動くトラックが 1 つも無ければ押せない。
-    const anyAnimated = Object.values(partTransforms).some(hasAnimation);
     // パーツごとに「今どの対象を編集しているか」。既定はパーツ全体。
     const [tfTarget, setTfTarget] = useState<Record<string, string | undefined>>({});
     const [renaming, setRenaming] = useState<string | null>(null);
@@ -106,10 +106,10 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                 <button
                     className={`btn btn-sm ${playScope === 'all' ? 'btn-primary' : ''}`}
                     onClick={() => onPlayToggle('all')}
-                    disabled={!anyAnimated}
-                    title={anyAnimated
-                        ? '全パーツのアニメーションを同時に再生する'
-                        : '動くトラックを持つパーツがまだありません'}
+                    disabled={!anyPlayable}
+                    title={anyPlayable
+                        ? '全パーツを再生（コマ送りと変形の両方）'
+                        : 'アニメーションがまだありません'}
                 >
                     {playScope === 'all' ? <Pause size={12} /> : <Play size={12} />} 全体
                 </button>
@@ -180,6 +180,19 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                 onClick={e => { e.stopPropagation(); startRename(part.partId); }}
                             >
                                 <Pencil size={12} color="#777" />
+                            </button>
+
+                            {/* このパーツだけ再生。コマ送りも変形も対象。 */}
+                            <button
+                                className={`icon-btn ${playScope === part.partId ? 'on' : ''}`}
+                                disabled={!partPlayable(part.partId)}
+                                title={partPlayable(part.partId)
+                                    ? `${part.partId} だけ再生`
+                                    : 'このパーツに動くものがありません'}
+                                onClick={e => { e.stopPropagation(); onPlayToggle(part.partId); }}
+                            >
+                                {playScope === part.partId
+                                    ? <Pause size={12} /> : <Play size={12} color="#777" />}
                             </button>
 
                             <div className="seg" onClick={e => e.stopPropagation()}>

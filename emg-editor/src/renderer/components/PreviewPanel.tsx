@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Move3d, Crosshair } from 'lucide-react';
+import { Move3d, Crosshair, Pause, Play, SkipBack } from 'lucide-react';
 import { evaluateTransform, transformMatrix } from '../services/transform';
 import { TransformOverlay, type PartBounds } from './TransformOverlay';
 import { emptyTransform, transformKey, type PartTransform } from '../types';
@@ -32,11 +32,17 @@ interface PreviewPanelProps {
     /** 再生時刻（秒）。停止中は 0。 */
     time: number;
     playing: boolean;
+    /** 全体再生。コマ送りと座標変換の両方が対象。 */
+    onPlayAll: () => void;
+    onRewind: () => void;
+    playingAll: boolean;
+    canPlay: boolean;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     atlasUrls, compositionItems, width, height,
     transforms, selectedPartId, onSelectPart, onTransformChange, time, playing,
+    onPlayAll, onRewind, playingAll, canPlay,
 }) => {
     // 掴む対象を切り替える。アンカーは「回転の中心」なので、絵を動かすのと
     // 同じ操作にすると必ず取り違える。
@@ -346,6 +352,33 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                             </button>
                         ))}
                     </div>
+                )}
+                {/* 全体再生。**ここに置く。** 以前はパーツ一覧の中にしか無く、
+                    プレビューを見ている人には見つけられなかった。 */}
+                {mode === 'composition' && (
+                    <>
+                        <button
+                            className={`btn btn-sm ${playingAll ? 'btn-primary' : ''}`}
+                            onClick={onPlayAll}
+                            disabled={!canPlay}
+                            title={canPlay
+                                ? '全パーツを再生（コマ送りと変形の両方）'
+                                : 'アニメーションがまだありません'}
+                        >
+                            {playingAll ? <Pause size={13} /> : <Play size={13} />} 全体再生
+                        </button>
+                        <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={onRewind}
+                            disabled={!canPlay}
+                            title="先頭に戻して停止"
+                        >
+                            <SkipBack size={13} />
+                        </button>
+                        <span className="tf-hint" style={{ minWidth: '46px' }}>
+                            {time.toFixed(2)}s
+                        </span>
+                    </>
                 )}
                 {mode === 'composition' && (
                     <div className="seg" title={selectedPartId ? undefined : 'パーツを選ぶと使えます'}>
