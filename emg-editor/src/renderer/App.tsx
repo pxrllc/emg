@@ -17,6 +17,8 @@ function App() {
         psdRoot, atlasUrls, selectedLayer, layerMeta,
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
+        partTransforms, transformTime, playScope,
+        handleTransformChange, handlePlayToggle, handleTransformReset, setTransformTime,
         mapping, setMapping,
         presets, expressions, handleExpressionAdd, handleExpressionChange,
         handleExpressionRename, handleExpressionDelete,
@@ -56,6 +58,26 @@ function App() {
         () => emgData ? findMappingControlledParts(emgData.parts) : new Set<string>(),
         [emgData]
     );
+
+    /**
+     * プレビューに渡すトランスフォーム。
+     *
+     * **単体再生のときは、そのパーツ以外を時刻 0 に固定します。** 全部が同時に
+     * 動くと、今どのパーツの動きを見ているのか分からなくなるためです。
+     * 止まっているときは選択中のパーツだけがスクラブに追従します（他は静止）。
+     *
+     * 時刻 0 に固定するのは `duration` を 0 にすることで行います。`foldTime` が
+     * `duration <= 0` を 0 として扱うので、トラックは先頭の値に落ち着きます。
+     */
+    const scopedTransforms = useMemo(() => {
+        const scope = playScope ?? selectedPartId;
+        if (playScope === 'all') return partTransforms;
+        const out: typeof partTransforms = {};
+        for (const [partId, tf] of Object.entries(partTransforms)) {
+            out[partId] = partId === scope ? tf : { ...tf, duration: 0 };
+        }
+        return out;
+    }, [partTransforms, playScope, selectedPartId]);
 
     // スプライトシートは格子の指定が要るので、読み込んだ後に確認画面を挟む。
     const [sheetFile, setSheetFile] = useState<File | null>(null);
@@ -137,6 +159,12 @@ function App() {
                         compositionItems={compositionItems}
                         width={psdRoot?.width || 0}
                         height={psdRoot?.height || 0}
+                        transforms={scopedTransforms}
+                        selectedPartId={selectedPartId}
+                        onSelectPart={setSelectedPartId}
+                        onTransformChange={handleTransformChange}
+                        time={transformTime}
+                        playing={!!playScope}
                     />
                 }
                 rightPanel={
@@ -175,6 +203,13 @@ function App() {
                         onRenamePart={handleRenamePart}
                         onTypeAll={handleTypeAll}
                         partAnimations={partAnimations}
+                        partTransforms={partTransforms}
+                        transformTime={transformTime}
+                        playScope={playScope}
+                        onTransformChange={handleTransformChange}
+                        onPlayToggle={handlePlayToggle}
+                        onTransformReset={handleTransformReset}
+                        onSeek={setTransformTime}
                         mappingControlled={mappingControlled}
                         onAnimationToggle={handleAnimationToggle}
                         onAnimationChange={handleAnimationChange}

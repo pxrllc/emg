@@ -3,9 +3,9 @@ import type { Layer } from 'ag-psd';
 import type { EmgData, EmgPart, EmgPartLayer, EmgSprite } from './EmgGenerator';
 import type { EmgSemanticMapping } from './MappingGenerator';
 import {
-    emptyExpression, emptyMapping,
+    emptyExpression, emptyMapping, emptyTransform, TRANSFORM_PATHS,
     type AvatarExpression, type AvatarMapping, type AvatarPreset,
-    type LayerMeta, type PartAnimation,
+    type LayerMeta, type PartAnimation, type PartTransform, type TransformPath,
 } from '../types';
 import type { LoadedSource } from './SourceLoader';
 
@@ -28,6 +28,7 @@ const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
 export interface LoadedEmg {
     source: LoadedSource;
     animations: Record<string, PartAnimation>;
+    transforms: Record<string, PartTransform>;
     presets: AvatarPreset[];
     mapping: AvatarMapping;
     expressions: AvatarExpression[];
@@ -109,13 +110,17 @@ export class EmgLoader {
 
         // ---- sprites / presets ----------------------------------------------
         const animations: Record<string, PartAnimation> = {};
+        const transforms: Record<string, PartTransform> = {};
         for (const sprite of data.sprites ?? []) {
             const part = data.parts.find(p => p.partID === sprite.targetPartID);
             if (!part) {
                 warnings.push(`スプライト "${sprite.spriteID}" の対象パーツ "${sprite.targetPartID}" がありません`);
                 continue;
             }
-            animations[part.partID] = toAnimation(sprite, part);
+            if (sprite.sequence) animations[part.partID] = toAnimation(sprite, part);
+            if (sprite.tracks?.length) {
+                transforms[part.partID] = toTransform(sprite, part, warnings);
+            }
         }
 
         const presets: AvatarPreset[] = (data.presets ?? []).map(p => ({
@@ -138,7 +143,21 @@ export class EmgLoader {
             }
         }
 
-        return { source, animations, presets, mapping, expressions, warnings };
+        // アンカーはレイヤー側のフィールドだが、編集はパーツ単位。
+        // パーツ内で値が食い違っていたら先頭を採り、その旨を伝える。
+        for (const part of data.parts) {
+            const withAnchor = part.layers.filter(l => l.anchor_x !== undefined && l.anchor_y !== undefined);
+            if (withAnchor.length === 0) continue;
+            const first = withAnchor[0];
+            if (withAnchor.some(l => l.anchor_x !== first.anchor_x || l.anchor_y !== first.anchor_y)) {
+                warnings.push(`"${part.partID}" のレイヤーで anchor が揃っていないため、先頭の値を使いました`);
+            }
+            const tf = transforms[part.partID] ?? emptyTransform();
+            tf.anchor = { x: first.anchor_x!, y: first.anchor_y! };
+            transforms[part.partID] = tf;
+        }
+
+        return { source, animations, transforms, presets, mapping, expressions, warnings };
     }
 }
 
@@ -292,6 +311,45 @@ function toAnimation(sprite: EmgSprite, part: EmgPart): PartAnimation {
         intervalMin: sprite.trigger?.intervalMin ?? 3,
         intervalMax: sprite.trigger?.intervalMax ?? 8,
     };
+}
+
+/**
+ * `sprites[].tracks[]` を編集状態に戻す（v0.5.0 §7）。
+ *
+ * キーが 1 つだけのトラックは「静止した値」なので `base` に戻します
+ * （書き出しの逆で、`EmgGenerator.buildTracks` がそう作っています）。
+ * トラックのまま持つと、タイムラインに動かないキーが 1 つ残って
+ * 「動くはずなのに動かない行」に見えてしまいます。
+ */
+function toTransform(sprite: EmgSprite, part: EmgPart, warnings: string[]): PartTransform {
+    const tf = emptyTransform();
+    tf.duration = sprite.duration ?? 2;
+    tf.loop = sprite.loop ?? 'loop';
+    tf.phaseOffset = sprite.phaseOffset ?? 0;
+
+    const known = new Set<string>(TRANSFORM_PATHS.map(p => p.path));
+    for (const track of sprite.tracks ?? []) {
+        if (!known.has(track.path)) {
+            // §7.3 は 6 種しか定義していない。将来の版が増やしたときに
+            // 黙って落とすと、書き戻しで消えるので必ず伝える。
+            warnings.push(`"${part.partID}" の未知のトランスフォーム "${track.path}" は読み込みません`);
+            continue;
+        }
+        const path = track.path as TransformPath;
+        const keys = [...(track.keys ?? [])].sort((a, b) => a.t - b.t);
+        if (keys.length === 0) continue;
+
+        if (keys.length === 1) {
+            tf.base[path] = keys[0].v;
+            continue;
+        }
+        tf.tracks.push({
+            path,
+            keys,
+            interpolation: track.interpolation ?? 'linear',
+        });
+    }
+    return tf;
 }
 
 /** `mapping.json` を編集状態に戻す。 */

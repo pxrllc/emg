@@ -701,6 +701,136 @@ button.delta-chip:hover { border-color: #2563eb; }
   overflow: auto;
 }
 
+/* ---- バウンディングボックス（v0.5.0 §7）---------------------------------- */
+/* キャンバスにぴったり重ねる。SVG 自体はイベントを通し、掴めるのは中の図形だけ。 */
+.tf-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.tf-box {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* 枠の内側を掴んで動かすための当たり判定。見えない。 */
+.tf-grab { fill: rgba(37, 99, 235, 0.06); stroke: none; pointer-events: auto; }
+
+.tf-handle {
+  fill: #1e1e1e;
+  stroke: #2563eb;
+  stroke-width: 1.5;
+  pointer-events: auto;
+}
+.tf-handle:hover { fill: #2563eb; }
+.tf-rotate { fill: #2563eb; stroke: #fff; }
+
+/* アンカーは「回転の中心」。ハンドルと違う色にしないと取り違える。 */
+.tf-anchor { fill: rgba(240, 179, 126, 0.25); stroke: #f0b37e; stroke-width: 1.5; }
+.tf-anchor-cross { stroke: #f0b37e; stroke-width: 1.5; }
+
+.tf-hint {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: #93b4fd;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- ミニタイムライン ----------------------------------------------------- */
+.tl {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: #202023;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tl-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tl-lbl { font-size: 11px; color: #8a8a8e; }
+.tl-time {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: #93b4fd;
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+}
+
+.icon-btn.on { background: rgba(37, 99, 235, 0.25); border-radius: 3px; }
+
+/* 目盛り。掴むとスクラブできるので、行全体が当たり判定。 */
+.tl-ruler {
+  position: relative;
+  height: 16px;
+  margin-left: 84px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: ew-resize;
+}
+.tl-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #6b6b70;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #f0b37e;
+  pointer-events: none;
+}
+.tl-playhead.thin { width: 1px; opacity: 0.5; }
+
+.tl-row { display: flex; align-items: center; gap: 4px; }
+.tl-row.moving .tl-name { color: #93b4fd; font-weight: 600; }
+.tl-name { width: 52px; font-size: 11px; color: #a5a5aa; flex-shrink: 0; }
+.tl-unit { font-size: 10px; color: #6b6b70; width: 16px; flex-shrink: 0; }
+
+/* キーを置く帯。 */
+.tl-lane {
+  position: relative;
+  flex: 1;
+  min-width: 60px;
+  height: 18px;
+  border-radius: 3px;
+  background: #17171a;
+  border: 1px solid var(--border-color);
+  cursor: ew-resize;
+}
+
+.tl-key {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+}
+.tl-key:hover { color: #93b4fd; }
+.tl-key.at { color: #f0b37e; }
+
 /* テンプレート適用の結果。落ちた名前まで出すので 1 行が伸びうる。 */
 .tpl-row {
   display: grid;

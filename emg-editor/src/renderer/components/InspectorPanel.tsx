@@ -8,7 +8,7 @@ import { PresetsPanel } from './PresetsPanel';
 import { ExpressionsPanel } from './ExpressionsPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
-import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
+import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation, PartTransform } from '../types';
 
 type Tab = 'parts' | 'mapping' | 'presets' | 'layer' | 'json';
 
@@ -41,6 +41,14 @@ interface InspectorPanelProps {
     onAnimationAddFrame: (partId: string, frameId: string) => void;
     onAnimationRemoveFrame: (partId: string, index: number) => void;
     onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
+
+    partTransforms: Record<string, PartTransform>;
+    transformTime: number;
+    playScope: string | 'all' | null;
+    onTransformChange: (partId: string, patch: Partial<PartTransform>) => void;
+    onPlayToggle: (scope: string | 'all') => void;
+    onTransformReset: () => void;
+    onSeek: (t: number) => void;
 
     mapping: AvatarMapping;
     onMappingChange: (patch: Partial<AvatarMapping>) => void;
@@ -144,6 +152,13 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onAnimationAddFrame={props.onAnimationAddFrame}
                         onAnimationRemoveFrame={props.onAnimationRemoveFrame}
                         onAnimationDurationChange={props.onAnimationDurationChange}
+                        partTransforms={props.partTransforms}
+                        transformTime={props.transformTime}
+                        playScope={props.playScope}
+                        onTransformChange={props.onTransformChange}
+                        onPlayToggle={props.onPlayToggle}
+                        onTransformReset={props.onTransformReset}
+                        onSeek={props.onSeek}
                     />
                 )}
                 {activeTab === 'mapping' && (

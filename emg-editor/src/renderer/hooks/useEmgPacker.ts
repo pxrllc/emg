@@ -7,7 +7,7 @@ import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
 import { EmgGenerator, ExportItem, EmgData } from '../services/EmgGenerator';
 import { PreviewItem } from '../components/PreviewPanel';
-import { defaultPartAnimation, emptyExpression, emptyMapping, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation } from '../types';
+import { defaultPartAnimation, emptyExpression, emptyMapping, emptyTransform, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 import {
@@ -425,9 +425,58 @@ export function useEmgPacker() {
     // 表情はそれを参照して目・口だけを足す（types.ts の AvatarExpression を参照）。
     const [expressions, setExpressions] = useState<AvatarExpression[]>([]);
 
+    // partID -> トランスフォーム（v0.5.0 §7 の tracks[]）。
+    // sequence（差分の切り替え）とは別の軸なので partAnimations とは分けて持つ。
+    // 書き出しでは 1 つの sprite にまとめる（§10.5: loop は tracks、trigger は sequence）。
+    const [partTransforms, setPartTransforms] = useState<Record<string, PartTransform>>({});
+
+    // ---- 再生 --------------------------------------------------------------
+    // scope は「今どの範囲を動かしているか」。単体再生のときに他のパーツまで
+    // 動くと、そのパーツの動きだけを見たいのに全体が揺れて確認にならない。
+    const [transformTime, setTransformTime] = useState(0);
+    const [playScope, setPlayScope] = useState<string | 'all' | null>(null);
+
+    useEffect(() => {
+        if (!playScope) return;
+        let raf = 0;
+        let last = performance.now();
+        const tick = (now: number) => {
+            const dt = (now - last) / 1000;
+            last = now;
+            setTransformTime(t => t + dt);
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [playScope]);
+
+    const handleTransformChange = (partId: string, patch: Partial<PartTransform>) => {
+        setPartTransforms(prev => ({
+            ...prev,
+            [partId]: { ...(prev[partId] ?? emptyTransform()), ...patch },
+        }));
+    };
+
+    const handlePlayToggle = (scope: string | 'all') => {
+        // **更新関数の中で別の setState を呼んではいけない。** React は更新関数を
+        // 再実行することがあるので、そこに置いた setTransformTime(0) は毎フレーム
+        // 積み直され、時刻が 0 に張り付く（実際にそうなった）。
+        // 判定は現在値で行い、副作用はここに出す。
+        const next = playScope === scope ? null : scope;
+        // 別の対象に切り替えるときは頭出しする。途中から始まると
+        // 「押したのに動かない」（キーの無い区間だった）が起きる。
+        if (next && next !== playScope) setTransformTime(0);
+        setPlayScope(next);
+    };
+
+    const handleTransformReset = () => { setPlayScope(null); setTransformTime(0); };
+
     /** 今の内容を捨てて最初からにする。読み込みの直前に必ず通す。 */
     const resetEditingState = () => {
         setPartAnimations({});
+        setPartTransforms({});
+        setPlayScope(null);
+        setTransformTime(0);
         setPreviewFrame({});
         setPreviewOff({});
         setMapping(emptyMapping());
@@ -488,6 +537,8 @@ export function useEmgPacker() {
         const pid = (id: string) => renamed.get(id) ?? id;
         const animations = Object.fromEntries(
             Object.entries(loaded.animations).map(([k, a]) => [pid(k), { ...a, spriteID: pid(a.spriteID) }]));
+        const transforms = Object.fromEntries(
+            Object.entries(loaded.transforms).map(([k, t]) => [pid(k), t]));
         const presets = loaded.presets.map(p => ({
             ...p,
             parts: Object.fromEntries(Object.entries(p.parts).map(([k, v]) => [pid(k), v])),
@@ -503,6 +554,7 @@ export function useEmgPacker() {
         // まばたき・プリセット・表情は presetID の参照で結び付いた一式なので置き換える
         // （テンプレートの適用と同じ判断）。
         setPartAnimations(prev => ({ ...prev, ...animations }));
+        setPartTransforms(prev => ({ ...prev, ...transforms }));
         setMapping(mapping);
         setPresets(presets);
         setExpressions(loaded.expressions);
@@ -688,8 +740,15 @@ export function useEmgPacker() {
      *   - static : defaultVisible が false のパーツは初期状態で描かない（v0.5.0 §4）
      */
     const compositionItems = useMemo<PreviewItem[]>(() => {
-        const items: PreviewItem[] = [];
-        for (const layer of flattenLayers(psdRoot)) {
+        const items: (PreviewItem & { z: number })[] = [];
+        const layers = flattenLayers(psdRoot);
+        // 書き出しと同じ z 順で並べる。走査順のまま描くと、`.emg` から読み込んだ
+        // 「パーツをまたいで z が入れ子になっているファイル」でプレビューだけ
+        // 重なりが変わる。バウンディングボックスは見えている絵を掴むものなので、
+        // ここがずれていると掴む対象を間違える。
+        const zIndices = resolveZIndices(layers, layerMeta);
+
+        for (const [index, layer] of layers.entries()) {
             const meta = layerMeta[layer.id!];
             if (!meta || !meta.visible) continue;
 
@@ -707,11 +766,15 @@ export function useEmgPacker() {
 
             items.push({
                 id: layer.id!,
+                partId: part.partId,
                 image: layer.canvas!,
                 left: layer.left || 0,
                 top: layer.top || 0,
+                opacity: meta.opacity ?? 1,
+                z: zIndices[index],
             });
         }
+        items.sort((a, b) => a.z - b.z);
         return items;
     }, [psdRoot, layerMeta, partById, previewFrame, previewOff]);
 
@@ -1173,7 +1236,8 @@ export function useEmgPacker() {
                 (phase, percent) => setExportProgress({ phase, percent }),
                 mapping,
                 presets,
-                expressions
+                expressions,
+                partTransforms
             );
 
             const link = document.createElement('a');
@@ -1404,6 +1468,13 @@ export function useEmgPacker() {
         previewFrame,
         previewOff,
         partAnimations,
+        partTransforms,
+        transformTime,
+        playScope,
+        handleTransformChange,
+        handlePlayToggle,
+        handleTransformReset,
+        setTransformTime,
         mapping,
         setMapping,
         presets,

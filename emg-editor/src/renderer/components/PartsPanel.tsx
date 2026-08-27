@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Pencil, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, Pause, Pencil, Play, RotateCcw } from 'lucide-react';
 import type { PartInfo } from '../parts';
-import type { PartAnimation } from '../types';
+import { emptyTransform, type PartAnimation, type PartTransform } from '../types';
+import { hasAnimation } from '../services/transform';
 import { AnimationEditor } from './AnimationEditor';
+import { TransformTimeline } from './TransformTimeline';
 
 interface PartsPanelProps {
     parts: PartInfo[];
@@ -31,6 +33,16 @@ interface PartsPanelProps {
     onAnimationAddFrame: (partId: string, frameId: string) => void;
     onAnimationRemoveFrame: (partId: string, index: number) => void;
     onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
+
+    /** partID -> トランスフォーム（v0.5.0 §7）。static パーツにも付けられる（§7.1）。 */
+    partTransforms: Record<string, PartTransform>;
+    transformTime: number;
+    /** 今どの範囲を再生しているか。partID か 'all'、止まっていれば null。 */
+    playScope: string | 'all' | null;
+    onTransformChange: (partId: string, patch: Partial<PartTransform>) => void;
+    onPlayToggle: (scope: string | 'all') => void;
+    onTransformReset: () => void;
+    onSeek: (t: number) => void;
 }
 
 /**
@@ -51,7 +63,11 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     partAnimations, mappingControlled,
     onAnimationToggle, onAnimationChange, onAnimationAddFrame,
     onAnimationRemoveFrame, onAnimationDurationChange,
+    partTransforms, transformTime, playScope,
+    onTransformChange, onPlayToggle, onTransformReset, onSeek,
 }) => {
+    // 「全体」ボタンは、動くトラックが 1 つも無ければ押せない。
+    const anyAnimated = parts.some(p => hasAnimation(partTransforms[p.partId]));
     const [renaming, setRenaming] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
 
@@ -84,6 +100,16 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                 <span style={{ fontSize: '11px', color: '#7d7d82', flex: 1 }}>
                     {parts.length} パーツ
                 </span>
+                <button
+                    className={`btn btn-sm ${playScope === 'all' ? 'btn-primary' : ''}`}
+                    onClick={() => onPlayToggle('all')}
+                    disabled={!anyAnimated}
+                    title={anyAnimated
+                        ? '全パーツのアニメーションを同時に再生する'
+                        : '動くトラックを持つパーツがまだありません'}
+                >
+                    {playScope === 'all' ? <Pause size={12} /> : <Play size={12} />} 全体
+                </button>
                 <button className="btn btn-sm" onClick={() => onTypeAll('static')} title="全パーツを Static にする">
                     全 Static
                 </button>
@@ -261,6 +287,21 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                             : `${part.layerIds.length} レイヤー`}
                                     </span>
                                 </label>
+                            )}
+
+                            {/* トランスフォーム（§7）。static / switch のどちらにも付く。
+                                差分の切り替えとは別の軸なので、常に出しておく。 */}
+                            {selectedPartId === part.partId && (
+                                <TransformTimeline
+                                    partId={part.partId}
+                                    transform={partTransforms[part.partId] ?? emptyTransform()}
+                                    time={transformTime}
+                                    playing={playScope === part.partId || playScope === 'all'}
+                                    onChange={patch => onTransformChange(part.partId, patch)}
+                                    onSeek={onSeek}
+                                    onPlayToggle={() => onPlayToggle(part.partId)}
+                                    onReset={onTransformReset}
+                                />
                             )}
                         </div>
                     </div>

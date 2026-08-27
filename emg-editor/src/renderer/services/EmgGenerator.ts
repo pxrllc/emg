@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation } from '../types';
+import { TRANSFORM_PATHS, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform, type TransformPath } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
 import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
@@ -56,6 +56,13 @@ export interface EmgPartLayer {
     height: number;
     basePosition_x: number; // Canvas x
     basePosition_y: number; // Canvas y
+    /**
+     * v0.4.0 §3。回転・拡縮の中心。**キャンバス座標**。
+     * 不在時は `basePosition` と同値。パーツを回すときの中心は
+     * レイヤーごとではなくパーツ単位で決まるので、同じパーツの全レイヤーに同じ値を書く。
+     */
+    anchor_x?: number;
+    anchor_y?: number;
     textureZIndex: number;
     opacity: number;
     blendMode: string;
@@ -77,16 +84,35 @@ export interface EmgTrigger {
     intervalMax?: number;
 }
 
-/** emg-json-spec.md 7 章。partID 単位のフレーム切り替えアニメーション。 */
+/** v0.5.0 §7.2。座標変換のキーフレーム列。 */
+export interface EmgTrack {
+    /** v0.5.0 §7.3 の 6 種のいずれか。 */
+    path: string;
+    keys: { t: number; v: number }[];
+    interpolation?: 'step' | 'linear' | 'cubic';
+}
+
+/** emg-json-spec.md 7 章。partID 単位のアニメーション。 */
 export interface EmgSprite {
     spriteID: string;
-    /** 対象パーツ。**その type は switch でなければならない**（7 章）。 */
+    /**
+     * 対象パーツ。
+     * **`sequence` を持つ場合は switch でなければならない**（v0.5.0 §7.1）。
+     * `tracks` のみを持つ sprite は static / switch のどちらでもよい。
+     */
     targetPartID: string;
     /** v0.4.0 で任意化（不在時 12）。`sequence.keys` を使う場合は不要（v0.5.0 6.1）。 */
     fps?: number;
-    sequence: EmgSequence;
+    sequence?: EmgSequence;
     /** 不在時、プレイヤーは自律再生してはならない（7 章）。 */
     trigger?: EmgTrigger;
+    /** v0.5.0 §7。 */
+    tracks?: EmgTrack[];
+    /** `tracks` を持つ場合は必須（§7.2）。 */
+    duration?: number;
+    /** §7.6。`tracks` にのみ効く（§10.5）。不在時は `"loop"`。 */
+    loop?: 'once' | 'loop' | 'pingpong';
+    phaseOffset?: number;
 }
 
 /**
@@ -102,6 +128,9 @@ export type ExportItem = {
     zIndex: number; // calculated in App.tsx
 };
 
+/** JSON に小数の誤差を書き散らさないための丸め。 */
+const round3 = (v: number) => Math.round(v * 1000) / 1000;
+
 export class EmgGenerator {
     /**
      * 編集状態のアニメーション設定を `sprites[]` に変換する。
@@ -114,7 +143,8 @@ export class EmgGenerator {
      */
     private static buildSprites(
         parts: EmgPart[],
-        animations: Record<string, PartAnimation>
+        animations: Record<string, PartAnimation>,
+        transforms: Record<string, PartTransform> = {}
     ): EmgSprite[] {
         const controlled = findMappingControlledParts(parts);
         const sprites: EmgSprite[] = [];
@@ -122,45 +152,66 @@ export class EmgGenerator {
 
         for (const part of parts) {
             const anim = animations[part.partID];
-            if (!anim || !anim.enabled) continue;
-            // static パーツはフレームを持たないので対象外（7 章）。
-            if (part.type !== 'switch') continue;
+            const tf = transforms[part.partID];
+            const tracks = EmgGenerator.buildTracks(tf);
 
-            const available = new Set(part.layers.map(l => l.frameName ?? l.textureID));
-            const frames = anim.frames.filter(f => available.has(f));
-            if (frames.length === 0) continue;
+            // sequence は switch パーツにしか付けられない（v0.5.0 §7.1）。
+            // tracks はどちらのパーツにも付けられる（体や髪を動かすためのもの）。
+            const wantSequence = !!anim?.enabled && part.type === 'switch';
+            if (!wantSequence && tracks.length === 0) continue;
+
+            let sequence: EmgSequence | undefined;
+            if (wantSequence && anim) {
+                const available = new Set(part.layers.map(l => l.frameName ?? l.textureID));
+                const frames = anim.frames.filter(f => available.has(f));
+                if (frames.length > 0) {
+                    sequence = { type: anim.sequenceType };
+                    if (anim.timing === 'keys') {
+                        // durations は「そのフレームの表示秒数」。keys は累積時刻なので積算する（6.1）。
+                        let t = 0;
+                        sequence.keys = frames.map((frame, i) => {
+                            const key = { t: Math.round(t * 1000) / 1000, frame };
+                            t += Math.max(0.001, anim.durations[i] ?? 0.1);
+                            return key;
+                        });
+                    } else {
+                        sequence.frames = frames;
+                    }
+                }
+            }
+            if (!sequence && tracks.length === 0) continue;
 
             // spriteID はファイル内で一意にする。外部から再生を指示するキーになるため。
-            let spriteID = anim.spriteID || part.partID;
+            const wanted = anim?.spriteID || part.partID;
+            let spriteID = wanted;
             let n = 1;
-            while (usedIds.has(spriteID)) spriteID = `${anim.spriteID || part.partID}_${n++}`;
+            while (usedIds.has(spriteID)) spriteID = `${wanted}_${n++}`;
             usedIds.add(spriteID);
-
-            const sequence: EmgSequence = { type: anim.sequenceType };
-            if (anim.timing === 'keys') {
-                // durations は「そのフレームの表示秒数」。keys は累積時刻なので積算する（6.1）。
-                let t = 0;
-                sequence.keys = frames.map((frame, i) => {
-                    const key = { t: Math.round(t * 1000) / 1000, frame };
-                    t += Math.max(0.001, anim.durations[i] ?? 0.1);
-                    return key;
-                });
-            } else {
-                sequence.frames = frames;
-            }
 
             const sprite: EmgSprite = {
                 spriteID,
                 targetPartID: part.partID,
-                sequence,
             };
+            if (sequence) sprite.sequence = sequence;
+
+            // §10.5: loop は tracks にのみ効き、sequence の繰り返しは trigger が決める。
+            // 1 つの sprite に両方載せてよいのはそのため。
+            if (tracks.length > 0 && tf) {
+                sprite.tracks = tracks;
+                sprite.duration = Math.max(0.05, tf.duration);
+                sprite.loop = EmgGenerator.hasMovingTrack(tf) ? tf.loop : 'once';
+                if (tf.phaseOffset) sprite.phaseOffset = tf.phaseOffset;
+            }
+
             // keys を使う場合 fps は不要（6.1）。書くと解釈が二重になる。
-            if (anim.timing === 'fps') sprite.fps = anim.fps;
+            if (sequence && anim?.timing === 'fps') sprite.fps = anim.fps;
 
             // 7.3: mapping.json が blink/lipSync として明示指定するパーツは、
             // mapping 側が表示を掌握する。trigger を書かなければ
             // 「プレイヤーは自律再生してはならない」になる（7 章）。
-            if (!controlled.has(part.partID)) {
+            // trigger は sequence の繰り返しを決めるもの（§10.5）なので、
+            // tracks しか無い sprite には書かない。
+            if (sequence && anim && !controlled.has(part.partID)) {
                 if (anim.triggerType === 'random_interval') {
                     sprite.trigger = {
                         type: 'random_interval',
@@ -176,6 +227,54 @@ export class EmgGenerator {
         }
 
         return sprites;
+    }
+
+    /** 動くトラック（キーが 2 つ以上）が 1 つでもあるか。 */
+    private static hasMovingTrack(tf: PartTransform): boolean {
+        return tf.tracks.some(t => t.keys.length > 1);
+    }
+
+    /** そのパスが動くか。動くなら basePosition への畳み込みはできない。 */
+    private static isMoving(tf: PartTransform, path: TransformPath): boolean {
+        return (tf.tracks.find(t => t.path === path)?.keys.length ?? 0) > 1;
+    }
+
+    /**
+     * 編集状態のトランスフォームを `tracks[]` に変換する。
+     *
+     * **平行移動はここに出しません。** `basePosition` に畳み込めるので
+     * （`createData` がそうしている）、トラックにすると同じことを 2 通りで
+     * 表せる状態になります。動く平行移動だけがトラックになります。
+     *
+     * 静止した回転・拡縮は EMG に書く場所がないため、**キー 1 つのトラック**に
+     * します。§7.6 の `once` が「1 回再生し、最後のキーの値を保持する」と
+     * 定めているので、これが静止値の正しい表し方です。
+     */
+    private static buildTracks(tf: PartTransform | undefined): EmgTrack[] {
+        if (!tf) return [];
+        const out: EmgTrack[] = [];
+
+        for (const p of TRANSFORM_PATHS) {
+            const track = tf.tracks.find(t => t.path === p.path);
+            const keys = track?.keys ?? [];
+
+            if (keys.length > 1) {
+                out.push({
+                    path: p.path,
+                    keys: keys.map(k => ({ t: round3(k.t), v: round3(k.v) })),
+                    interpolation: track!.interpolation,
+                });
+                continue;
+            }
+
+            // 動かないもの。値が既定と同じなら書く必要がない。
+            const v = keys.length === 1 ? keys[0].v : (tf.base[p.path] ?? p.def);
+            if (v === p.def) continue;
+            // 平行移動は basePosition が持つ。
+            if (p.path === 'translate_x' || p.path === 'translate_y') continue;
+            out.push({ path: p.path, keys: [{ t: 0, v: round3(v) }], interpolation: 'linear' });
+        }
+        return out;
     }
 
     /**
@@ -224,7 +323,8 @@ export class EmgGenerator {
         psdWidth: number,
         psdHeight: number,
         animations: Record<string, PartAnimation> = {},
-        presets: AvatarPreset[] = []
+        presets: AvatarPreset[] = [],
+        transforms: Record<string, PartTransform> = {}
     ): EmgData {
         const partsMap = new Map<string, EmgPart>();
 
@@ -299,6 +399,12 @@ export class EmgGenerator {
             // Calculate UV / Atlas coords
             // v0.2.2 uses x,y,width,height in ATLAS pixels.
 
+            // 静止した平行移動は basePosition に畳み込む（トラックにしない）。
+            // 動く平行移動だけが tracks[] に出る（buildTracks を参照）。
+            const tf = transforms[partId];
+            const shiftX = tf && !EmgGenerator.isMoving(tf, 'translate_x') ? (tf.base.translate_x ?? 0) : 0;
+            const shiftY = tf && !EmgGenerator.isMoving(tf, 'translate_y') ? (tf.base.translate_y ?? 0) : 0;
+
             part.layers.push({
                 textureID: textureId,
                 ...(item.meta.frameName ? { frameName: item.meta.frameName } : {}),
@@ -307,8 +413,9 @@ export class EmgGenerator {
                 y: item.packed.y,
                 width: item.packed.width,
                 height: item.packed.height,
-                basePosition_x: (item.originalLayer.left || 0),
-                basePosition_y: (item.originalLayer.top || 0),
+                basePosition_x: (item.originalLayer.left || 0) + shiftX,
+                basePosition_y: (item.originalLayer.top || 0) + shiftY,
+                // アンカーは後段でまとめて入れる（パーツの外接矩形が要るため）。
                 textureZIndex: item.zIndex,
                 opacity: item.meta.opacity ?? 1.0,
                 blendMode: item.meta.blendMode || 'normal'
@@ -367,6 +474,40 @@ export class EmgGenerator {
         // Or I can update `ExportItem` to include `sortOrder`?
 
         const emgParts = Array.from(partsMap.values());
+
+        // ---- アンカー（v0.4.0 §3）--------------------------------------------
+        // **回転・拡縮を書き出すパーツには、必ずアンカーも書く。**
+        // 仕様の既定は `basePosition` と同値（＝そのレイヤーの左上）だが、
+        // エディタは外接矩形の中心を回転の中心として見せている。書かずに出すと、
+        // 画面で見た絵と消費側が描く絵が食い違う。
+        for (const part of emgParts) {
+            const tf = transforms[part.partID];
+            if (!tf || part.layers.length === 0) continue;
+            const spins = TRANSFORM_PATHS.some(p =>
+                (p.path === 'rotation' || p.path === 'scale_x' || p.path === 'scale_y')
+                && (tf.tracks.some(t => t.path === p.path && t.keys.length > 0)
+                    || (tf.base[p.path] ?? p.def) !== p.def));
+            if (!spins) continue;
+
+            let anchor = tf.anchor;
+            if (!anchor) {
+                // 既定は外接矩形の中心。プレビューの既定と同じ規則にする。
+                const left = Math.min(...part.layers.map(l => l.basePosition_x));
+                const top = Math.min(...part.layers.map(l => l.basePosition_y));
+                const right = Math.max(...part.layers.map(l => l.basePosition_x + l.width));
+                const bottom = Math.max(...part.layers.map(l => l.basePosition_y + l.height));
+                anchor = { x: (left + right) / 2, y: (top + bottom) / 2 };
+            } else {
+                // 平行移動を basePosition に畳み込んだ分だけ、中心も動かす。
+                const shiftX = EmgGenerator.isMoving(tf, 'translate_x') ? 0 : (tf.base.translate_x ?? 0);
+                const shiftY = EmgGenerator.isMoving(tf, 'translate_y') ? 0 : (tf.base.translate_y ?? 0);
+                anchor = { x: anchor.x + shiftX, y: anchor.y + shiftY };
+            }
+            for (const l of part.layers) {
+                l.anchor_x = round3(anchor.x);
+                l.anchor_y = round3(anchor.y);
+            }
+        }
 
         // Flatten all layers to assign global Z if we had a way.
         // Since we don't, we leave Z assignment to the caller (via meta) OR we just put 0.
@@ -442,7 +583,7 @@ export class EmgGenerator {
                 height: a.height
             })),
             parts: emgParts,
-            sprites: EmgGenerator.buildSprites(emgParts, animations),
+            sprites: EmgGenerator.buildSprites(emgParts, animations, transforms),
             ...(builtPresets.length > 0 ? { presets: builtPresets } : {})
         };
     }
@@ -456,7 +597,8 @@ export class EmgGenerator {
         onProgress?: ExportProgressCallback,
         mappingState?: AvatarMapping,
         presets: AvatarPreset[] = [],
-        expressions: AvatarExpression[] = []
+        expressions: AvatarExpression[] = [],
+        transforms: Record<string, PartTransform> = {}
     ): Promise<Blob> {
         const zip = new JSZip();
         const report = (phase: string, percent: number) => onProgress?.(phase, percent);
@@ -483,7 +625,7 @@ export class EmgGenerator {
 
         // 2. Generate JSON
         report('定義を生成中', 62);
-        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations, presets);
+        const emgData = EmgGenerator.createData(packResult, items, psdWidth, psdHeight, animations, presets, transforms);
         zip.file('data.json', JSON.stringify(emgData, null, 2));
 
         // 3. mapping.json（任意）。

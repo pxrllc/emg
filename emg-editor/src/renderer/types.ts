@@ -64,6 +64,83 @@ export interface PartAnimation {
     intervalMax: number;
 }
 
+// ---- トランスフォーム（v0.5.0 §7 の `sprites[].tracks[]`）------------------
+
+/** v0.5.0 §7.3。**この 6 種以外は定義されていません。** */
+export const TRANSFORM_PATHS = [
+    { path: 'translate_x', label: 'X 移動', unit: 'px', def: 0, step: 1 },
+    { path: 'translate_y', label: 'Y 移動', unit: 'px', def: 0, step: 1 },
+    { path: 'rotation', label: '回転', unit: '°', def: 0, step: 1 },
+    { path: 'scale_x', label: 'X 拡縮', unit: '倍', def: 1, step: 0.01 },
+    { path: 'scale_y', label: 'Y 拡縮', unit: '倍', def: 1, step: 0.01 },
+    { path: 'opacity', label: '不透明度', unit: '', def: 1, step: 0.01 },
+] as const;
+
+export type TransformPath = typeof TRANSFORM_PATHS[number]['path'];
+
+export const TRANSFORM_DEFAULTS: Record<TransformPath, number> = {
+    translate_x: 0, translate_y: 0, rotation: 0, scale_x: 1, scale_y: 1, opacity: 1,
+};
+
+/** v0.5.0 §7.2。`t` は再生開始からの秒数（昇順）。 */
+export interface TransformKey { t: number; v: number }
+
+export interface TransformTrack {
+    path: TransformPath;
+    keys: TransformKey[];
+    /** v0.5.0 §7.5。`cubic` は Catmull-Rom に固定。 */
+    interpolation: 'step' | 'linear' | 'cubic';
+}
+
+/**
+ * 1 パーツ分のトランスフォーム。
+ *
+ * **`base` は「そのパスに `tracks` が無いときの値」です。** キーの値は絶対値なので
+ * （§7.3 が既定値付きの絶対値として定義している）、`base` を足し込む形にはしません。
+ * 2 通りの解釈ができる状態を作らないためで、バウンディングボックスで回した角度が
+ * タイムラインのキーとずれる、という事故を構造的に防ぎます。
+ *
+ * **静止した回転・拡縮を書く場所が EMG にはありません。** `basePosition` は平行移動
+ * しか持たないので、`base` の回転・拡縮は書き出し時に**キー 1 つ + `loop: "once"`**
+ * のトラックになります（§7.6 が「1 回再生し、最後のキーの値を保持する」と定めている）。
+ * 平行移動だけは `basePosition` に畳み込めるので、トラックにはしません。
+ *
+ * アンカーはレイヤー側のフィールド（v0.4.0 §3）ですが、回転の中心はパーツ単位で
+ * 決めるものなので、ここで持って所属レイヤー全部に同じ値を書きます。
+ */
+export interface PartTransform {
+    /** そのパスに `tracks` が無いときの値。 */
+    base: Record<TransformPath, number>;
+    /**
+     * 回転・拡縮の中心（キャンバス座標）。
+     * 未設定なら書き出し時に `basePosition` と同値になる（v0.4.0 §3 の既定）。
+     */
+    anchor?: { x: number; y: number };
+    /** 空なら静止。 */
+    tracks: TransformTrack[];
+    /** v0.5.0 §7.2。`tracks` を持つ場合は必須。 */
+    duration: number;
+    loop: 'once' | 'loop' | 'pingpong';
+    phaseOffset: number;
+}
+
+export function emptyTransform(): PartTransform {
+    return {
+        base: { ...TRANSFORM_DEFAULTS },
+        tracks: [],
+        duration: 2,
+        loop: 'loop',
+        phaseOffset: 0,
+    };
+}
+
+/** 既定値のまま・トラックも無いなら、書き出すものが何も無い。 */
+export function isIdentityTransform(t: PartTransform | undefined): boolean {
+    if (!t) return true;
+    if (t.tracks.some(tr => tr.keys.length > 0)) return false;
+    return TRANSFORM_PATHS.every(p => t.base[p.path] === p.def);
+}
+
 /**
  * 状態の組（`presets[]`）の編集状態。
  *
