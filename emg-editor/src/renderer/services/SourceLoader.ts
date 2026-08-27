@@ -1,4 +1,5 @@
 import type { Layer } from 'ag-psd';
+import type { LayerMeta } from '../types';
 import { FileLoader } from './PsdLoader';
 import { ImageLoader } from './ImageLoader';
 import { AnimationLoader } from './AnimationLoader';
@@ -24,11 +25,26 @@ export interface LoadedSource {
      * 取り込み側がこれを `sprites[]` の元になる設定に変換する。
      */
     frameDurations?: number[];
+    /**
+     * レイヤーごとの編集状態の初期値。既定の推定を上書きしたいソース用。
+     *
+     * `.emg` の読み込みがこれを使う。木の形から種別を推定する既定の規則では、
+     * 差分が 1 コマだけの switch パーツや、初期非表示の static パーツを
+     * 取り違える（前者は非表示レイヤーが無いので static、後者は全部非表示なので
+     * switch に見える）。ファイルが答えを持っているのに推定するのは間違い。
+     *
+     * 引数は**取り込み前の**レイヤーオブジェクト。合流時に ID が振り直されるので、
+     * 呼び出し側はその場で新しい ID に結び付ける。
+     */
+    metaOf?: (layer: Layer) => Omit<LayerMeta, 'id' | 'partId'> | undefined;
 }
 
 export class SourceLoader {
-    /** ファイル選択ダイアログの accept 属性。 */
-    static readonly ACCEPT = ['.psd', '.kra', '.clip', ...ImageLoader.EXTENSIONS.map(e => `.${e}`)].join(',');
+    /**
+     * ファイル選択ダイアログの accept 属性。
+     * `.emg` は EmgLoader が受け持つが、選べないと入口が無いのでここに載せる。
+     */
+    static readonly ACCEPT = ['.psd', '.kra', '.clip', '.emg', ...ImageLoader.EXTENSIONS.map(e => `.${e}`)].join(',');
 
     static async load(file: File): Promise<LoadedSource> {
         const name = file.name.replace(/\.[^.]+$/, '') || 'source';

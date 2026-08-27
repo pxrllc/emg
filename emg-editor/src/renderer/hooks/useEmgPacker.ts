@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
 import { SourceLoader, type LoadedSource } from '../services/SourceLoader';
+import { EmgLoader, isEmgFile } from '../services/EmgLoader';
 import { FRAME_COUNT_WARNING } from '../services/AnimationLoader';
 import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
@@ -170,6 +171,54 @@ const uniqueGroupName = (siblings: PsdLayer[], base: string): string => {
     let n = 2;
     while (used.has(`${base}_${n}`)) n++;
     return `${base}_${n}`;
+};
+
+/** 木の中のグループ名を全部集める。どの階層のグループ名も partID になりうる。 */
+const collectGroupNames = (layers: PsdLayer[], out = new Set<string>()): Set<string> => {
+    for (const l of layers) {
+        if (l.children && l.children.length > 0) {
+            if (l.name) out.add(l.name);
+            collectGroupNames(l.children, out);
+        }
+    }
+    return out;
+};
+
+/**
+ * 取り込むグループ名が既存の partID とぶつかるなら改名する。
+ *
+ * 同じキャラクターの `.emg` を今開いている木に足すと、`Mouth` も `Eyes` も
+ * 両方に居る。partID は名前で決まるので、そのままだと 2 つのパーツが 1 つに
+ * 合流し、同じフレーム識別子が重複した壊れたパーツになる（レイヤーは倍に
+ * 増えるのにパーツ数は変わらない、という形で表面化する）。
+ *
+ * `@` 始まりはフレームグループ（partID にならない）なので触らない。
+ * 戻り値は「元の名前 → 新しい名前」。`.emg` の presets / mapping / sprites は
+ * partID を参照しているので、呼び出し側がこれで付け替える。
+ */
+const renameColliding = (incoming: PsdLayer[], used: Set<string>): Map<string, string> => {
+    const renamed = new Map<string, string>();
+    const walk = (layers: PsdLayer[]) => {
+        for (const l of layers) {
+            if (!l.children || l.children.length === 0) continue;
+            const name = l.name;
+            if (name && !name.startsWith('@')) {
+                if (used.has(name)) {
+                    let n = 2;
+                    let next = `${name}_${n}`;
+                    while (used.has(next)) next = `${name}_${++n}`;
+                    renamed.set(name, next);
+                    l.name = next;
+                    used.add(next);
+                } else {
+                    used.add(name);
+                }
+            }
+            walk(l.children);
+        }
+    };
+    walk(incoming);
+    return renamed;
 };
 
 /**
@@ -376,15 +425,23 @@ export function useEmgPacker() {
     // 表情はそれを参照して目・口だけを足す（types.ts の AvatarExpression を参照）。
     const [expressions, setExpressions] = useState<AvatarExpression[]>([]);
 
+    /** 今の内容を捨てて最初からにする。読み込みの直前に必ず通す。 */
+    const resetEditingState = () => {
+        setPartAnimations({});
+        setPreviewFrame({});
+        setPreviewOff({});
+        setMapping(emptyMapping());
+        setPresets([]);
+        setExpressions([]);
+        applyTree(null, {});
+    };
+
     const handlePsdLoad = async (file: File) => {
         try {
+            resetEditingState();
+            // `.emg` は「書き出したものの続き」なので、開く経路も同じ入口にする。
+            if (isEmgFile(file.name)) { await importEmg(file); return; }
             const root = await FileLoader.load(file);
-            setPartAnimations({});
-            setPreviewFrame({});
-            setPreviewOff({});
-            setMapping(emptyMapping());
-            setPresets([]);
-            setExpressions([]);
             applyTree(root, recalculateMeta(root, {}));
         } catch (e) {
             // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
@@ -402,10 +459,60 @@ export function useEmgPacker() {
      */
     const handleSourceAdd = async (file: File) => {
         try {
+            if (isEmgFile(file.name)) { await importEmg(file); return; }
             mergeSource(await SourceLoader.load(file), file.name);
         } catch (e) {
             console.error('Failed to add source:', e);
             setToast({ title: `${file.name} を取り込めませんでした`, body: String(e instanceof Error ? e.message : e), tone: 'error' });
+        }
+    };
+
+    /**
+     * `.emg` を編集状態に戻す。
+     *
+     * レイヤーは `mergeSource` に流す（ID の採番・キャンバスの拡張・トーストが
+     * 1 か所で済む）。`.emg` にしか無い情報 — sprites / presets / mapping.json —
+     * だけをここで足す。
+     *
+     * **元の PSD を置き換えるものではありません。** グループ階層、書き出しに
+     * 含めなかったレイヤー、トリミング前の余白は戻りません。
+     */
+    const importEmg = async (file: File) => {
+        const loaded = await EmgLoader.load(file);
+        const renamed = mergeSource(loaded.source, file.name);
+        if (!renamed) return;
+
+        // 合流時にパーツが改名されたら、partID を参照しているものを付け替える。
+        // sprites / presets / mapping.json はすべて partID で結び付いているので、
+        // ここを飛ばすと「読めたのに何も動かない」ファイルになる。
+        const pid = (id: string) => renamed.get(id) ?? id;
+        const animations = Object.fromEntries(
+            Object.entries(loaded.animations).map(([k, a]) => [pid(k), { ...a, spriteID: pid(a.spriteID) }]));
+        const presets = loaded.presets.map(p => ({
+            ...p,
+            parts: Object.fromEntries(Object.entries(p.parts).map(([k, v]) => [pid(k), v])),
+            toggles: Object.fromEntries(Object.entries(p.toggles).map(([k, v]) => [pid(k), v])),
+        }));
+        const mapping = {
+            ...loaded.mapping,
+            blinkPartId: loaded.mapping.blinkPartId ? pid(loaded.mapping.blinkPartId) : '',
+            lipSyncPartId: loaded.mapping.lipSyncPartId ? pid(loaded.mapping.lipSyncPartId) : '',
+        };
+
+        // アニメーションはパーツ単位で独立しているので重ねる。
+        // まばたき・プリセット・表情は presetID の参照で結び付いた一式なので置き換える
+        // （テンプレートの適用と同じ判断）。
+        setPartAnimations(prev => ({ ...prev, ...animations }));
+        setMapping(mapping);
+        setPresets(presets);
+        setExpressions(loaded.expressions);
+
+        if (loaded.warnings.length > 0) {
+            setToast({
+                title: '読み込みました（戻せなかったものがあります）',
+                body: loaded.warnings.join(' / '),
+                tone: 'error',
+            });
         }
     };
 
@@ -416,10 +523,10 @@ export function useEmgPacker() {
      * ここから先は同じ処理にする。経路が分かれると ID の採番やアニメーション設定の
      * 登録を片方だけ書き忘れる（実際に起きた）。
      */
-    const mergeSource = (source: LoadedSource, fileName: string) => {
+    const mergeSource = (source: LoadedSource, fileName: string): Map<string, string> | null => {
         if (source.children.length === 0) {
             setToast({ title: '取り込めませんでした', body: `${fileName} にレイヤーがありません。`, tone: 'error' });
-            return;
+            return null;
         }
 
             // 何も開いていない場合も同じ経路を通す。分けると、ID の採番や
@@ -432,12 +539,20 @@ export function useEmgPacker() {
             //    ImageLoader / AnimationLoader のレイヤーはそもそも ID を持たない。
             //    ここで必ず一意な ID を与える（layerMeta のキーになる）。
             let nextId = maxLayerId(base.children ?? []) + 1;
-            const reid = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => ({
-                ...l,
-                id: nextId++,
-                children: l.children ? reid(l.children) : undefined,
-            }));
+            // ソースが編集状態の初期値を持っている場合（`.emg` の読み込み）、
+            // 新しい ID に結び付けて種に渡す。recalculateMeta は既にメタがある
+            // レイヤーには推定を当てないので、これで既定の推定を迂回できる。
+            const seed: Record<number, LayerMeta> = {};
+            const reid = (layers: PsdLayer[]): PsdLayer[] => layers.map(l => {
+                const id = nextId++;
+                const m = source.metaOf?.(l);
+                if (m) seed[id] = { ...m, id, partId: '' };
+                return { ...l, id, children: l.children ? reid(l.children) : undefined };
+            });
             const incoming = reid(source.children as PsdLayer[]);
+
+            // 1.5. partID がぶつかるグループを改名する。
+            const renamed = renameColliding(incoming, collectGroupNames(base.children ?? []));
 
             // 2. キャンバスは大きい方に合わせて広げる。既存レイヤーは動かさない
             //    （動かすと今まで書き出していた座標が変わってしまう）。
@@ -473,7 +588,7 @@ export function useEmgPacker() {
                 children: group ? [...(base.children ?? []), group] : incoming,
             };
 
-            applyTree(newRoot, recalculateMeta(newRoot, layerMetaRef.current));
+            applyTree(newRoot, recalculateMeta(newRoot, { ...layerMetaRef.current, ...seed }));
 
             // アニメーションなら、そのまま再生できる状態にしておく。
             // フレームを取り込んだだけでは静止した差分パーツにしかならず、
@@ -493,13 +608,18 @@ export function useEmgPacker() {
             // フレーム数が多いとアトラスを圧迫し、「1 枚に収める」が崩れる。
             // 書き出してから気づくのでは遅いので、取り込んだ時点で伝える。
             const label = group?.name ?? source.name;
+            const renameNote = renamed.size > 0
+                ? ` 名前が重なるパーツを改名しました: ${[...renamed].map(([a, b]) => `${a} → ${b}`).join('、')}`
+                : '';
             setToast(source.kind === 'animation' && incoming.length > FRAME_COUNT_WARNING
                 ? {
                     title: `取り込み（フレームが多めです）`,
                     body: `${label} — ${frameNote}。テクスチャ 1 枚に収まらない場合があります。`
-                        + `書き出し後の枚数を確認してください。`,
+                        + `書き出し後の枚数を確認してください。${renameNote}`,
                 }
-                : { title: '取り込み', body: `${label}（${frameNote}）` });
+                : { title: '取り込み', body: `${label}（${frameNote}）${renameNote}` });
+
+            return renamed;
     };
 
     /** スプライトシートの切り出し結果を取り込む（格子と fps はダイアログで決める）。 */
