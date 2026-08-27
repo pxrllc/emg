@@ -52,6 +52,8 @@ interface InspectorPanelProps {
     /** 再生できるものが 1 つでもあるか（コマ送り・変形の両方）。 */
     anyPlayable: boolean;
     partPlayable: (partId: string) => boolean;
+    transformTarget: Record<string, string | undefined>;
+    onTransformTargetChange: (partId: string, frame?: string) => void;
 
     mapping: AvatarMapping;
     onMappingChange: (patch: Partial<AvatarMapping>) => void;
@@ -164,6 +166,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         onSeek={props.onSeek}
                         anyPlayable={props.anyPlayable}
                         partPlayable={props.partPlayable}
+                        transformTarget={props.transformTarget}
+                        onTransformTargetChange={props.onTransformTargetChange}
                     />
                 )}
                 {activeTab === 'mapping' && (

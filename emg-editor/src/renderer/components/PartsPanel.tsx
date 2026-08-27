@@ -45,6 +45,9 @@ interface PartsPanelProps {
     onSeek: (t: number) => void;
     anyPlayable: boolean;
     partPlayable: (partId: string) => boolean;
+    /** パーツごとの編集対象（0.5.3 §7.4.1）。キャンバス側と共有する。 */
+    transformTarget: Record<string, string | undefined>;
+    onTransformTargetChange: (partId: string, frame?: string) => void;
 }
 
 /**
@@ -67,10 +70,8 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     onAnimationRemoveFrame, onAnimationDurationChange,
     partTransforms, transformTime, playScope,
     onTransformChange, onPlayToggle, onTransformReset, onSeek,
-    anyPlayable, partPlayable,
+    anyPlayable, partPlayable, transformTarget, onTransformTargetChange,
 }) => {
-    // パーツごとに「今どの対象を編集しているか」。既定はパーツ全体。
-    const [tfTarget, setTfTarget] = useState<Record<string, string | undefined>>({});
     const [renaming, setRenaming] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
 
@@ -308,14 +309,14 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                             {/* トランスフォーム（§7）。static / switch のどちらにも付く。
                                 差分の切り替えとは別の軸なので、常に出しておく。 */}
                             {selectedPartId === part.partId && (() => {
-                                const target = tfTarget[part.partId];
+                                const target = transformTarget[part.partId];
                                 const key = transformKey(part.partId, target);
                                 return (
                                     <TransformTimeline
                                         partId={part.partId}
                                         frames={part.frames.map(f => f.frameId)}
                                         target={target}
-                                        onTargetChange={f => setTfTarget(prev => ({ ...prev, [part.partId]: f }))}
+                                        onTargetChange={f => onTransformTargetChange(part.partId, f)}
                                         hasTransform={f => !!partTransforms[transformKey(part.partId, f)]}
                                         transform={partTransforms[key] ?? emptyTransform()}
                                         time={transformTime}

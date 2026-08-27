@@ -27,6 +27,8 @@ interface PreviewPanelProps {
     /** 添字は partID か「partID + フレーム識別子」（0.5.3 §7.4.1）。 */
     transforms: Record<string, PartTransform>;
     selectedPartId: string | null;
+    /** パーツごとの編集対象（0.5.3 §7.4.1）。タイムラインと共有する。 */
+    transformTarget: Record<string, string | undefined>;
     onSelectPart: (partId: string) => void;
     onTransformChange: (key: string, patch: Partial<PartTransform>) => void;
     /** 再生時刻（秒）。停止中は 0。 */
@@ -41,7 +43,7 @@ interface PreviewPanelProps {
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     atlasUrls, compositionItems, width, height,
-    transforms, selectedPartId, onSelectPart, onTransformChange, time, playing,
+    transforms, selectedPartId, transformTarget, onSelectPart, onTransformChange, time, playing,
     onPlayAll, onRewind, playingAll, canPlay,
 }) => {
     // 掴む対象を切り替える。アンカーは「回転の中心」なので、絵を動かすのと
@@ -271,7 +273,11 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         };
     }, [updateViewport]);
 
-    const selectedBounds = selectedPartId ? partBounds[selectedPartId] : undefined;
+    // 矩形は**いま編集している対象**のもの。タイムラインが髪だけを狙っているのに
+    // 体全体の枠が出ていると、掴んだものと数値が別物になる。
+    const selectedKey = selectedPartId
+        ? transformKey(selectedPartId, transformTarget[selectedPartId]) : null;
+    const selectedBounds = selectedKey ? partBounds[selectedKey] : undefined;
 
     /**
      * その位置にある一番手前のパーツ（の不透明な画素）を探す。
@@ -334,7 +340,9 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         // **軸ごとに判定する。** まとめて判定していたため、X にキーを打つと
         // 「Y にしか動かない」（Y だけ base が効き、X はキーに上書きされる）
         // という状態になっていた。
-        const tf = transforms[transformKey(partId)] ?? emptyTransform();
+        // 掴んだパーツの「いま編集している対象」に書く。タイムラインと同じ宛先。
+        const key = transformKey(partId, transformTarget[partId]);
+        const tf = transforms[key] ?? emptyTransform();
         const animated = (path: 'translate_x' | 'translate_y') =>
             (tf.tracks.find(t => t.path === path)?.keys.length ?? 0) > 1;
 
@@ -378,7 +386,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
             patch.base = nextBase;
             if (tracks !== tf.tracks) patch.tracks = tracks;
-            onTransformChange(transformKey(partId), patch);
+            onTransformChange(key, patch);
             setHint('移動 ' + label.join(' / '));
         };
         const up = () => {
@@ -388,7 +396,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
-    }, [partAt, playing, selectedPartId, onSelectPart, transforms, scale, onTransformChange]);
+    }, [partAt, playing, selectedPartId, onSelectPart, transforms, transformTarget, time, scale, onTransformChange]);
 
     /** 絵の上ならつかめることを見せる。 */
     const handleCanvasHover = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -532,12 +540,12 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                         {mode === 'composition' && selectedBounds && (
                             <TransformOverlay
                                 bounds={selectedBounds}
-                                transform={transforms[selectedBounds.partId] ?? emptyTransform()}
+                                transform={transforms[selectedKey!] ?? emptyTransform()}
                                 scale={scale}
                                 anchorMode={anchorMode}
                                 time={time}
                                 playing={playing}
-                                onChange={patch => onTransformChange(selectedBounds.partId, patch)}
+                                onChange={patch => onTransformChange(selectedKey!, patch)}
                                 onHint={setHint}
                             />
                         )}

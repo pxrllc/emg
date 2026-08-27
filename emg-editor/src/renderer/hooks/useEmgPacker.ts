@@ -440,6 +440,14 @@ export function useEmgPacker() {
     // 書き出しでは 1 つの sprite にまとめる（§10.5: loop は tracks、trigger は sequence）。
     const [partTransforms, setPartTransforms] = useState<Record<string, PartTransform>>({});
 
+    /**
+     * パーツごとに「いま編集している対象」（0.5.3 §7.4.1）。undefined ならパーツ全体。
+     *
+     * **キャンバスとタイムラインで共有します。** 別々に持つと、バウンディング
+     * ボックスを引いて動かしたものと、数値欄に出ている値が別物になる。
+     */
+    const [transformTarget, setTransformTarget] = useState<Record<string, string | undefined>>({});
+
     // ---- 再生 --------------------------------------------------------------
     // scope は「今どの範囲を動かしているか」。単体再生のときに他のパーツまで
     // 動くと、そのパーツの動きだけを見たいのに全体が揺れて確認にならない。
@@ -529,6 +537,7 @@ export function useEmgPacker() {
     const resetEditingState = () => {
         setPartAnimations({});
         setPartTransforms({});
+        setTransformTarget({});
         setPlayScope(null);
         setTransformTime(0);
         setPreviewFrame({});
@@ -1558,6 +1567,8 @@ export function useEmgPacker() {
         previewOff,
         partAnimations,
         partTransforms,
+        transformTarget,
+        setTransformTarget,
         transformTime,
         playScope,
         handleTransformChange,

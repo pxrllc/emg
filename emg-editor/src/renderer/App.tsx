@@ -18,7 +18,7 @@ function App() {
         psdRoot, atlasUrls, selectedLayer, layerMeta,
         compositionItems, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
-        partTransforms, transformTime, playScope,
+        partTransforms, transformTarget, setTransformTarget, transformTime, playScope,
         handleTransformChange, handlePlayToggle, handleTransformReset, setTransformTime,
         anyPlayable, partPlayable,
         mapping, setMapping,
@@ -188,6 +188,7 @@ function App() {
                         height={psdRoot?.height || 0}
                         transforms={scopedTransforms}
                         selectedPartId={selectedPartId}
+                        transformTarget={transformTarget}
                         onSelectPart={setSelectedPartId}
                         onTransformChange={handleTransformChange}
                         time={transformTime}
@@ -243,6 +244,9 @@ function App() {
                         onSeek={setTransformTime}
                         anyPlayable={anyPlayable}
                         partPlayable={partPlayable}
+                        transformTarget={transformTarget}
+                        onTransformTargetChange={(partId, frame) =>
+                            setTransformTarget(prev => ({ ...prev, [partId]: frame }))}
                         mappingControlled={mappingControlled}
                         onAnimationToggle={handleAnimationToggle}
                         onAnimationChange={handleAnimationChange}
