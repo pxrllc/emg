@@ -329,15 +329,21 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         if (!partId) return;   // 何も無いところ。選択は保つ。
         if (partId !== selectedPartId) onSelectPart(partId);
 
-        // 動く平行移動を持つパーツは、ここで動かすとキーと食い違う。
-        const tf = transforms[transformKey(partId)];
-        const animated = (tf?.tracks.find(t => t.path === 'translate_x' || t.path === 'translate_y')
-            ?.keys.length ?? 0) > 1;
-        if (animated) return;
+        // 動く平行移動は `base` ではなくキーが値を決めるので、掴んでも動かせない。
+        //
+        // **軸ごとに判定する。** まとめて判定していたため、X にキーを打つと
+        // 「Y にしか動かない」（Y だけ base が効き、X はキーに上書きされる）
+        // という状態になっていた。
+        const tf = transforms[transformKey(partId)] ?? emptyTransform();
+        const animated = (path: 'translate_x' | 'translate_y') =>
+            (tf.tracks.find(t => t.path === path)?.keys.length ?? 0) > 1;
 
         e.preventDefault();
         const startX = e.clientX, startY = e.clientY;
-        const base = { ...(tf ?? emptyTransform()).base };
+        const base = { ...tf.base };
+        // キーがある軸は、その時刻の値を起点にする（base は使われないため）。
+        const start = evaluateTransform(tf, time);
+        const keyTime = Math.round(Math.min(time, Math.max(0.05, tf.duration)) * 1000) / 1000;
         let moved = false;
 
         const move = (ev: PointerEvent) => {
@@ -346,13 +352,34 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             // 数 px の揺れで動かさない。クリックで選ぶだけのつもりが動くのを防ぐ。
             if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 3) return;
             moved = true;
-            const next = {
-                ...base,
-                translate_x: Math.round((base.translate_x + dx) * 100) / 100,
-                translate_y: Math.round((base.translate_y + dy) * 100) / 100,
-            };
-            onTransformChange(transformKey(partId), { base: next });
-            setHint(`移動 ${next.translate_x}, ${next.translate_y} px`);
+
+            const patch: Partial<PartTransform> = {};
+            const nextBase = { ...base };
+            let tracks = tf.tracks;
+            const label: string[] = [];
+
+            for (const [path, d] of [['translate_x', dx], ['translate_y', dy]] as const) {
+                const v = Math.round((start[path] + d) * 100) / 100;
+                if (animated(path)) {
+                    // **キーがある軸は、再生位置のキーを動かす。**
+                    // base を書いてもキーに上書きされるので、掴んでも動かないように
+                    // 見えていた（X にキーを打つと Y にしか動かない、という報告の原因）。
+                    const cur = tracks.find(t => t.path === path)!;
+                    const keys = cur.keys.filter(k => Math.abs(k.t - keyTime) > 0.001);
+                    keys.push({ t: keyTime, v });
+                    keys.sort((a, b) => a.t - b.t);
+                    tracks = [...tracks.filter(t => t.path !== path), { ...cur, keys }];
+                    label.push(`${path === 'translate_x' ? 'X' : 'Y'} ${v}（${keyTime}s のキー）`);
+                } else {
+                    nextBase[path] = v;
+                    label.push(`${path === 'translate_x' ? 'X' : 'Y'} ${v}`);
+                }
+            }
+
+            patch.base = nextBase;
+            if (tracks !== tf.tracks) patch.tracks = tracks;
+            onTransformChange(transformKey(partId), patch);
+            setHint('移動 ' + label.join(' / '));
         };
         const up = () => {
             window.removeEventListener('pointermove', move);
