@@ -720,9 +720,6 @@ button.delta-chip:hover { border-color: #2563eb; }
   pointer-events: none;
 }
 
-/* 枠の内側を掴んで動かすための当たり判定。見えない。 */
-.tf-grab { fill: rgba(37, 99, 235, 0.06); stroke: none; pointer-events: auto; }
-
 .tf-handle {
   fill: #1e1e1e;
   stroke: #2563eb;

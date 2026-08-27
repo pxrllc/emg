@@ -274,28 +274,31 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const selectedBounds = selectedPartId ? partBounds[selectedPartId] : undefined;
 
     /**
-     * キャンバスを押した位置にあるパーツを選ぶ。
+     * その位置にある一番手前のパーツ（の不透明な画素）を探す。
      *
-     * 前面から順に、**そのレイヤーの不透明な画素に当たったか**で判定する。
-     * 矩形で判定すると、髪の外接矩形が顔全体を覆っているために顔が一生掴めない。
+     * 外接矩形で判定すると、髪の矩形が顔全体を覆っているために顔が一生掴めません。
+     * **絵そのもの**を当たり判定にします。
      */
-    const pickPartAt = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-        if (playing) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const cx = (e.clientX - rect.left) / scale;
-        const cy = (e.clientY - rect.top) / scale;
+    const partAt = useCallback((clientX: number, clientY: number): string | null => {
+        const canvas = canvasRef.current;
+        if (!canvas) return null;
+        const rect = canvas.getBoundingClientRect();
+        const cx = (clientX - rect.left) / scale;
+        const cy = (clientY - rect.top) / scale;
 
         for (let i = compositionItems.length - 1; i >= 0; i--) {
             const item = compositionItems[i];
-            const tf = transforms[item.partId];
-            const b = partBounds[item.partId];
             let x = cx, y = cy;
-            if (tf && b) {
+            // 変形済みの絵を掴むので、逆行列で変形前の座標に戻してから当てる。
+            for (const key of [transformKey(item.partId), transformKey(item.partId, item.frameId)]) {
+                const tf = transforms[key];
+                const b = partBounds[key];
+                if (!tf || !b) continue;
                 const anchor = tf.anchor ?? {
                     x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2,
                 };
                 const p = transformMatrix(evaluateTransform(tf, time), anchor.x, anchor.y)
-                    .inverse().transformPoint(new DOMPoint(cx, cy));
+                    .inverse().transformPoint(new DOMPoint(x, y));
                 x = p.x; y = p.y;
             }
             const lx = Math.floor(x - item.left);
@@ -303,9 +306,68 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
             if (lx < 0 || ly < 0 || lx >= item.image.width || ly >= item.image.height) continue;
             const px = item.image.getContext('2d', { willReadFrequently: true })
                 ?.getImageData(lx, ly, 1, 1).data;
-            if (px && px[3] > 8) { onSelectPart(item.partId); return; }
+            if (px && px[3] > 8) return item.partId;
         }
-    }, [compositionItems, partBounds, transforms, time, scale, playing, onSelectPart]);
+        return null;
+    }, [compositionItems, partBounds, transforms, time, scale]);
+
+    /**
+     * キャンバスを押したとき。**選択と移動をここが引き受けます。**
+     *
+     * 使っているツール（変形 / 中心）に関わらず、
+     *   - 絵の上を押したらそのパーツを選ぶ
+     *   - そのまま引いたら動かす
+     * になります。バウンディングボックスのハンドルとアンカーだけがこれより優先され、
+     * そちらはオーバーレイ側が受け取ります。
+     *
+     * 以前は外接矩形の内側がまるごと「移動の当たり判定」になっていたため、
+     * 透明な余白を引いても絵が動き、重なったパーツは手前の矩形に隠れて選べませんでした。
+     */
+    const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (playing) return;
+        const partId = partAt(e.clientX, e.clientY);
+        if (!partId) return;   // 何も無いところ。選択は保つ。
+        if (partId !== selectedPartId) onSelectPart(partId);
+
+        // 動く平行移動を持つパーツは、ここで動かすとキーと食い違う。
+        const tf = transforms[transformKey(partId)];
+        const animated = (tf?.tracks.find(t => t.path === 'translate_x' || t.path === 'translate_y')
+            ?.keys.length ?? 0) > 1;
+        if (animated) return;
+
+        e.preventDefault();
+        const startX = e.clientX, startY = e.clientY;
+        const base = { ...(tf ?? emptyTransform()).base };
+        let moved = false;
+
+        const move = (ev: PointerEvent) => {
+            const dx = (ev.clientX - startX) / scale;
+            const dy = (ev.clientY - startY) / scale;
+            // 数 px の揺れで動かさない。クリックで選ぶだけのつもりが動くのを防ぐ。
+            if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 3) return;
+            moved = true;
+            const next = {
+                ...base,
+                translate_x: Math.round((base.translate_x + dx) * 100) / 100,
+                translate_y: Math.round((base.translate_y + dy) * 100) / 100,
+            };
+            onTransformChange(transformKey(partId), { base: next });
+            setHint(`移動 ${next.translate_x}, ${next.translate_y} px`);
+        };
+        const up = () => {
+            window.removeEventListener('pointermove', move);
+            window.removeEventListener('pointerup', up);
+            setHint(null);
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', up);
+    }, [partAt, playing, selectedPartId, onSelectPart, transforms, scale, onTransformChange]);
+
+    /** 絵の上ならつかめることを見せる。 */
+    const handleCanvasHover = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (playing) { e.currentTarget.style.cursor = 'default'; return; }
+        e.currentTarget.style.cursor = partAt(e.clientX, e.clientY) ? 'move' : 'default';
+    }, [partAt, playing]);
 
     const handleMinimapDrag = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!scrollContainerRef.current || imgSize.w === 0) return;
@@ -436,7 +498,8 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                     <div style={{ margin: 'auto', position: 'relative' }}>
                         <canvas
                             ref={canvasRef}
-                            onPointerDown={mode === 'composition' ? pickPartAt : undefined}
+                            onPointerDown={mode === 'composition' ? handleCanvasPointerDown : undefined}
+                            onPointerMove={mode === 'composition' ? handleCanvasHover : undefined}
                             style={{ display: 'block', maxWidth: 'none', background: 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHElEQVQYlWNgYGD4z8AARwyyD46kAqJhCg0QAABD1AIG7K6OBAAAAABJRU5ErkJggg==) repeat', ...displayStyle }}
                         />
                         {mode === 'composition' && selectedBounds && (

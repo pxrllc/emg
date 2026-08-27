@@ -224,19 +224,16 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
         <svg
             ref={rootRef}
             className="tf-overlay"
-            style={{ pointerEvents: frozen && !anchorMode ? 'none' : 'auto' }}
         >
             {/* 枠。掴めるのは中身なので、線自体はイベントを取らない */}
             <path d={path} className="tf-box" />
 
-            {!frozen && (
-                <path
-                    d={path}
-                    className="tf-grab"
-                    style={{ cursor: CURSORS.move }}
-                    onPointerDown={begin('move')}
-                />
-            )}
+            {/* **枠の内側は掴みません。** 以前はここに当たり判定の面を敷いていたが、
+                外接矩形は透明な余白も他パーツの上も覆うので、
+                  - 髪の矩形の下にある顔をクリックしても選べない
+                  - 何も描かれていない余白を引いても絵が動く
+                という状態だった。移動は「絵そのもの」を引く操作に移し
+                （PreviewPanel の当たり判定）、ここはハンドルとアンカーだけにする。 */}
 
             {/* 回転 */}
             {!frozen && !locked('rotation') && (
