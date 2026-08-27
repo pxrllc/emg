@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useEmgPacker } from './hooks/useEmgPacker';
 import { MainLayout } from './components/MainLayout';
 import { LayerTree } from './components/LayerTree';
@@ -35,7 +35,7 @@ function App() {
         handleAnimationRemoveFrame, handleAnimationDurationChange,
         handleGroupSelected, handleRenamePart,
         setSelectedPartId, setSelectedLayer, setLayerMeta,
-        exportProgress, toast, setToast,
+        exportProgress, history, toast, setToast,
     } = useEmgPacker();
 
     const visibility = useMemo(
@@ -91,6 +91,27 @@ function App() {
     };
 
     const unassigned = useMemo(() => countUnassigned(mapping), [mapping]);
+
+    /**
+     * Ctrl+Z / Ctrl+Shift+Z（Ctrl+Y も受ける）。
+     *
+     * 文字を打っている最中は横取りしない。パーツ名や表情名の入力欄で
+     * Ctrl+Z を押したとき、期待されるのは入力欄自身の取り消しなので。
+     */
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+            const el = e.target as HTMLElement | null;
+            if (el && (el.isContentEditable
+                || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return;
+
+            const k = e.key.toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); history.undo(); }
+            else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); history.redo(); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [history]);
 
     const openFilePicker = () => document.getElementById('psd-upload-input')?.click();
     const openAddPicker = () => document.getElementById('source-add-input')?.click();
@@ -234,6 +255,10 @@ function App() {
                 onLoadPsd={openFilePicker}
                 onAddSource={openAddPicker}
                 onAddSheet={openSheetPicker}
+                onUndo={history.undo}
+                onRedo={history.redo}
+                canUndo={history.canUndo}
+                canRedo={history.canRedo}
             />
             {sheetFile && (
                 <SpriteSheetDialog

@@ -1,5 +1,5 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Grid3x3 } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Grid3x3, Undo2, Redo2 } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
@@ -10,6 +10,11 @@ interface MainLayoutProps {
     onAddSheet?: () => void;
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
+    /** 取り消し / やり直し。書き出しに影響する操作だけが対象。 */
+    onUndo?: () => void;
+    onRedo?: () => void;
+    canUndo?: boolean;
+    canRedo?: boolean;
 }
 
 function ResizeHandle({ className = "" }: { className?: string }) {
@@ -20,7 +25,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile, onUndo, onRedo, canUndo, canRedo }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -35,6 +40,15 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                             {/* 読み込み済みなら、これはもう主役ではない。青は Export 側に譲る。 */}
                             {hasFile && (
                                 <div style={{ display: 'flex', gap: '4px' }}>
+                                    {/* 取り消しは編集全体に効く。素材の追加より前に置く。 */}
+                                    <button className="btn btn-sm btn-ghost" onClick={onUndo} disabled={!canUndo}
+                                        title="取り消す（Ctrl+Z）">
+                                        <Undo2 size={13} />
+                                    </button>
+                                    <button className="btn btn-sm btn-ghost" onClick={onRedo} disabled={!canRedo}
+                                        title="やり直す（Ctrl+Shift+Z）">
+                                        <Redo2 size={13} />
+                                    </button>
                                     {onAddSource && (
                                         <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像 / GIF を追加する（ドラッグ&ドロップでも可）">
                                             <FilePlus size={13} />

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
 import { SourceLoader, type LoadedSource } from '../services/SourceLoader';
 import { EmgLoader, isEmgFile } from '../services/EmgLoader';
@@ -10,6 +10,7 @@ import { PreviewItem } from '../components/PreviewPanel';
 import { defaultPartAnimation, emptyExpression, emptyMapping, emptyTransform, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform } from '../types';
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
+import { useHistory, type DocumentSnapshot } from './useHistory';
 import {
     applyTemplate, buildTemplate, isTemplate, TEMPLATE_EXT,
     type EditorTemplate, type TemplateReport,
@@ -328,8 +329,15 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
                     blendMode: layer.blendMode || 'normal'
                 };
             } else {
-                newMeta[layer.id].partId = currentPartId;
-                newMeta[layer.id].frameName = currentFrameName;
+                // **その場で書き換えない。** newMeta は浅いコピーなので、
+                // 中の LayerMeta は呼び出し前の状態と同じオブジェクト。
+                // 書き換えると、取り消し用に取ってあるスナップショットの中身まで
+                // 変わってしまう（パーツ名を戻せない、という形で表面化した）。
+                newMeta[layer.id] = {
+                    ...newMeta[layer.id],
+                    partId: currentPartId,
+                    frameName: currentFrameName,
+                };
             }
         }
 
@@ -361,7 +369,7 @@ const recalculateMeta = (root: Psd, currentMeta: Record<number, LayerMeta>): Rec
         const allHidden = metas.every(m => m.defaultVisible === false);
         if (allHidden) continue;   // パーツごとトグルにするのでレイヤーは全部残す
         for (const m of metas) {
-            if (m.defaultVisible === false) m.visible = false;
+            if (m.defaultVisible === false) newMeta[m.id] = { ...m, visible: false };
         }
     }
 
@@ -471,6 +479,30 @@ export function useEmgPacker() {
 
     const handleTransformReset = () => { setPlayScope(null); setTransformTime(0); };
 
+    // ---- 取り消し / やり直し ------------------------------------------------
+    // 対象は「書き出しに影響する状態」だけ。プレビューの差分選択や再生位置は
+    // 含めない（useHistory の DocumentSnapshot を参照）。
+    const snapshot = useMemo<DocumentSnapshot>(() => ({
+        psdRoot, layerMeta, partAnimations, partTransforms, mapping, presets, expressions,
+    }), [psdRoot, layerMeta, partAnimations, partTransforms, mapping, presets, expressions]);
+
+    const restoreSnapshot = useCallback((s: DocumentSnapshot) => {
+        // ツリーとメタは必ず対で戻す。片方だけだとメタが欠ける。
+        applyTree(s.psdRoot, s.layerMeta);
+        setPartAnimations(s.partAnimations);
+        setPartTransforms(s.partTransforms);
+        setMapping(s.mapping);
+        setPresets(s.presets);
+        setExpressions(s.expressions);
+        // 再生は止める。戻した先にキーが無いことがあり、
+        // 「動いているのに何も起きない」状態になる。
+        setPlayScope(null);
+    }, []);
+
+    // 読み込みが終わるたびに進める。これより前には戻れなくてよい。
+    const [loadToken, setLoadToken] = useState(0);
+    const history = useHistory(snapshot, restoreSnapshot, loadToken);
+
     /** 今の内容を捨てて最初からにする。読み込みの直前に必ず通す。 */
     const resetEditingState = () => {
         setPartAnimations({});
@@ -489,9 +521,15 @@ export function useEmgPacker() {
         try {
             resetEditingState();
             // `.emg` は「書き出したものの続き」なので、開く経路も同じ入口にする。
-            if (isEmgFile(file.name)) { await importEmg(file); return; }
-            const root = await FileLoader.load(file);
-            applyTree(root, recalculateMeta(root, {}));
+            if (isEmgFile(file.name)) {
+                await importEmg(file);
+            } else {
+                const root = await FileLoader.load(file);
+                applyTree(root, recalculateMeta(root, {}));
+            }
+            // 読み込み完了。**「開く」のときだけ**履歴を捨てる。
+            // 「素材を追加」は普通の編集なので、取り消せなければならない。
+            setLoadToken(n => n + 1);
         } catch (e) {
             // alert はレンダラ全体を止める（ブラウザでもう一度触るまで何も動かなくなる）。
             console.error('Failed to load file:', e);
@@ -714,20 +752,23 @@ export function useEmgPacker() {
      */
     useEffect(() => {
         if (parts.length === 0) return;
-        setMapping(prev => {
-            if (prev.blinkPartId || prev.lipSyncPartId) return prev;   // 触られている
+        if (mapping.blinkPartId || mapping.lipSyncPartId) return;   // 触られている
 
-            const match = (kws: string[], exclude?: string) => parts.find(p =>
-                p.type === 'switch' && p.partId !== exclude &&
-                kws.some(k => p.partId.toLowerCase().includes(k)));
+        const match = (kws: string[], exclude?: string) => parts.find(p =>
+            p.type === 'switch' && p.partId !== exclude &&
+            kws.some(k => p.partId.toLowerCase().includes(k)));
 
-            const blink = match(['eye', 'blink', '瞳', '目']);
-            const lip = match(['mouth', 'lip', '口'], blink?.partId);
-            if (!blink && !lip) return prev;
+        const blink = match(['eye', 'blink', '瞳', '目']);
+        const lip = match(['mouth', 'lip', '口'], blink?.partId);
+        if (!blink && !lip) return;
 
-            return { ...prev, blinkPartId: blink?.partId ?? '', lipSyncPartId: lip?.partId ?? '' };
-        });
-    }, [parts]);
+        // 利用者の操作ではないので履歴に残さない。読み込み直後に 1 手積まれると、
+        // 最初の取り消しが空振りしたように見える。
+        history.skipNext();
+        setMapping(prev => ({
+            ...prev, blinkPartId: blink?.partId ?? '', lipSyncPartId: lip?.partId ?? '',
+        }));
+    }, [parts, mapping, history]);
 
 
     /**
@@ -1522,6 +1563,7 @@ export function useEmgPacker() {
         setSelectedLayer,
         setLayerMeta,
         exportProgress,
+        history,
         toast,
         setToast,
     };
