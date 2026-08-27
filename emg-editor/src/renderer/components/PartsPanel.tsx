@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Pause, Pencil, Play, RotateCcw } from 'lucide-react';
 import type { PartInfo } from '../parts';
-import { emptyTransform, type PartAnimation, type PartTransform } from '../types';
+import { emptyTransform, transformKey, type PartAnimation, type PartTransform } from '../types';
 import { hasAnimation } from '../services/transform';
 import { AnimationEditor } from './AnimationEditor';
 import { TransformTimeline } from './TransformTimeline';
@@ -39,7 +39,8 @@ interface PartsPanelProps {
     transformTime: number;
     /** 今どの範囲を再生しているか。partID か 'all'、止まっていれば null。 */
     playScope: string | 'all' | null;
-    onTransformChange: (partId: string, patch: Partial<PartTransform>) => void;
+    /** 対象は partID か「partID + フレーム識別子」（0.5.3 §7.4.1）。 */
+    onTransformChange: (key: string, patch: Partial<PartTransform>) => void;
     onPlayToggle: (scope: string | 'all') => void;
     onTransformReset: () => void;
     onSeek: (t: number) => void;
@@ -67,7 +68,9 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     onTransformChange, onPlayToggle, onTransformReset, onSeek,
 }) => {
     // 「全体」ボタンは、動くトラックが 1 つも無ければ押せない。
-    const anyAnimated = parts.some(p => hasAnimation(partTransforms[p.partId]));
+    const anyAnimated = Object.values(partTransforms).some(hasAnimation);
+    // パーツごとに「今どの対象を編集しているか」。既定はパーツ全体。
+    const [tfTarget, setTfTarget] = useState<Record<string, string | undefined>>({});
     const [renaming, setRenaming] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
 
@@ -291,18 +294,26 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
 
                             {/* トランスフォーム（§7）。static / switch のどちらにも付く。
                                 差分の切り替えとは別の軸なので、常に出しておく。 */}
-                            {selectedPartId === part.partId && (
-                                <TransformTimeline
-                                    partId={part.partId}
-                                    transform={partTransforms[part.partId] ?? emptyTransform()}
-                                    time={transformTime}
-                                    playing={playScope === part.partId || playScope === 'all'}
-                                    onChange={patch => onTransformChange(part.partId, patch)}
-                                    onSeek={onSeek}
-                                    onPlayToggle={() => onPlayToggle(part.partId)}
-                                    onReset={onTransformReset}
-                                />
-                            )}
+                            {selectedPartId === part.partId && (() => {
+                                const target = tfTarget[part.partId];
+                                const key = transformKey(part.partId, target);
+                                return (
+                                    <TransformTimeline
+                                        partId={part.partId}
+                                        frames={part.frames.map(f => f.frameId)}
+                                        target={target}
+                                        onTargetChange={f => setTfTarget(prev => ({ ...prev, [part.partId]: f }))}
+                                        hasTransform={f => !!partTransforms[transformKey(part.partId, f)]}
+                                        transform={partTransforms[key] ?? emptyTransform()}
+                                        time={transformTime}
+                                        playing={playScope === key || playScope === 'all'}
+                                        onChange={patch => onTransformChange(key, patch)}
+                                        onSeek={onSeek}
+                                        onPlayToggle={() => onPlayToggle(key)}
+                                        onReset={onTransformReset}
+                                    />
+                                );
+                            })()}
                         </div>
                     </div>
                 );

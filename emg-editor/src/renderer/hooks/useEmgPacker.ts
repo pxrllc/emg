@@ -808,6 +808,7 @@ export function useEmgPacker() {
             items.push({
                 id: layer.id!,
                 partId: part.partId,
+                frameId: frameIdOf(layer, meta),
                 image: layer.canvas!,
                 left: layer.left || 0,
                 top: layer.top || 0,

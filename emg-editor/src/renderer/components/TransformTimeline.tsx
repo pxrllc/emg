@@ -7,6 +7,13 @@ import {
 
 interface TransformTimelineProps {
     partId: string;
+    /** このパーツのフレーム識別子（背面→前面）。対象の切り替えに使う。 */
+    frames: string[];
+    /** 今編集している対象。undefined ならパーツ全体。 */
+    target?: string;
+    onTargetChange: (frame?: string) => void;
+    /** 対象ごとに何か入っているか（選択欄に印を出す）。 */
+    hasTransform: (frame?: string) => boolean;
     transform: PartTransform;
     /** 今の再生時刻（秒）。停止中も位置を保つ。 */
     time: number;
@@ -41,7 +48,8 @@ const round = (v: number, n = 3) => Math.round(v * 10 ** n) / 10 ** n;
  * なので（types.ts の `PartTransform`）、この 2 つは同時には存在しません。
  */
 export const TransformTimeline: React.FC<TransformTimelineProps> = ({
-    partId, transform, time, playing, onChange, onSeek, onPlayToggle, onReset,
+    partId, frames, target, onTargetChange, hasTransform,
+    transform, time, playing, onChange, onSeek, onPlayToggle, onReset,
 }) => {
     const laneRef = useRef<HTMLDivElement>(null);
     const duration = Math.max(0.05, transform.duration);
@@ -105,6 +113,25 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
 
     return (
         <div className="tl" onClick={e => e.stopPropagation()}>
+            {/* 対象。0.5.3 §7.4.1 でフレームごとに別の動きを持てる。
+                体というまとまりを保ったまま髪だけ揺らす、といった用途のため。 */}
+            {frames.length > 1 && (
+                <div className="anim-row">
+                    <label className="tl-lbl">動かす対象</label>
+                    <select
+                        value={target ?? ''}
+                        onChange={e => onTargetChange(e.target.value || undefined)}
+                        style={{ ...selStyle, flex: 1, minWidth: 0 }}
+                        title="パーツ全体か、その中の 1 つか"
+                    >
+                        <option value="">パーツ全体（{partId}）{hasTransform() ? ' ●' : ''}</option>
+                        {frames.map(f => (
+                            <option key={f} value={f}>{f}{hasTransform(f) ? ' ●' : ''}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
             <div className="tl-head">
                 <button
                     className={`icon-btn ${playing ? 'on' : ''}`}
@@ -221,6 +248,10 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
             })}
 
             <div className="part-meta">
+                {target !== undefined && (
+                    <>「{target}」だけを動かします。回転・拡縮の中心もこの対象のものになります
+                    （<code>targetLayer</code>、0.5.3）。<br /></>
+                )}
                 キーが 1 つだけの行は「静止した値」として書き出します
                 （<code>loop: "once"</code> が最後のキーの値を保持します）。
                 移動だけは <code>basePosition</code> に畳み込むのでトラックになりません。

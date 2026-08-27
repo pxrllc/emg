@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { parseTransformKey } from './types';
 import { useEmgPacker } from './hooks/useEmgPacker';
 import { MainLayout } from './components/MainLayout';
 import { LayerTree } from './components/LayerTree';
@@ -70,11 +71,15 @@ function App() {
      * `duration <= 0` を 0 として扱うので、トラックは先頭の値に落ち着きます。
      */
     const scopedTransforms = useMemo(() => {
-        const scope = playScope ?? selectedPartId;
         if (playScope === 'all') return partTransforms;
         const out: typeof partTransforms = {};
-        for (const [partId, tf] of Object.entries(partTransforms)) {
-            out[partId] = partId === scope ? tf : { ...tf, duration: 0 };
+        for (const [key, tf] of Object.entries(partTransforms)) {
+            // 再生中はその対象だけ。止まっているときは、選択中パーツに属する対象
+            // （パーツ全体でも中のフレームでも）がスクラブに追従する。
+            const live = playScope
+                ? key === playScope
+                : parseTransformKey(key).partId === selectedPartId;
+            out[key] = live ? tf : { ...tf, duration: 0 };
         }
         return out;
     }, [partTransforms, playScope, selectedPartId]);

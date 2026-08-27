@@ -114,6 +114,10 @@ export interface PartTransform {
     /**
      * 回転・拡縮の中心（キャンバス座標）。
      * 未設定なら書き出し時に `basePosition` と同値になる（v0.4.0 §3 の既定）。
+     *
+     * **アンカーはレイヤーごとに独立しています**（0.5.3 §7.4）。この値は
+     * この対象に属するレイヤー全部へ同じものを書きます。房ごとに軸を変えたい
+     * 場合は、フレームごとに対象を分けます（{@link TransformTarget}）。
      */
     anchor?: { x: number; y: number };
     /** 空なら静止。 */
@@ -122,6 +126,43 @@ export interface PartTransform {
     duration: number;
     loop: 'once' | 'loop' | 'pingpong';
     phaseOffset: number;
+}
+
+/**
+ * トランスフォームの対象。
+ *
+ * 0.5.2 まではパーツ 1 つにつき 1 つでしたが、0.5.3 の `sprites[].targetLayer`
+ * により**パーツ内のフレームごと**に別の動きを持てます。体というまとまりを
+ * 保ったまま髪の房だけを揺らす、といった用途のための単位です。
+ *
+ * パーツを分割しても同じことはできますが、パーツは描画の単位であると同時に
+ * 状態と意味づけの単位でもある（`presets` / `toggles` / `mapping.json` が
+ * partID で働く）ため、動きの都合で割ると衣装の着せ替えまで壊れます。
+ *
+ * `frame` が `undefined` ならパーツ全体が対象（従来どおり）。
+ */
+export interface TransformTarget {
+    partId: string;
+    /** フレーム識別子（`frameName ?? textureID`）。不在ならパーツ全体。 */
+    frame?: string;
+}
+
+/**
+ * 対象を 1 本のキーにする（`partTransforms` の添字）。
+ *
+ * partID にもフレーム識別子にも空白は珍しくない（「Back hair」など）ので、
+ * 区切りには名前に現れない文字（US, U+001F）を使う。空白で区切ると分解を誤る。
+ */
+const KEY_SEP = '\u001F';
+
+export function transformKey(partId: string, frame?: string): string {
+    return frame === undefined ? partId : partId + KEY_SEP + frame;
+}
+
+/** {@link transformKey} の逆。 */
+export function parseTransformKey(key: string): TransformTarget {
+    const i = key.indexOf(KEY_SEP);
+    return i < 0 ? { partId: key } : { partId: key.slice(0, i), frame: key.slice(i + 1) };
 }
 
 export function emptyTransform(): PartTransform {

@@ -2,12 +2,14 @@ import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { Move3d, Crosshair } from 'lucide-react';
 import { evaluateTransform, transformMatrix } from '../services/transform';
 import { TransformOverlay, type PartBounds } from './TransformOverlay';
-import { emptyTransform, type PartTransform } from '../types';
+import { emptyTransform, transformKey, type PartTransform } from '../types';
 
 export interface PreviewItem {
     id: number;
-    /** どのパーツのレイヤーか。トランスフォームはパーツ単位で効く（v0.5.0 §7）。 */
+    /** どのパーツのレイヤーか。 */
     partId: string;
+    /** フレーム識別子。0.5.3 §7.4.1 のフレーム単位トランスフォームの宛先。 */
+    frameId: string;
     image: HTMLCanvasElement;
     left: number;
     top: number;
@@ -22,10 +24,11 @@ interface PreviewPanelProps {
     width: number;
     height: number;
 
+    /** 添字は partID か「partID + フレーム識別子」（0.5.3 §7.4.1）。 */
     transforms: Record<string, PartTransform>;
     selectedPartId: string | null;
     onSelectPart: (partId: string) => void;
-    onTransformChange: (partId: string, patch: Partial<PartTransform>) => void;
+    onTransformChange: (key: string, patch: Partial<PartTransform>) => void;
     /** 再生時刻（秒）。停止中は 0。 */
     time: number;
     playing: boolean;
@@ -104,21 +107,23 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
      */
     const partBounds = useMemo(() => {
         const out: Record<string, PartBounds> = {};
-        for (const item of compositionItems) {
+        const add = (key: string, partId: string, item: PreviewItem) => {
             const r = item.left + item.image.width;
             const b = item.top + item.image.height;
-            const cur = out[item.partId];
+            const cur = out[key];
             if (!cur) {
-                out[item.partId] = {
-                    partId: item.partId,
-                    left: item.left, top: item.top, right: r, bottom: b,
-                };
+                out[key] = { partId, left: item.left, top: item.top, right: r, bottom: b };
             } else {
                 cur.left = Math.min(cur.left, item.left);
                 cur.top = Math.min(cur.top, item.top);
                 cur.right = Math.max(cur.right, r);
                 cur.bottom = Math.max(cur.bottom, b);
             }
+        };
+        for (const item of compositionItems) {
+            // パーツ全体と、フレーム単位（0.5.3 §7.4.1）の両方を持つ。
+            add(transformKey(item.partId), item.partId, item);
+            add(transformKey(item.partId, item.frameId), item.partId, item);
         }
         return out;
     }, [compositionItems]);
@@ -196,21 +201,28 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                 // パーツ単位でトランスフォームを掛ける（v0.5.0 §7）。
                 // 適用順序は transform.ts の transformMatrix が持っている。
                 for (const item of compositionItems) {
-                    const tf = transforms[item.partId];
-                    const bounds = partBounds[item.partId];
                     ctx.save();
-                    ctx.globalAlpha = item.opacity;
-
-                    if (tf && bounds) {
+                    let alpha = item.opacity;
+                    // パーツ全体を狙うものと、このフレームを狙うもの（0.5.3 §7.4.1）を
+                    // 順に掛ける。両方あるときは重なる — validator が警告する状態だが、
+                    // 見えている絵と書き出しを一致させるためここでも同じ扱いにする。
+                    let m: DOMMatrix | null = null;
+                    for (const key of [transformKey(item.partId),
+                                       transformKey(item.partId, item.frameId)]) {
+                        const tf = transforms[key];
+                        const bounds = partBounds[key];
+                        if (!tf || !bounds) continue;
                         const v = evaluateTransform(tf, time);
                         const anchor = tf.anchor ?? {
                             x: (bounds.left + bounds.right) / 2,
                             y: (bounds.top + bounds.bottom) / 2,
                         };
-                        const m = transformMatrix(v, anchor.x, anchor.y);
-                        ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
-                        ctx.globalAlpha = item.opacity * v.opacity;
+                        const next = transformMatrix(v, anchor.x, anchor.y);
+                        m = m ? m.multiply(next) : next;
+                        alpha *= v.opacity;
                     }
+                    if (m) ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
+                    ctx.globalAlpha = alpha;
 
                     ctx.drawImage(item.image, item.left, item.top);
                     ctx.restore();

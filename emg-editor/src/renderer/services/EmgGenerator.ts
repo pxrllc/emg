@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { PackResult } from './TexturePacker';
-import { TRANSFORM_PATHS, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform, type TransformPath } from '../types';
+import { TRANSFORM_PATHS, transformKey, type AvatarExpression, type AvatarMapping, type AvatarPreset, type LayerMeta, type PartAnimation, type PartTransform, type TransformPath } from '../types';
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
 import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
@@ -57,9 +57,11 @@ export interface EmgPartLayer {
     basePosition_x: number; // Canvas x
     basePosition_y: number; // Canvas y
     /**
-     * v0.4.0 §3。回転・拡縮の中心。**キャンバス座標**。
-     * 不在時は `basePosition` と同値。パーツを回すときの中心は
-     * レイヤーごとではなくパーツ単位で決まるので、同じパーツの全レイヤーに同じ値を書く。
+     * v0.4.0 §3。回転・拡縮の中心。**キャンバス座標**。不在時は `basePosition` と同値。
+     *
+     * 0.5.3 §7.4 のとおり**アンカーはレイヤーごとに独立**しており、
+     * トランスフォームは各レイヤー自身のアンカーを軸に適用される。
+     * パーツ全体を 1 点で回したいときだけ、全レイヤーに同じ値を書く。
      */
     anchor_x?: number;
     anchor_y?: number;
@@ -106,6 +108,11 @@ export interface EmgSprite {
     sequence?: EmgSequence;
     /** 不在時、プレイヤーは自律再生してはならない（7 章）。 */
     trigger?: EmgTrigger;
+    /**
+     * 0.5.3 §7.4.1。トランスフォームの対象をパーツ内の 1 フレームに絞る。
+     * 値はフレーム識別子。不在ならパーツ全体。
+     */
+    targetLayer?: string;
     /** v0.5.0 §7。 */
     tracks?: EmgTrack[];
     /** `tracks` を持つ場合は必須（§7.2）。 */
@@ -152,30 +159,57 @@ export class EmgGenerator {
 
         for (const part of parts) {
             const anim = animations[part.partID];
-            const tf = transforms[part.partID];
+            const frames = new Set(part.layers.map(l => l.frameName ?? l.textureID));
+
+            // この対象に効くトランスフォーム。パーツ全体を指すものと、
+            // パーツ内のフレームを指すもの（0.5.3 §7.4.1）がありうる。
+            const tf = transforms[transformKey(part.partID)];
             const tracks = EmgGenerator.buildTracks(tf);
 
             // sequence は switch パーツにしか付けられない（v0.5.0 §7.1）。
             // tracks はどちらのパーツにも付けられる（体や髪を動かすためのもの）。
             const wantSequence = !!anim?.enabled && part.type === 'switch';
+
+            // フレームを狙うトランスフォームは、それぞれ独立した sprite になる。
+            for (const frame of frames) {
+                const ftf = transforms[transformKey(part.partID, frame)];
+                const ftracks = EmgGenerator.buildTracks(ftf);
+                if (ftracks.length === 0 || !ftf) continue;
+                // レイヤーが 1 枚しかないパーツで targetLayer を書くと、
+                // 効果は同じなのに宣言義務だけ増える（§7.4.1 規則 4）。
+                const narrow = frames.size > 1;
+                let sid = `${part.partID}_${frame}`;
+                let m = 1;
+                while (usedIds.has(sid)) sid = `${part.partID}_${frame}_${m++}`;
+                usedIds.add(sid);
+                sprites.push({
+                    spriteID: sid,
+                    targetPartID: part.partID,
+                    ...(narrow ? { targetLayer: frame } : {}),
+                    tracks: ftracks,
+                    duration: Math.max(0.05, ftf.duration),
+                    loop: EmgGenerator.hasMovingTrack(ftf) ? ftf.loop : 'once',
+                    ...(ftf.phaseOffset ? { phaseOffset: ftf.phaseOffset } : {}),
+                });
+            }
+
             if (!wantSequence && tracks.length === 0) continue;
 
             let sequence: EmgSequence | undefined;
             if (wantSequence && anim) {
-                const available = new Set(part.layers.map(l => l.frameName ?? l.textureID));
-                const frames = anim.frames.filter(f => available.has(f));
-                if (frames.length > 0) {
+                const seq = anim.frames.filter(f => frames.has(f));
+                if (seq.length > 0) {
                     sequence = { type: anim.sequenceType };
                     if (anim.timing === 'keys') {
                         // durations は「そのフレームの表示秒数」。keys は累積時刻なので積算する（6.1）。
                         let t = 0;
-                        sequence.keys = frames.map((frame, i) => {
+                        sequence.keys = seq.map((frame, i) => {
                             const key = { t: Math.round(t * 1000) / 1000, frame };
                             t += Math.max(0.001, anim.durations[i] ?? 0.1);
                             return key;
                         });
                     } else {
-                        sequence.frames = frames;
+                        sequence.frames = seq;
                     }
                 }
             }
@@ -401,9 +435,17 @@ export class EmgGenerator {
 
             // 静止した平行移動は basePosition に畳み込む（トラックにしない）。
             // 動く平行移動だけが tracks[] に出る（buildTracks を参照）。
-            const tf = transforms[partId];
-            const shiftX = tf && !EmgGenerator.isMoving(tf, 'translate_x') ? (tf.base.translate_x ?? 0) : 0;
-            const shiftY = tf && !EmgGenerator.isMoving(tf, 'translate_y') ? (tf.base.translate_y ?? 0) : 0;
+            //
+            // パーツ全体を狙うものと、このレイヤーのフレームを狙うもの（0.5.3）の
+            // **両方**を足す。フレーム側を見落とすと、房だけずらした位置が黙って消える。
+            const frameId = item.meta.frameName ?? textureId;
+            let shiftX = 0, shiftY = 0;
+            for (const tf of [transforms[transformKey(partId)],
+                              transforms[transformKey(partId, frameId)]]) {
+                if (!tf) continue;
+                if (!EmgGenerator.isMoving(tf, 'translate_x')) shiftX += tf.base.translate_x ?? 0;
+                if (!EmgGenerator.isMoving(tf, 'translate_y')) shiftY += tf.base.translate_y ?? 0;
+            }
 
             part.layers.push({
                 textureID: textureId,
@@ -481,31 +523,50 @@ export class EmgGenerator {
         // エディタは外接矩形の中心を回転の中心として見せている。書かずに出すと、
         // 画面で見た絵と消費側が描く絵が食い違う。
         for (const part of emgParts) {
-            const tf = transforms[part.partID];
-            if (!tf || part.layers.length === 0) continue;
-            const spins = TRANSFORM_PATHS.some(p =>
-                (p.path === 'rotation' || p.path === 'scale_x' || p.path === 'scale_y')
-                && (tf.tracks.some(t => t.path === p.path && t.keys.length > 0)
-                    || (tf.base[p.path] ?? p.def) !== p.def));
-            if (!spins) continue;
+            if (part.layers.length === 0) continue;
 
-            let anchor = tf.anchor;
-            if (!anchor) {
-                // 既定は外接矩形の中心。プレビューの既定と同じ規則にする。
-                const left = Math.min(...part.layers.map(l => l.basePosition_x));
-                const top = Math.min(...part.layers.map(l => l.basePosition_y));
-                const right = Math.max(...part.layers.map(l => l.basePosition_x + l.width));
-                const bottom = Math.max(...part.layers.map(l => l.basePosition_y + l.height));
-                anchor = { x: (left + right) / 2, y: (top + bottom) / 2 };
-            } else {
-                // 平行移動を basePosition に畳み込んだ分だけ、中心も動かす。
-                const shiftX = EmgGenerator.isMoving(tf, 'translate_x') ? 0 : (tf.base.translate_x ?? 0);
-                const shiftY = EmgGenerator.isMoving(tf, 'translate_y') ? 0 : (tf.base.translate_y ?? 0);
-                anchor = { x: anchor.x + shiftX, y: anchor.y + shiftY };
-            }
+            // 対象ごとに書く。0.5.3 §7.4 のとおりアンカーはレイヤーごとに独立なので、
+            // 「髪だけ根元を軸に回す」ときは髪のレイヤーにだけその軸が付く。
+            const groups = new Map<string, EmgPartLayer[]>();
             for (const l of part.layers) {
-                l.anchor_x = round3(anchor.x);
-                l.anchor_y = round3(anchor.y);
+                const fid = l.frameName ?? l.textureID;
+                if (!groups.has(fid)) groups.set(fid, []);
+                groups.get(fid)!.push(l);
+            }
+
+            const targets: { tf: PartTransform; layers: EmgPartLayer[] }[] = [];
+            const whole = transforms[transformKey(part.partID)];
+            if (whole) targets.push({ tf: whole, layers: part.layers });
+            for (const [fid, layers] of groups) {
+                const tf = transforms[transformKey(part.partID, fid)];
+                if (tf) targets.push({ tf, layers });
+            }
+
+            for (const { tf, layers } of targets) {
+                const spins = TRANSFORM_PATHS.some(p =>
+                    (p.path === 'rotation' || p.path === 'scale_x' || p.path === 'scale_y')
+                    && (tf.tracks.some(t => t.path === p.path && t.keys.length > 0)
+                        || (tf.base[p.path] ?? p.def) !== p.def));
+                if (!spins) continue;
+
+                let anchor = tf.anchor;
+                if (!anchor) {
+                    // 既定は**その対象の**外接矩形の中心。プレビューと同じ規則にする。
+                    const left = Math.min(...layers.map(l => l.basePosition_x));
+                    const top = Math.min(...layers.map(l => l.basePosition_y));
+                    const right = Math.max(...layers.map(l => l.basePosition_x + l.width));
+                    const bottom = Math.max(...layers.map(l => l.basePosition_y + l.height));
+                    anchor = { x: (left + right) / 2, y: (top + bottom) / 2 };
+                } else {
+                    // 平行移動を basePosition に畳み込んだ分だけ、中心も動かす。
+                    const shiftX = EmgGenerator.isMoving(tf, 'translate_x') ? 0 : (tf.base.translate_x ?? 0);
+                    const shiftY = EmgGenerator.isMoving(tf, 'translate_y') ? 0 : (tf.base.translate_y ?? 0);
+                    anchor = { x: anchor.x + shiftX, y: anchor.y + shiftY };
+                }
+                for (const l of layers) {
+                    l.anchor_x = round3(anchor.x);
+                    l.anchor_y = round3(anchor.y);
+                }
             }
         }
 
@@ -566,14 +627,21 @@ export class EmgGenerator {
         const hasSwitchNone = emgParts.some(p => p.type === 'switch' && p.defaultVisible === false);
 
         const builtPresets = EmgGenerator.buildPresets(emgParts, presets);
+        const builtSprites = EmgGenerator.buildSprites(emgParts, animations, transforms);
+
+        // 0.5.3 §7.4.1: targetLayer を使うファイルは宣言が必須。
+        // 未対応の実装は無視してパーツ全体を動かすため、髪だけ揺れるはずの絵で
+        // 体ごと揺れる（= 誤った絵）。
+        const hasLayerTransform = builtSprites.some(s => s.targetLayer !== undefined);
 
         const requiredExtensions = [
             ...(hasMultiLayerFrame ? ['EMG_frame_name'] : []),
             ...(hasSwitchNone ? ['EMG_switch_none'] : []),
+            ...(hasLayerTransform ? ['EMG_layer_transform'] : []),
         ];
 
         return {
-            version: '0.5.2',
+            version: '0.5.3',
             ...(requiredExtensions.length > 0 ? { requiredExtensions } : {}),
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
@@ -583,7 +651,7 @@ export class EmgGenerator {
                 height: a.height
             })),
             parts: emgParts,
-            sprites: EmgGenerator.buildSprites(emgParts, animations, transforms),
+            sprites: builtSprites,
             ...(builtPresets.length > 0 ? { presets: builtPresets } : {})
         };
     }

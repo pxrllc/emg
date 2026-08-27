@@ -3,7 +3,7 @@ import type { Layer } from 'ag-psd';
 import type { EmgData, EmgPart, EmgPartLayer, EmgSprite } from './EmgGenerator';
 import type { EmgSemanticMapping } from './MappingGenerator';
 import {
-    emptyExpression, emptyMapping, emptyTransform, TRANSFORM_PATHS,
+    emptyExpression, emptyMapping, emptyTransform, transformKey, TRANSFORM_PATHS,
     type AvatarExpression, type AvatarMapping, type AvatarPreset,
     type LayerMeta, type PartAnimation, type PartTransform, type TransformPath,
 } from '../types';
@@ -23,7 +23,7 @@ import type { LoadedSource } from './SourceLoader';
  */
 
 /** このエディタが理解する `requiredExtensions` の識別子（emg-extensions-registry.md）。 */
-const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
+const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none', 'EMG_layer_transform']);
 
 export interface LoadedEmg {
     source: LoadedSource;
@@ -119,7 +119,14 @@ export class EmgLoader {
             }
             if (sprite.sequence) animations[part.partID] = toAnimation(sprite, part);
             if (sprite.tracks?.length) {
-                transforms[part.partID] = toTransform(sprite, part, warnings);
+                // 0.5.3 §7.4.1: targetLayer があれば、そのフレームだけが対象。
+                const frames = new Set(part.layers.map(frameIdOfLayer));
+                if (sprite.targetLayer !== undefined && !frames.has(sprite.targetLayer)) {
+                    warnings.push(`スプライト "${sprite.spriteID}" の targetLayer "${sprite.targetLayer}" が "${part.partID}" にありません`);
+                    continue;
+                }
+                transforms[transformKey(part.partID, sprite.targetLayer)] =
+                    toTransform(sprite, part, warnings);
             }
         }
 
@@ -143,18 +150,39 @@ export class EmgLoader {
             }
         }
 
-        // アンカーはレイヤー側のフィールドだが、編集はパーツ単位。
-        // パーツ内で値が食い違っていたら先頭を採り、その旨を伝える。
+        // アンカーはレイヤーごとに独立している（0.5.3 §7.4）。
+        // 編集はトランスフォームの対象ごとなので、対象の単位で読み戻す。
         for (const part of data.parts) {
-            const withAnchor = part.layers.filter(l => l.anchor_x !== undefined && l.anchor_y !== undefined);
-            if (withAnchor.length === 0) continue;
-            const first = withAnchor[0];
-            if (withAnchor.some(l => l.anchor_x !== first.anchor_x || l.anchor_y !== first.anchor_y)) {
-                warnings.push(`"${part.partID}" のレイヤーで anchor が揃っていないため、先頭の値を使いました`);
+            // その対象に属するレイヤーだけを見る。
+            const readAnchor = (layers: EmgPartLayer[], key: string, label: string) => {
+                const withAnchor = layers.filter(l => l.anchor_x !== undefined && l.anchor_y !== undefined);
+                if (withAnchor.length === 0) return;
+                const first = withAnchor[0];
+                if (withAnchor.some(l => l.anchor_x !== first.anchor_x || l.anchor_y !== first.anchor_y)) {
+                    warnings.push(`${label} のレイヤーで anchor が揃っていないため、先頭の値を使いました`);
+                }
+                const tf = transforms[key] ?? emptyTransform();
+                tf.anchor = { x: first.anchor_x!, y: first.anchor_y! };
+                transforms[key] = tf;
+            };
+
+            // フレームを狙うトランスフォームがあるなら、そのフレームのレイヤーから読む。
+            const byFrame = new Map<string, EmgPartLayer[]>();
+            for (const l of part.layers) {
+                const fid = frameIdOfLayer(l);
+                if (!byFrame.has(fid)) byFrame.set(fid, []);
+                byFrame.get(fid)!.push(l);
             }
-            const tf = transforms[part.partID] ?? emptyTransform();
-            tf.anchor = { x: first.anchor_x!, y: first.anchor_y! };
-            transforms[part.partID] = tf;
+            const claimed = new Set<EmgPartLayer>();
+            for (const [fid, layers] of byFrame) {
+                const key = transformKey(part.partID, fid);
+                if (!(key in transforms)) continue;
+                readAnchor(layers, key, `"${part.partID}" の "${fid}"`);
+                layers.forEach(l => claimed.add(l));
+            }
+            // 残りはパーツ全体の対象として読む。
+            const rest = part.layers.filter(l => !claimed.has(l));
+            if (rest.length > 0) readAnchor(rest, transformKey(part.partID), `"${part.partID}"`);
         }
 
         return { source, animations, transforms, presets, mapping, expressions, warnings };
