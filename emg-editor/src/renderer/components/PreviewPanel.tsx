@@ -546,7 +546,8 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                             ref={canvasRef}
                             onPointerDown={mode === 'composition' ? handleCanvasPointerDown : undefined}
                             onPointerMove={mode === 'composition' ? handleCanvasHover : undefined}
-                            style={{ display: 'block', maxWidth: 'none', background: 'url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAHElEQVQYlWNgYGD4z8AARwyyD46kAqJhCg0QAABD1AIG7K6OBAAAAABJRU5ErkJggg==) repeat', ...displayStyle }}
+                            className="preview-canvas"
+                            style={displayStyle}
                         />
                         {mode === 'composition' && selectedBounds && (
                             <TransformOverlay

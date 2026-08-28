@@ -3,6 +3,7 @@ import { Grid3x3, X } from 'lucide-react';
 import {
     DEFAULT_GRID, resolveGrid, cellRect, type SheetGrid,
 } from '../services/SpriteSheetLoader';
+import { NumberInput } from './NumberInput';
 
 interface SpriteSheetDialogProps {
     file: File;
@@ -128,37 +129,37 @@ export const SpriteSheetDialog: React.FC<SpriteSheetDialogProps> = ({ file, onCa
                             {grid.mode === 'count' ? (
                                 <div className="anim-row">
                                     <label>列 × 行</label>
-                                    <input type="number" min={1} value={grid.columns}
-                                        onChange={e => set({ columns: parseInt(e.target.value) || 1 })} style={numStyle} />
+                                    <NumberInput min={1} value={grid.columns}
+                                        onChange={v => set({ columns: v })} style={numStyle} />
                                     <span className="part-meta">×</span>
-                                    <input type="number" min={1} value={grid.rows}
-                                        onChange={e => set({ rows: parseInt(e.target.value) || 1 })} style={numStyle} />
+                                    <NumberInput min={1} value={grid.rows}
+                                        onChange={v => set({ rows: v })} style={numStyle} />
                                 </div>
                             ) : (
                                 <div className="anim-row">
                                     <label>幅 × 高さ</label>
-                                    <input type="number" min={1} value={grid.cellWidth}
-                                        onChange={e => set({ cellWidth: parseInt(e.target.value) || 1 })} style={numStyle} />
+                                    <NumberInput min={1} value={grid.cellWidth}
+                                        onChange={v => set({ cellWidth: v })} style={numStyle} />
                                     <span className="part-meta">×</span>
-                                    <input type="number" min={1} value={grid.cellHeight}
-                                        onChange={e => set({ cellHeight: parseInt(e.target.value) || 1 })} style={numStyle} />
+                                    <NumberInput min={1} value={grid.cellHeight}
+                                        onChange={v => set({ cellHeight: v })} style={numStyle} />
                                     <span className="part-meta">px</span>
                                 </div>
                             )}
 
                             <div className="anim-row">
                                 <label>余白 / 間隔</label>
-                                <input type="number" min={0} value={grid.margin}
-                                    onChange={e => set({ margin: parseInt(e.target.value) || 0 })} style={numStyle} />
-                                <input type="number" min={0} value={grid.spacing}
-                                    onChange={e => set({ spacing: parseInt(e.target.value) || 0 })} style={numStyle} />
+                                <NumberInput min={0} value={grid.margin}
+                                        onChange={v => set({ margin: v })} style={numStyle} />
+                                <NumberInput min={0} value={grid.spacing}
+                                        onChange={v => set({ spacing: v })} style={numStyle} />
                                 <span className="part-meta">px</span>
                             </div>
 
                             <div className="anim-row">
                                 <label>速さ</label>
-                                <input type="number" min={1} max={120} value={fps}
-                                    onChange={e => setFps(parseInt(e.target.value) || 12)} style={numStyle} />
+                                <NumberInput min={1} max={120} value={fps}
+                                    onChange={setFps} style={numStyle} />
                                 <span className="part-meta">fps（シートに時間の情報が無いため指定が要ります）</span>
                             </div>
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useRef } from 'react';
 import { Diamond, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { evaluateTransform, foldTime, hasAnimation } from '../services/transform';
+import { NumberInput } from './NumberInput';
 import {
     TRANSFORM_PATHS, type PartTransform, type TransformPath, type TransformTrack,
 } from '../types';
@@ -156,9 +157,9 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
                 )}
 
                 <label className="tl-lbl">尺</label>
-                <input
-                    type="number" min={0.05} step={0.1} value={transform.duration}
-                    onChange={e => onChange({ duration: Math.max(0.05, parseFloat(e.target.value) || 0.05) })}
+                <NumberInput
+                    min={0.05} step={0.1} decimals={2} value={transform.duration}
+                    onChange={v => onChange({ duration: v })}
                     style={numStyle}
                 />
                 <select
@@ -191,11 +192,11 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
                     <div className={`tl-row ${moving ? 'moving' : ''}`} key={p.path}>
                         <span className="tl-name">{p.label}</span>
 
-                        <input
-                            type="number"
+                        <NumberInput
                             step={p.step}
+                            decimals={3}
                             value={round(values[p.path])}
-                            onChange={e => setValue(p.path, parseFloat(e.target.value) || 0)}
+                            onChange={v => setValue(p.path, v)}
                             style={numStyle}
                             title={moving ? '再生位置にキーを打ちます' : '静止時の値'}
                         />

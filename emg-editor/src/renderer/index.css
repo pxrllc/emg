@@ -701,6 +701,29 @@ button.delta-chip:hover { border-color: #2563eb; }
   overflow: auto;
 }
 
+/* ---- プレビューのキャンバス ------------------------------------------------
+   **境界が見えることが重要。** 以前は暗い市松模様だけで、パネルの地色と
+   ほとんど同じだったため、どこまでがキャンバスか分からなかった。
+   新規作成で空のキャンバスを作ったときは、何も無いのと区別がつかなかった。 */
+.preview-scroll-container {
+  /* キャンバスの外。中より暗くして「範囲外」だと分かるようにする。 */
+  background: #141416;
+}
+
+.preview-canvas {
+  display: block;
+  max-width: none;
+  /* 市松模様は透明部分を見分けるため。地色より明るくして境界を出す。 */
+  background-color: #3a3a3f;
+  background-image:
+    linear-gradient(45deg, #2e2e33 25%, transparent 25%, transparent 75%, #2e2e33 75%),
+    linear-gradient(45deg, #2e2e33 25%, transparent 25%, transparent 75%, #2e2e33 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+  border: 1px solid #6b6b72;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
 /* ---- バウンディングボックス（v0.5.0 §7）---------------------------------- */
 /* キャンバスにぴったり重ねる。SVG 自体はイベントを通し、掴めるのは中の図形だけ。 */
 .tf-overlay {

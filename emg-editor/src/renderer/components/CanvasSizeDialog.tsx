@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Frame, X } from 'lucide-react';
+import { NumberInput } from './NumberInput';
 
 /** 既存の中身を、広くなった／狭くなったキャンバスのどこに置くか。 */
 export type CanvasAlign = 'topLeft' | 'center';
@@ -70,11 +71,9 @@ export const CanvasSizeDialog: React.FC<CanvasSizeDialogProps> = ({
                 <div className="modal-body">
                     <div className="anim-row">
                         <label>幅 × 高さ</label>
-                        <input type="number" min={1} max={MAX} value={w}
-                            onChange={e => setW(Math.max(1, parseInt(e.target.value) || 1))} style={numStyle} />
+                        <NumberInput min={1} max={MAX} value={w} onChange={setW} style={numStyle} />
                         <span className="part-meta">×</span>
-                        <input type="number" min={1} max={MAX} value={h}
-                            onChange={e => setH(Math.max(1, parseInt(e.target.value) || 1))} style={numStyle} />
+                        <NumberInput min={1} max={MAX} value={h} onChange={setH} style={numStyle} />
                         <span className="part-meta">px</span>
                     </div>
 

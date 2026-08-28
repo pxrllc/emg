@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, X } from 'lucide-react';
 import type { PartAnimation } from '../types';
 import type { PartInfo } from '../parts';
+import { NumberInput } from './NumberInput';
 
 interface AnimationEditorProps {
     part: PartInfo;
@@ -62,12 +63,12 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
                                 <span className="seq-index">{i + 1}</span>
                                 {frameId}
                                 {animation.timing === 'keys' && (
-                                    <input
-                                        type="number"
+                                    <NumberInput
                                         min={0.01}
                                         step={0.01}
+                                        decimals={3}
                                         value={animation.durations[i] ?? 0.1}
-                                        onChange={e => onDurationChange(part.partId, i, parseFloat(e.target.value) || 0.1)}
+                                        onChange={v => onDurationChange(part.partId, i, v)}
                                         style={{ ...numStyle, width: '46px', marginLeft: '4px' }}
                                         title="このフレームの表示秒数"
                                     />
@@ -113,12 +114,11 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
                         </select>
                         {animation.timing === 'fps' && (
                             <>
-                                <input
-                                    type="number"
+                                <NumberInput
                                     min={1}
                                     max={120}
                                     value={animation.fps}
-                                    onChange={e => onChange(part.partId, { fps: parseInt(e.target.value) || 12 })}
+                                    onChange={v => onChange(part.partId, { fps: v })}
                                     style={numStyle}
                                 />
                                 <span className="part-meta">fps</span>
@@ -152,17 +152,17 @@ export const AnimationEditor: React.FC<AnimationEditorProps> = ({
                         </select>
                         {animation.triggerType === 'random_interval' && !mappingControlled && (
                             <>
-                                <input
-                                    type="number" min={0} step={0.5}
+                                <NumberInput
+                                    min={0} step={0.5} decimals={2}
                                     value={animation.intervalMin}
-                                    onChange={e => onChange(part.partId, { intervalMin: parseFloat(e.target.value) || 0 })}
+                                    onChange={v => onChange(part.partId, { intervalMin: v })}
                                     style={numStyle}
                                 />
                                 <span className="part-meta">〜</span>
-                                <input
-                                    type="number" min={0} step={0.5}
+                                <NumberInput
+                                    min={0} step={0.5} decimals={2}
                                     value={animation.intervalMax}
-                                    onChange={e => onChange(part.partId, { intervalMax: parseFloat(e.target.value) || 0 })}
+                                    onChange={v => onChange(part.partId, { intervalMax: v })}
                                     style={numStyle}
                                 />
                                 <span className="part-meta">秒</span>
