@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Layer, Psd } from 'ag-psd';
-import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FilePlus, FolderPlus, Grid3x3, Group } from 'lucide-react';
+import { ChevronRight, ChevronDown, Eye, EyeOff, Folder, File, FilePlus, FolderPlus, Frame, Grid3x3, Group } from 'lucide-react';
 import type { LayerMeta } from '../types';
 
 // Module-level variable for reliable drag tracking in Electron
@@ -19,6 +19,7 @@ interface LayerTreeProps {
     onAddSource?: () => void;
     onAddSheet?: () => void;
     onGroupSelected?: () => void;
+    onNewProject?: () => void;
 }
 
 export const LayerTree: React.FC<LayerTreeProps> = ({
@@ -33,7 +34,8 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
     onLoadPsd,
     onAddSource,
     onAddSheet,
-    onGroupSelected
+    onGroupSelected,
+    onNewProject,
 }) => {
     if (!psd || !psd.children) return (
         <div className="empty-state">
@@ -44,6 +46,9 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
             </div>
             <button className="btn btn-primary" onClick={onLoadPsd} style={{ width: '100%', maxWidth: '220px' }}>
                 <FolderPlus size={16} /> ファイルを開く
+            </button>
+            <button className="btn" onClick={() => onNewProject?.()} style={{ width: '100%', maxWidth: '220px' }}>
+                <Frame size={14} /> 新規作成（空のキャンバス）
             </button>
             <button className="btn" onClick={() => onAddSheet?.()} style={{ width: '100%', maxWidth: '220px' }}>
                 <Grid3x3 size={14} /> スプライトを追加

@@ -39,12 +39,14 @@ interface PreviewPanelProps {
     onRewind: () => void;
     playingAll: boolean;
     canPlay: boolean;
+    /** キャンバス寸法の変更を開く。 */
+    onResizeCanvas: () => void;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     atlasUrls, compositionItems, width, height,
     transforms, selectedPartId, transformTarget, onSelectPart, onTransformChange, time, playing,
-    onPlayAll, onRewind, playingAll, canPlay,
+    onPlayAll, onRewind, playingAll, canPlay, onResizeCanvas,
 }) => {
     // 掴む対象を切り替える。アンカーは「回転の中心」なので、絵を動かすのと
     // 同じ操作にすると必ず取り違える。
@@ -499,6 +501,15 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                 )}
                 {hint && <span className="tf-hint">{hint}</span>}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {mode === 'composition' && width > 0 && (
+                        <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={onResizeCanvas}
+                            title="キャンバスサイズを変更する（baseCanvasWidth / Height）"
+                        >
+                            {width} × {height}
+                        </button>
+                    )}
                     <button
                         className="btn btn-sm"
                         onClick={() => setScaleManually(s => Math.max(0.05, +(s - 0.1).toFixed(2)))}

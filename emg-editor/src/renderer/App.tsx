@@ -12,6 +12,7 @@ import { SourceLoader } from './services/SourceLoader';
 import { SpriteSheetLoader } from './services/SpriteSheetLoader';
 import { SpriteSheetDialog } from './components/SpriteSheetDialog';
 import { TemplateReportDialog } from './components/TemplateReportDialog';
+import { CanvasSizeDialog } from './components/CanvasSizeDialog';
 
 function App() {
     const {
@@ -26,7 +27,7 @@ function App() {
         handleExpressionRename, handleExpressionDelete,
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
-        handlePsdLoad, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleNewProject, handleCanvasResize, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
@@ -87,6 +88,25 @@ function App() {
 
     // スプライトシートは格子の指定が要るので、読み込んだ後に確認画面を挟む。
     const [sheetFile, setSheetFile] = useState<File | null>(null);
+
+    // 新規作成 / キャンバスサイズ変更。同じ画面を使い分ける。
+    const [sizeDialog, setSizeDialog] = useState<'new' | 'resize' | null>(null);
+
+    /**
+     * 今の中身が占めている範囲（キャンバス座標）。
+     * 寸法を縮めたときに何がはみ出すかを、決める前に見せるために要る。
+     */
+    const contentBounds = useMemo(() => {
+        if (compositionItems.length === 0) return null;
+        let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+        for (const it of compositionItems) {
+            left = Math.min(left, it.left);
+            top = Math.min(top, it.top);
+            right = Math.max(right, it.left + it.image.width);
+            bottom = Math.max(bottom, it.top + it.image.height);
+        }
+        return { left, top, right, bottom };
+    }, [compositionItems]);
 
     /**
      * 複数ファイルは 1 つずつ順に取り込む。まとめて並行に走らせると、
@@ -178,6 +198,7 @@ function App() {
                         onAddSource={openAddPicker}
                         onAddSheet={openSheetPicker}
                         onGroupSelected={handleGroupSelected}
+                        onNewProject={() => setSizeDialog('new')}
                     />
                 }
                 centerPanel={
@@ -197,6 +218,7 @@ function App() {
                         onRewind={handleTransformReset}
                         playingAll={playScope === 'all'}
                         canPlay={anyPlayable}
+                        onResizeCanvas={() => setSizeDialog('resize')}
                     />
                 }
                 rightPanel={
@@ -271,6 +293,7 @@ function App() {
                 onLoadPsd={openFilePicker}
                 onAddSource={openAddPicker}
                 onAddSheet={openSheetPicker}
+                onNewProject={() => setSizeDialog('new')}
                 onUndo={history.undo}
                 onRedo={history.redo}
                 canUndo={history.canUndo}
@@ -284,6 +307,19 @@ function App() {
                         const name = sheetFile.name.replace(/\.[^.]+$/, '') || 'sheet';
                         handleSheetImport(name, SpriteSheetLoader.slice(source, grid, fps, name));
                         setSheetFile(null);
+                    }}
+                />
+            )}
+            {sizeDialog && (
+                <CanvasSizeDialog
+                    current={sizeDialog === 'resize' && psdRoot
+                        ? { width: psdRoot.width ?? 0, height: psdRoot.height ?? 0 } : undefined}
+                    contentBounds={sizeDialog === 'resize' ? contentBounds : null}
+                    onCancel={() => setSizeDialog(null)}
+                    onApply={(w, h, align) => {
+                        if (sizeDialog === 'new') handleNewProject(w, h);
+                        else handleCanvasResize(w, h, align);
+                        setSizeDialog(null);
                     }}
                 />
             )}

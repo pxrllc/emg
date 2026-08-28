@@ -572,6 +572,65 @@ export function useEmgPacker() {
     };
 
     /**
+     * 空のキャンバスから始める。
+     *
+     * これが無いと、何かを読み込むまでキャンバスの寸法が決まらず、
+     * 最初に入れた素材の大きさがそのまま作品の大きさになっていた。
+     * 先に器を決めてから素材を置ける方が、配置を考えて作る場合には自然。
+     */
+    const handleNewProject = (width: number, height: number) => {
+        resetEditingState();
+        applyTree({ width, height, children: [] } as unknown as Psd, {});
+        setLoadToken(n => n + 1);
+        setToast({ title: '新規作成', body: `${width} × ${height} px の空のキャンバス` });
+    };
+
+    /**
+     * キャンバスの寸法を変える（`baseCanvasWidth` / `baseCanvasHeight`）。
+     *
+     * `align === 'topLeft'` は座標を一切触りません。書き出した `basePosition` が
+     * そのままなので、既に配布したファイルと位置がずれません。
+     * `align === 'center'` は増減分の半分だけ全レイヤーを動かします。
+     */
+    const handleCanvasResize = (width: number, height: number, align: 'topLeft' | 'center') => {
+        const root = psdRootRef.current;
+        if (!root) return;
+
+        let children = root.children ?? [];
+        if (align === 'center') {
+            const dx = Math.round((width - (root.width ?? 0)) / 2);
+            const dy = Math.round((height - (root.height ?? 0)) / 2);
+            if (dx !== 0 || dy !== 0) {
+                // レイヤーは不変に扱う（取り消しのスナップショットが参照を共有しているため、
+                // その場で書き換えると過去の状態まで動いてしまう）。
+                const shift = (ls: PsdLayer[]): PsdLayer[] => ls.map(l => ({
+                    ...l,
+                    left: typeof l.left === 'number' ? l.left + dx : l.left,
+                    top: typeof l.top === 'number' ? l.top + dy : l.top,
+                    right: typeof l.right === 'number' ? l.right + dx : l.right,
+                    bottom: typeof l.bottom === 'number' ? l.bottom + dy : l.bottom,
+                    children: l.children ? shift(l.children as PsdLayer[]) : undefined,
+                }));
+                children = shift(children as PsdLayer[]);
+
+                // アンカーはキャンバス座標なので一緒に動かす（v0.4.0 §3）。
+                // 置き去りにすると、回転の中心だけが元の場所に残る。
+                setPartTransforms(prev => {
+                    const next: Record<string, PartTransform> = {};
+                    for (const [k, t] of Object.entries(prev)) {
+                        next[k] = t.anchor
+                            ? { ...t, anchor: { x: t.anchor.x + dx, y: t.anchor.y + dy } }
+                            : t;
+                    }
+                    return next;
+                });
+            }
+        }
+
+        applyTree({ ...root, width, height, children }, layerMetaRef.current);
+    };
+
+    /**
      * 2 つ目以降のソースを取り込んで、いま開いている木に合流させる。
      *
      * 合成は「1 本の木にまとめる」形にする。走査結果がこれまでどおり単一の
@@ -1592,6 +1651,8 @@ export function useEmgPacker() {
         handlePresetRename,
         handlePresetDelete,
         handlePsdLoad,
+        handleNewProject,
+        handleCanvasResize,
         handleSourceAdd,
         handleSheetImport,
         handlePsdUpdate,

@@ -1,5 +1,5 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Grid3x3, Undo2, Redo2 } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Frame, Grid3x3, Undo2, Redo2 } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
@@ -11,6 +11,7 @@ interface MainLayoutProps {
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
     /** 取り消し / やり直し。書き出しに影響する操作だけが対象。 */
+    onNewProject?: () => void;
     onUndo?: () => void;
     onRedo?: () => void;
     canUndo?: boolean;
@@ -25,7 +26,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile, onUndo, onRedo, canUndo, canRedo }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile, onNewProject, onUndo, onRedo, canUndo, canRedo }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -65,6 +66,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                         <button className="btn btn-sm btn-ghost" onClick={onLoadPsd} title="別のファイルを開き直す（今の内容は破棄）">
                                             <FileUp size={13} />
                                             開く
+                                        </button>
+                                    )}
+                                    {onNewProject && (
+                                        <button className="btn btn-sm btn-ghost" onClick={onNewProject} title="空のキャンバスから始める（今の内容は破棄）">
+                                            <Frame size={13} />
+                                            新規
                                         </button>
                                     )}
                                 </div>
