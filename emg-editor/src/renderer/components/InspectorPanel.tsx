@@ -217,7 +217,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                 {activeTab === 'json' && (
                     props.emgData
                         ? <JsonViewer data={props.emgData} highlightId={props.layerId?.toString()} />
-                        : <div className="empty-state">PSD を読み込むと data.json のプレビューが出ます。</div>
+                        : <div className="empty-state">素材を追加すると data.json のプレビューが出ます。</div>
                 )}
             </div>
 

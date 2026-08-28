@@ -78,7 +78,7 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     if (parts.length === 0) {
         return (
             <div className="empty-state">
-                PSD を読み込むとパーツが表示されます。
+                素材を追加するとパーツが表示されます。
             </div>
         );
     }

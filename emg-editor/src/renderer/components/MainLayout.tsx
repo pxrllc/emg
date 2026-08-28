@@ -1,13 +1,11 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FilePlus, FileUp, Frame, Grid3x3, Undo2, Redo2 } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FileUp, Frame, Undo2, Redo2 } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
     centerPanel?: React.ReactNode;
     rightPanel?: React.ReactNode;
     onLoadPsd?: () => void;
-    onAddSource?: () => void;
-    onAddSheet?: () => void;
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
     /** 取り消し / やり直し。書き出しに影響する操作だけが対象。 */
@@ -26,7 +24,7 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, onAddSource, onAddSheet, hasFile, onNewProject, onUndo, onRedo, canUndo, canRedo }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, hasFile, onNewProject, onUndo, onRedo, canUndo, canRedo }) => {
     return (
         <div className="layout-container">
             <PanelGroup orientation="horizontal">
@@ -39,8 +37,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                 <span>レイヤー</span>
                             </div>
                             {/* 読み込み済みなら、これはもう主役ではない。青は Export 側に譲る。 */}
+                            {/* **素材の追加はここに置きません。** すぐ下の
+                                ツールバーに同じものがあり、4 つ並べるとパネルが
+                                狭いときにヘッダが溢れて「開く」「新規」が
+                                画面外に切れていた（押せなくなっていた）。 */}
                             {hasFile && (
-                                <div style={{ display: 'flex', gap: '4px' }}>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                     {/* 取り消しは編集全体に効く。素材の追加より前に置く。 */}
                                     <button className="btn btn-sm btn-ghost" onClick={onUndo} disabled={!canUndo}
                                         title="取り消す（Ctrl+Z）">
@@ -50,18 +52,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                                         title="やり直す（Ctrl+Shift+Z）">
                                         <Redo2 size={13} />
                                     </button>
-                                    {onAddSource && (
-                                        <button className="btn btn-sm btn-ghost" onClick={onAddSource} title="PSD / KRA / 画像 / GIF を追加する（ドラッグ&ドロップでも可）">
-                                            <FilePlus size={13} />
-                                            素材を追加
-                                        </button>
-                                    )}
-                                    {onAddSheet && (
-                                        <button className="btn btn-sm btn-ghost" onClick={onAddSheet} title="スプライトシートを切り出して追加する">
-                                            <Grid3x3 size={13} />
-                                            スプライトを追加
-                                        </button>
-                                    )}
                                     {onLoadPsd && (
                                         <button className="btn btn-sm btn-ghost" onClick={onLoadPsd} title="別のファイルを開き直す（今の内容は破棄）">
                                             <FileUp size={13} />

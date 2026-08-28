@@ -291,8 +291,6 @@ function App() {
                     />
                 }
                 onLoadPsd={openFilePicker}
-                onAddSource={openAddPicker}
-                onAddSheet={openSheetPicker}
                 onNewProject={() => setSizeDialog('new')}
                 onUndo={history.undo}
                 onRedo={history.redo}
