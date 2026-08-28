@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import { Diamond, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
-import { evaluateTransform, hasAnimation } from '../services/transform';
+import { evaluateTransform, foldTime, hasAnimation } from '../services/transform';
 import {
     TRANSFORM_PATHS, type PartTransform, type TransformPath, type TransformTrack,
 } from '../types';
@@ -66,7 +66,9 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
     /** 今の再生位置にキーを打つ。既にその時刻にあれば値を置き換える。 */
     const addKey = (path: TransformPath, v: number) => {
         const cur = trackOf(path);
-        const t = round(Math.min(time, duration));
+        // 再生位置と同じ折り返し後の時刻に打つ。素の time を使うと、
+        // ループ長を超えた位置では打ったキーが読まれず、入力が消えたように見える。
+        const t = round(foldTime(time, duration, transform.loop, transform.phaseOffset));
         const keys = [...(cur?.keys ?? [])].filter(k => Math.abs(k.t - t) > 0.001);
         keys.push({ t, v: round(v) });
         keys.sort((a, b) => a.t - b.t);

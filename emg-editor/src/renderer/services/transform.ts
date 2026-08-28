@@ -124,10 +124,35 @@ export function transformMatrix(
     return m;
 }
 
-/** そのパスが「動く」か。静止なら書き出しでキー 1 つに畳める。 */
+/** そのパスが「動く」か（キーが 2 つ以上）。静止なら書き出しでキー 1 つに畳める。 */
 export function isAnimated(t: PartTransform, path: TransformPath): boolean {
     const track = t.tracks.find(tr => tr.path === path);
     return !!track && track.keys.length > 1;
+}
+
+/**
+ * そのパスの値を**トラックが握っているか**。
+ *
+ * **キーが 1 つでも握ります。** `evaluateTransform` はキーが 1 つのトラックでも
+ * `base` を上書きするためで、ここを「2 つ以上」で判定すると、
+ * キーを 1 つ打った軸は `base` に書いても画面が変わらない — つまり
+ * 「その軸だけ動かせない。数値だけ動いて見える」という状態になります
+ * （実際にそう報告された）。編集側の分岐は必ずこれを使うこと。
+ */
+export function ownsPath(t: PartTransform | undefined, path: TransformPath): boolean {
+    return (t?.tracks.find(tr => tr.path === path)?.keys.length ?? 0) > 0;
+}
+
+/**
+ * トラックが無い／キーが 1 つのときに効いている「静止値」。
+ *
+ * キーが 1 つのトラックは静止値の表し方（§7.6 の `once`）なので、
+ * `base` ではなくそのキーが効きます。書き出しの畳み込みもこちらを見ること。
+ */
+export function staticValue(t: PartTransform | undefined, path: TransformPath): number {
+    const keys = t?.tracks.find(tr => tr.path === path)?.keys;
+    if (keys && keys.length === 1) return keys[0].v;
+    return t?.base[path] ?? TRANSFORM_DEFAULTS[path];
 }
 
 /** アニメーションが 1 つでもあるか。再生ボタンの有効・無効に使う。 */

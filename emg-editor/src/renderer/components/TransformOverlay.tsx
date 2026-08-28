@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { evaluateTransform, transformMatrix } from '../services/transform';
+import { evaluateTransform, ownsPath, transformMatrix } from '../services/transform';
 import type { PartTransform, TransformPath } from '../types';
 
 /** パーツの変形前の外接矩形（キャンバス座標）。 */
@@ -94,8 +94,9 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
         y: topMid.y + (topMid.y - botMid.y) / upLen * 26,
     };
 
-    const locked = (path: TransformPath) =>
-        (transform.tracks.find(t => t.path === path)?.keys.length ?? 0) > 1;
+    // キーが 1 つでもあれば、その値はトラックが握っている。ハンドルで base を
+    // 書いても画面は変わらないので、掴ませない（嘘のハンドルを出さない）。
+    const locked = (path: TransformPath) => ownsPath(transform, path);
     const frozen = playing || anchorMode;
 
     // キャンバスの画面上の原点。掴んだ瞬間に確定させる（ドラッグ中にスクロール

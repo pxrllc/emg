@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Move3d, Crosshair, Pause, Play, SkipBack } from 'lucide-react';
-import { evaluateTransform, transformMatrix } from '../services/transform';
+import { evaluateTransform, foldTime, ownsPath, transformMatrix } from '../services/transform';
 import { TransformOverlay, type PartBounds } from './TransformOverlay';
 import { emptyTransform, transformKey, type PartTransform } from '../types';
 
@@ -343,15 +343,15 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         // 掴んだパーツの「いま編集している対象」に書く。タイムラインと同じ宛先。
         const key = transformKey(partId, transformTarget[partId]);
         const tf = transforms[key] ?? emptyTransform();
-        const animated = (path: 'translate_x' | 'translate_y') =>
-            (tf.tracks.find(t => t.path === path)?.keys.length ?? 0) > 1;
 
         e.preventDefault();
         const startX = e.clientX, startY = e.clientY;
         const base = { ...tf.base };
         // キーがある軸は、その時刻の値を起点にする（base は使われないため）。
         const start = evaluateTransform(tf, time);
-        const keyTime = Math.round(Math.min(time, Math.max(0.05, tf.duration)) * 1000) / 1000;
+        // **再生位置と同じ折り返し後の時刻に打つ。** 素の time で打つと、
+        // ループ長を超えた位置ではキーが読まれず「入力が消える」ように見える。
+        const keyTime = Math.round(foldTime(time, tf.duration, tf.loop, tf.phaseOffset) * 1000) / 1000;
         let moved = false;
 
         const move = (ev: PointerEvent) => {
@@ -368,10 +368,10 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
             for (const [path, d] of [['translate_x', dx], ['translate_y', dy]] as const) {
                 const v = Math.round((start[path] + d) * 100) / 100;
-                if (animated(path)) {
-                    // **キーがある軸は、再生位置のキーを動かす。**
+                if (ownsPath(tf, path)) {
+                    // **キーが 1 つでもある軸は、再生位置のキーを動かす。**
                     // base を書いてもキーに上書きされるので、掴んでも動かないように
-                    // 見えていた（X にキーを打つと Y にしか動かない、という報告の原因）。
+                    // 見えていた（X にキーを 1 つ打つと Y にしか動かせない、という報告の原因）。
                     const cur = tracks.find(t => t.path === path)!;
                     const keys = cur.keys.filter(k => Math.abs(k.t - keyTime) > 0.001);
                     keys.push({ t: keyTime, v });

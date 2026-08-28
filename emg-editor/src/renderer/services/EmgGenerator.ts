@@ -4,6 +4,7 @@ import { TRANSFORM_PATHS, transformKey, type AvatarExpression, type AvatarMappin
 import type { PackedItem } from './TexturePacker';
 import type { Layer } from 'ag-psd';
 import { buildMapping, findMappingControlledParts, generateDraftMapping } from './MappingGenerator';
+import { staticValue } from './transform';
 
 export interface EmgData {
     version: string;
@@ -302,7 +303,7 @@ export class EmgGenerator {
             }
 
             // 動かないもの。値が既定と同じなら書く必要がない。
-            const v = keys.length === 1 ? keys[0].v : (tf.base[p.path] ?? p.def);
+            const v = staticValue(tf, p.path);
             if (v === p.def) continue;
             // 平行移動は basePosition が持つ。
             if (p.path === 'translate_x' || p.path === 'translate_y') continue;
@@ -443,8 +444,10 @@ export class EmgGenerator {
             for (const tf of [transforms[transformKey(partId)],
                               transforms[transformKey(partId, frameId)]]) {
                 if (!tf) continue;
-                if (!EmgGenerator.isMoving(tf, 'translate_x')) shiftX += tf.base.translate_x ?? 0;
-                if (!EmgGenerator.isMoving(tf, 'translate_y')) shiftY += tf.base.translate_y ?? 0;
+                // 効いている静止値を使う。キーが 1 つのトラックは静止値の
+                // 表し方なので、そこで base を読むとプレビューと食い違う。
+                if (!EmgGenerator.isMoving(tf, 'translate_x')) shiftX += staticValue(tf, 'translate_x');
+                if (!EmgGenerator.isMoving(tf, 'translate_y')) shiftY += staticValue(tf, 'translate_y');
             }
 
             part.layers.push({
@@ -545,8 +548,7 @@ export class EmgGenerator {
             for (const { tf, layers } of targets) {
                 const spins = TRANSFORM_PATHS.some(p =>
                     (p.path === 'rotation' || p.path === 'scale_x' || p.path === 'scale_y')
-                    && (tf.tracks.some(t => t.path === p.path && t.keys.length > 0)
-                        || (tf.base[p.path] ?? p.def) !== p.def));
+                    && (EmgGenerator.isMoving(tf, p.path) || staticValue(tf, p.path) !== p.def));
                 if (!spins) continue;
 
                 let anchor = tf.anchor;
@@ -559,8 +561,8 @@ export class EmgGenerator {
                     anchor = { x: (left + right) / 2, y: (top + bottom) / 2 };
                 } else {
                     // 平行移動を basePosition に畳み込んだ分だけ、中心も動かす。
-                    const shiftX = EmgGenerator.isMoving(tf, 'translate_x') ? 0 : (tf.base.translate_x ?? 0);
-                    const shiftY = EmgGenerator.isMoving(tf, 'translate_y') ? 0 : (tf.base.translate_y ?? 0);
+                    const shiftX = EmgGenerator.isMoving(tf, 'translate_x') ? 0 : staticValue(tf, 'translate_x');
+                    const shiftY = EmgGenerator.isMoving(tf, 'translate_y') ? 0 : staticValue(tf, 'translate_y');
                     anchor = { x: anchor.x + shiftX, y: anchor.y + shiftY };
                 }
                 for (const l of layers) {
