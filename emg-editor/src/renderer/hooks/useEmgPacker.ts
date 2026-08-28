@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { PsdLoader, FileLoader, PsdLayer } from '../services/PsdLoader';
 import { SourceLoader, type LoadedSource } from '../services/SourceLoader';
 import { EmgLoader, isEmgFile } from '../services/EmgLoader';
+import { baseNameOf, downloadBlob, prepareSave } from '../services/download';
 import { FRAME_COUNT_WARNING } from '../services/AnimationLoader';
 import { Psd, type Layer } from 'ag-psd';
 import { TexturePacker, PackItem, PackResult } from '../services/TexturePacker';
@@ -531,6 +532,13 @@ export function useEmgPacker() {
 
     // 読み込みが終わるたびに進める。これより前には戻れなくてよい。
     const [loadToken, setLoadToken] = useState(0);
+
+    /**
+     * いま扱っている素材の名前。保存名の芯にする。
+     * 固定名だと書き出すたびに `model (1).emg` と積み上がり、
+     * どれがどの素材か分からなくなる。
+     */
+    const [projectName, setProjectName] = useState('untitled');
     const history = useHistory(snapshot, restoreSnapshot, loadToken);
 
     /** 今の内容を捨てて最初からにする。読み込みの直前に必ず通す。 */
@@ -554,7 +562,9 @@ export function useEmgPacker() {
             // `.emg` は「書き出したものの続き」なので、開く経路も同じ入口にする。
             if (isEmgFile(file.name)) {
                 await importEmg(file);
+                setProjectName(baseNameOf(file.name));
             } else {
+                setProjectName(baseNameOf(file.name));
                 // **SourceLoader を通す。** 以前はここで FileLoader（PSD / KRA 専用）を
                 // 直接呼んでいたため、選択ダイアログが受け付ける GIF や PNG を選ぶと
                 // 「Invalid signature: 'GIF8'」で失敗していた。「素材を追加」でしか
@@ -582,6 +592,7 @@ export function useEmgPacker() {
         resetEditingState();
         applyTree({ width, height, children: [] } as unknown as Psd, {});
         setLoadToken(n => n + 1);
+        setProjectName('untitled');
         setToast({ title: '新規作成', body: `${width} × ${height} px の空のキャンバス` });
     };
 
@@ -639,6 +650,9 @@ export function useEmgPacker() {
      */
     const handleSourceAdd = async (file: File) => {
         try {
+            // 空から足した最初の素材で名前を決める。以後は上書きしない
+            // （2 つ目を足すたびに保存名が変わると探しにくい）。
+            if (projectName === 'untitled') setProjectName(baseNameOf(file.name));
             if (isEmgFile(file.name)) { await importEmg(file); return; }
             mergeSource(await SourceLoader.load(file), file.name);
         } catch (e) {
@@ -1352,6 +1366,15 @@ export function useEmgPacker() {
     }, [packResult, psdRoot, layerMeta, partAnimations, presets]);
 
     const handleExport = async () => {
+        // 保存先は押された瞬間に押さえる（download.ts の prepareSave を参照）。
+        // アトラスの PNG 生成に十数秒かかるため、後から保存しようとすると
+        // ブロックされて「押したのにファイルが無い」になる。
+        let target;
+        try {
+            target = await prepareSave(`${projectName}.emg`, 'application/zip', ['.emg']);
+        } catch {
+            return;   // 保存先の選択をやめた
+        }
         if (!psdRoot) return;
 
         // 進捗表示を描画させてから重い処理に入る。React の state 更新だけでは
@@ -1424,10 +1447,7 @@ export function useEmgPacker() {
                 partTransforms
             );
 
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'model.emg';
-            link.click();
+            const saved = await target.write(blob);
 
             // 「全素材を 1 枚のテクスチャに詰める」が守られたかを、
             // ここで必ず利用者に見せる。以前は console.warn だけで、
@@ -1529,12 +1549,9 @@ export function useEmgPacker() {
         if (!psdRoot) return;
         const tpl = buildTemplate(parts, partAnimations, mapping, presets, expressions);
         const blob = new Blob([JSON.stringify(tpl, null, 2)], { type: 'application/json' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `avatar${TEMPLATE_EXT}`;
-        link.click();
+        const saved = downloadBlob(blob, `${projectName}${TEMPLATE_EXT}`);
         setToast({
-            title: 'テンプレートを書き出しました',
+            title: `テンプレートを書き出しました（${saved}）`,
             body: `${Object.keys(tpl.partTypes).length} パーツ / プリセット ${tpl.presets.length} / 表情 ${tpl.expressions.length}`,
         });
     };
@@ -1608,10 +1625,8 @@ export function useEmgPacker() {
             layerMeta: layerMeta
         };
         const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = 'project.json';
-        link.click();
+        const saved = downloadBlob(blob, `${projectName}.project.json`);
+        setToast({ title: `設定を保存しました（${saved}）`, body: 'ダウンロードフォルダに入ります' });
     };
 
     const handleLoadProject = () => {
@@ -1682,6 +1697,7 @@ export function useEmgPacker() {
         handlePsdLoad,
         handleNewProject,
         handleCanvasResize,
+        projectName,
         handleSourceAdd,
         handleSheetImport,
         handlePsdUpdate,

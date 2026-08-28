@@ -16,6 +16,7 @@ import { CanvasSizeDialog } from './components/CanvasSizeDialog';
 import { PreviewExportDialog } from './components/PreviewExportDialog';
 import { computeBounds, drawComposite } from './services/composite';
 import { exportPreview, extensionOf } from './services/previewExport';
+import { prepareSave } from './services/download';
 
 function App() {
     const {
@@ -30,7 +31,7 @@ function App() {
         handleExpressionRename, handleExpressionDelete,
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
-        handlePsdLoad, handleNewProject, handleCanvasResize, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
@@ -111,6 +112,18 @@ function App() {
         scale: number; background: 'transparent' | string;
     }) => {
         if (!psdRoot) return;
+        // **保存先は押された瞬間に押さえる。** 書き出しに数秒かかるので、
+        // 終わってから保存しようとすると「操作から続いていない」と見なされて
+        // ブロックされ、押しても何も起きないことがある。
+        let target;
+        try {
+            target = await prepareSave(
+                `${projectName}.${extensionOf(o.format)}`,
+                o.format === 'gif' ? 'image/gif' : 'video/webm',
+                [`.${extensionOf(o.format)}`]);
+        } catch {
+            return;   // 利用者が保存先の選択をやめた
+        }
         setPreviewBusy({ phase: '準備しています', ratio: 0 });
         try {
             const blob = await exportPreview({
@@ -121,14 +134,11 @@ function App() {
                 draw: (ctx, items, t, base) => drawComposite(ctx, items, partTransforms, computeBounds(items), t, base),
                 onProgress: (phase, ratio) => setPreviewBusy({ phase, ratio }),
             });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `preview.${extensionOf(o.format)}`;
-            link.click();
+            const saved = await target.write(blob);
             setPreviewExportOpen(false);
             setToast({
                 title: 'プレビューを書き出しました',
-                body: `${link.download} — ${o.duration}s / ${o.fps}fps / ${Math.round(blob.size / 1024)} KB`,
+                body: `${saved} — ${o.duration}s / ${o.fps}fps / ${Math.round(blob.size / 1024)} KB`,
             });
         } catch (e) {
             console.error(e);
