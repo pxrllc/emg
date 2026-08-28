@@ -16,7 +16,7 @@ import { CanvasSizeDialog } from './components/CanvasSizeDialog';
 import { PreviewExportDialog } from './components/PreviewExportDialog';
 import { computeBounds, drawComposite } from './services/composite';
 import { exportPreview, extensionOf } from './services/previewExport';
-import { prepareSave } from './services/download';
+import { downloadBlob, prepareSave } from './services/download';
 
 function App() {
     const {
@@ -32,7 +32,7 @@ function App() {
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
         handlePsdLoad, handleNewProject, handleCanvasResize, projectName, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
-        handleExport, handleSaveProject, handleLoadProject,
+        handleExport, pendingExport, handleSavePending, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
@@ -99,6 +99,8 @@ function App() {
     // プレビューの書き出し（GIF / 動画）。
     const [previewExportOpen, setPreviewExportOpen] = useState(false);
     const [previewBusy, setPreviewBusy] = useState<{ phase: string; ratio: number } | null>(null);
+    // 保存ダイアログを出せない環境で、押されるまで持っておく出来上がり。
+    const [previewResult, setPreviewResult] = useState<{ blob: Blob; name: string } | null>(null);
 
     /**
      * プレビューをアニメーションとして書き出す。
@@ -125,6 +127,7 @@ function App() {
             return;   // 利用者が保存先の選択をやめた
         }
         setPreviewBusy({ phase: '準備しています', ratio: 0 });
+        setPreviewResult(null);
         try {
             const blob = await exportPreview({
                 ...o,
@@ -134,12 +137,17 @@ function App() {
                 draw: (ctx, items, t, base) => drawComposite(ctx, items, partTransforms, computeBounds(items), t, base),
                 onProgress: (phase, ratio) => setPreviewBusy({ phase, ratio }),
             });
-            const saved = await target.write(blob);
-            setPreviewExportOpen(false);
-            setToast({
-                title: 'プレビューを書き出しました',
-                body: `${saved} — ${o.duration}s / ${o.fps}fps / ${Math.round(blob.size / 1024)} KB`,
-            });
+            if (target.kind === 'picker') {
+                const saved = await target.write(blob);
+                setPreviewExportOpen(false);
+                setToast({
+                    title: 'プレビューを書き出しました',
+                    body: `${saved} — ${o.duration}s / ${o.fps}fps / ${Math.round(blob.size / 1024)} KB`,
+                });
+            } else {
+                // 自動で落とすとブラウザに捨てられることがあるので、押してもらう。
+                setPreviewResult({ blob, name: target.name });
+            }
         } catch (e) {
             console.error(e);
             setToast({ title: '書き出せませんでした', body: String(e instanceof Error ? e.message : e), tone: 'error' });
@@ -341,6 +349,8 @@ function App() {
                         }
                         emgData={emgData}
                         onExport={handleExport}
+                        pendingExport={pendingExport && { name: pendingExport.name, size: pendingExport.blob.size }}
+                        onSavePending={handleSavePending}
                         onSaveProject={handleSaveProject}
                         onLoadProject={handleLoadProject}
                         onTemplateSave={handleTemplateSave}
@@ -370,7 +380,15 @@ function App() {
                     contentDuration={contentDuration}
                     canvas={{ width: psdRoot.width ?? 0, height: psdRoot.height ?? 0 }}
                     busy={previewBusy}
-                    onCancel={() => setPreviewExportOpen(false)}
+                    result={previewResult && { name: previewResult.name, size: previewResult.blob.size }}
+                    onSaveResult={() => {
+                        if (!previewResult) return;
+                        const saved = downloadBlob(previewResult.blob, previewResult.name);
+                        setPreviewResult(null);
+                        setPreviewExportOpen(false);
+                        setToast({ title: '保存しました', body: `ダウンロードフォルダに ${saved}` });
+                    }}
+                    onCancel={() => { setPreviewResult(null); setPreviewExportOpen(false); }}
                     onExport={runPreviewExport}
                 />
             )}

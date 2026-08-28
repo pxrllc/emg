@@ -66,6 +66,12 @@ export interface SaveTarget {
     write: (blob: Blob) => Promise<string>;
     /** 利用者が選んだ名前。決められない環境では提案した名前。 */
     name: string;
+    /**
+     * `picker` なら保存先が確定しているので、出来上がった時点で書けば必ず入る。
+     * `download` は「操作から続いていない」と見なされて**黙って捨てられる**ことが
+     * あるので、呼び出し側は保存ボタンを出して、押されたときに書くこと。
+     */
+    kind: 'picker' | 'download';
 }
 
 type PickerWindow = Window & {
@@ -90,6 +96,7 @@ export async function prepareSave(
                 types: [{ description: name.split('.').pop() ?? 'file', accept: { [mime]: extensions } }],
             });
             return {
+                kind: 'picker',
                 name: handle.name || name,
                 write: async (blob: Blob) => {
                     const ws = await handle.createWritable();
@@ -103,5 +110,5 @@ export async function prepareSave(
             // それ以外（未対応・権限なし）はダウンロードへ。
         }
     }
-    return { name, write: async (blob: Blob) => downloadBlob(blob, name) };
+    return { kind: 'download', name, write: async (blob: Blob) => downloadBlob(blob, name) };
 }

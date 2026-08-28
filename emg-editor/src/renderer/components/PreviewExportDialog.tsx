@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clapperboard, X } from 'lucide-react';
+import { Clapperboard, Download, X } from 'lucide-react';
 import { NumberInput } from './NumberInput';
 import { canRecordWebm, type PreviewFormat } from '../services/previewExport';
 
@@ -8,6 +8,15 @@ interface PreviewExportDialogProps {
     contentDuration: number;
     canvas: { width: number; height: number };
     busy: { phase: string; ratio: number } | null;
+    /**
+     * 出来上がったが、まだ保存していないもの。
+     *
+     * 保存ダイアログを出せない環境では、書き出しの直後に自動で落とすと
+     * ブラウザに黙って捨てられることがある（操作から続いていない扱い）。
+     * 押されたときに落とすため、ここに置いて保存ボタンを出す。
+     */
+    result: { name: string; size: number } | null;
+    onSaveResult: () => void;
     onCancel: () => void;
     onExport: (o: {
         format: PreviewFormat; duration: number; fps: number;
@@ -27,7 +36,7 @@ const numStyle: React.CSSProperties = {
  * 作ったものが 1 周する長さで出るのが普通に欲しい結果なので。
  */
 export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
-    contentDuration, canvas, busy, onCancel, onExport,
+    contentDuration, canvas, busy, result, onSaveResult, onCancel, onExport,
 }) => {
     const [format, setFormat] = useState<PreviewFormat>('gif');
     // 動くものが無ければ 1 秒。0 秒だと 1 コマも出ない。
@@ -111,6 +120,18 @@ export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
                         </div>
                     )}
 
+                    {result && !busy && (
+                        <div className="map-block">
+                            <div className="map-head">できました</div>
+                            <div className="part-meta">
+                                {result.name} — {Math.round(result.size / 1024)} KB
+                            </div>
+                            <button className="btn btn-primary btn-block" onClick={onSaveResult}>
+                                <Download size={14} /> 保存する
+                            </button>
+                        </div>
+                    )}
+
                     {busy && (
                         <>
                             <div className="progress-track">
@@ -134,7 +155,7 @@ export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
                             background: transparent ? 'transparent' : '#ffffff',
                         })}
                     >
-                        {busy ? '書き出し中…' : '書き出す'}
+                        {busy ? '書き出し中…' : result ? 'もう一度書き出す' : '書き出す'}
                     </button>
                 </div>
             </div>

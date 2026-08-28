@@ -413,6 +413,15 @@ export function useEmgPacker() {
     // 押した直後に無反応に見えてしまう。割合は目安で、正確さは求めていない。
     const [exportProgress, setExportProgress] = useState<{ phase: string; percent: number } | null>(null);
 
+    /**
+     * 出来上がったが、まだ保存していない `.emg`。
+     *
+     * 保存ダイアログを出せない環境では、書き出しの直後に自動で落とすと
+     * ブラウザに黙って捨てられる（操作から続いていない扱い）。押されたときに
+     * 落とすため、ここに置いてボタンを「保存する」に変える。
+     */
+    const [pendingExport, setPendingExport] = useState<{ blob: Blob; name: string } | null>(null);
+
     // プレビュー専用の状態。書き出し結果には一切影響しない。
     //   previewFrame : switch パーツで今どの差分を見ているか（既定は part.default）
     //   previewOff   : プレビュー上で伏せているパーツ（顔の確認で髪を退かす等）
@@ -543,6 +552,7 @@ export function useEmgPacker() {
 
     /** 今の内容を捨てて最初からにする。読み込みの直前に必ず通す。 */
     const resetEditingState = () => {
+        setPendingExport(null);
         setPartAnimations({});
         setPartTransforms({});
         setTransformTarget({});
@@ -1447,7 +1457,11 @@ export function useEmgPacker() {
                 partTransforms
             );
 
-            const saved = await target.write(blob);
+            if (target.kind !== 'picker') {
+                // 自動で落とすと捨てられることがあるので、押してもらう。
+                setPendingExport({ blob, name: target.name });
+            }
+            const saved = target.kind === 'picker' ? await target.write(blob) : target.name;
 
             // 「全素材を 1 枚のテクスチャに詰める」が守られたかを、
             // ここで必ず利用者に見せる。以前は console.warn だけで、
@@ -1459,7 +1473,7 @@ export function useEmgPacker() {
 
             setToast(result.atlases.length === 1
                 ? {
-                    title: '書き出しました',
+                    title: target.kind === 'picker' ? '書き出しました' : '書き出しました（「保存する」を押してください）',
                     body: `model.emg — テクスチャ 1 枚 ${sizes}（占有率 ${occupancy}%）/ ${exportItems.length} レイヤー`,
                 }
                 : {
@@ -1619,6 +1633,14 @@ export function useEmgPacker() {
         setTemplateReport(app.report);
     };
 
+    /** 保留していた `.emg` を落とす。押された瞬間なので確実に保存される。 */
+    const handleSavePending = () => {
+        if (!pendingExport) return;
+        const saved = downloadBlob(pendingExport.blob, pendingExport.name);
+        setPendingExport(null);
+        setToast({ title: '保存しました', body: `ダウンロードフォルダに ${saved}` });
+    };
+
     const handleSaveProject = () => {
         const projectData = {
             version: '1.0',
@@ -1703,6 +1725,8 @@ export function useEmgPacker() {
         handlePsdUpdate,
         handleLayerVisibilityChange,
         handleExport,
+        pendingExport,
+        handleSavePending,
         handleSaveProject,
         handleLoadProject,
         handleTemplateSave,

@@ -81,6 +81,9 @@ interface InspectorPanelProps {
 
     emgData?: EmgData;
     onExport: () => void;
+    /** 出来上がったが未保存の `.emg`。あれば書き出しボタンを「保存する」にする。 */
+    pendingExport: { name: string; size: number } | null;
+    onSavePending: () => void;
     onSaveProject: () => void;
     onLoadProject: () => void;
     onTemplateSave: () => void;
@@ -222,14 +225,21 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
             </div>
 
             <div className="action-bar">
-                <button
-                    className="btn btn-primary btn-block"
-                    onClick={props.onExport}
-                    disabled={!props.hasFile || props.exportableCount === 0 || !!props.exportProgress}
-                >
-                    <Download size={15} />
-                    {props.exportProgress ? '書き出し中…' : '.emg を書き出す'}
-                </button>
+                {props.pendingExport && !props.exportProgress ? (
+                    <button className="btn btn-primary btn-block" onClick={props.onSavePending}>
+                        <Download size={15} />
+                        保存する（{props.pendingExport.name} / {Math.round(props.pendingExport.size / 1024)} KB）
+                    </button>
+                ) : (
+                    <button
+                        className="btn btn-primary btn-block"
+                        onClick={props.onExport}
+                        disabled={!props.hasFile || props.exportableCount === 0 || !!props.exportProgress}
+                    >
+                        <Download size={15} />
+                        {props.exportProgress ? '書き出し中…' : '.emg を書き出す'}
+                    </button>
+                )}
                 {!props.exportProgress && props.hasFile
                     && (props.unassigned.blink + props.unassigned.lipSync) > 0 && (
                     <div className="action-warn">
