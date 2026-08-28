@@ -167,6 +167,11 @@ Test files in `emg-packer/asset/` (gitignored) are the ground truth for what act
 - **z-order is inverted in every file exported before the traversal-order fix** (`himari3.emg` gives the body the frontmost `textureZIndex`; so do `senti_02.emg` and `senti_030.emg`). Root cause is the `ag-psd` child ordering described under "emg-packer internals". `emg-ymm4` exposes a "Z-Index反転" toggle to work around such files. Confirmed again in `senti_02.emg`, where drawing in spec order (ascending = back to front) puts the body over the face; the fix applied to the bundled demo was to **normalise the file** (`z' = maxZ - z`) rather than add another toggle.
 - **A whole avatar may be a single `switch` part** (`senti.emg`: 36 layers, one part), so per-part role detection finds nothing. This is a **producer-side defect, already fixed**: `recalculateMeta()` used to walk only `root.children`, collapsing every nested group into one part; commit `e4306a7` made it recurse. Files exported before that fix stay broken — the correctly-parted export of the same character is `senti_02.emg` (`Body`/`arms`/`Mouth`/`Blushs`/`Eyes`/`Eyebrows`/`Character`), which is what `emg-cdn/assets/senti-demo.emg` is built from. **Re-export such files rather than teaching consumers to cope**; the alternative is layer-level (`textureID`) filtering inside a `static` part, which nothing in this repo implements.
 - A `version` field can lie: `yuriko.emg` claimed `0.2.2` while holding the pre-0.2 flat `layers[]`/`uv` schema.
+- **`emg-cdn/assets/f6ddEj.emg` is the only file here that actually animates**, so it is the only
+  thing to test playback against: five `auto_loop` `ordered` sequences (50fps ×3, 12fps ×2), two of
+  them also carrying §7 `scale_x`/`scale_y` tracks. Every other bundled `.emg` is static —
+  `senti-demo` has an empty `sprites[]`. Its atlas is 8192², which is past the demo page's
+  alpha-probe limit, so it also exercises that fallback.
 - **Store the atlas PNG uncompressed.** `EmgGenerator` calls `zip.generateAsync({ type: 'blob' })` with no `compression` option, so JSZip's default STORE applies. PNG is already deflated, so re-compressing buys ~0.3% and costs decode time on every load. Any hand-built `.emg` should match this.
 
 ### Reference player (`emg-cdn/emg-player.0.3.0.js`)

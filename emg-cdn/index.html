@@ -42,6 +42,7 @@
                 <h2>キャンバス</h2>
                 <span class="dims" id="canvasDims">—</span>
                 <span class="flex"></span>
+                <button class="chip" id="playToggle" hidden>一時停止</button>
                 <span class="src" id="sourceName">読み込み中…</span>
             </div>
             <div class="viewport checker" id="stageViewport">
@@ -116,6 +117,7 @@
 
             const DEMOS = [
                 { name: 'senti', url: './assets/senti-demo.emg', note: '0.3.0 / 7 パーツ' },
+                { name: 'エフェクト', url: './assets/f6ddEj.emg', note: '0.5.3 / 動きます' },
                 { name: 'zunda', url: './assets/zunda.emg', note: '旧 0.1 形式' },
                 { name: 'room', url: './assets/room.emg', note: '背景素材' },
             ];
@@ -258,7 +260,38 @@
                 buildPartChips();
                 updateReadout();   // 前のファイルで指していたレイヤーが残らないようにする
                 await showTexture(0);
+                // 再生ボタンの出し入れはパネル見出しの高さを変えるので、倍率を出す前に済ませる。
+                startFrameWatch();
                 layout();
+            }
+
+            /**
+             * 動くファイルかどうか。動かないファイルに再生ボタンを出しても押す意味がない。
+             * trigger を持つ sprite（自律再生）と tracks を持つ sprite（§7 の変形）が対象。
+             */
+            function hasMotion() {
+                return (state.data?.sprites ?? []).some(s => s.trigger || s.tracks?.length);
+            }
+
+            /**
+             * 再生中は switch パーツの表示フレームが入れ替わるので、アトラス側の
+             * 「いま出ている／出ていない」の表示が置いていかれる。毎コマ追うと
+             * 232 枚のクラスを 50 回/秒 書き換えることになるので、10 回/秒 で足りる。
+             */
+            let frameWatch = null;
+            function startFrameWatch() {
+                clearInterval(frameWatch);
+                frameWatch = null;
+                const playing = hasMotion();
+                $('playToggle').hidden = !playing;
+                $('playToggle').textContent = '一時停止';
+                if (!playing) return;
+                frameWatch = setInterval(() => {
+                    if (!window.isAnimationRunning) return;
+                    for (const r of atlasOverlay.children) {
+                        r.classList.toggle('dim', !isVisible(Number(r.dataset.index)));
+                    }
+                }, 100);
             }
 
             function buildTexChips() {
@@ -470,9 +503,12 @@
                 $('roFrame').textContent = l.frame;
                 $('roType').textContent = l.type;
                 $('roType').className = `tag ${l.type}`;
-                $('roAtlas').textContent = `x ${l.x}, y ${l.y} · ${l.w} × ${l.h}`;
-                $('roCanvas').textContent = `x ${l.bx}, y ${l.by}`;
-                $('roMisc').textContent = `${l.z} / ${l.opacity}`;
+                // basePosition は整数とは限らない（0.5 系のファイルに小数が入る）。
+                // 二進小数の桁を全部出すと読めないので丸める。
+                const num = v => typeof v === 'number' ? String(Math.round(v * 100) / 100) : String(v);
+                $('roAtlas').textContent = `x ${num(l.x)}, y ${num(l.y)} · ${num(l.w)} × ${num(l.h)}`;
+                $('roCanvas').textContent = `x ${num(l.bx)}, y ${num(l.by)}`;
+                $('roMisc').textContent = `${num(l.z)} / ${num(l.opacity)}`;
                 $('roVisible').textContent = isVisible(l.index) ? '表示中' : 'いまは非表示';
             }
 
@@ -529,6 +565,15 @@
                 b.onclick = () => loadDemo(demo);
                 $('demoChips').appendChild(b);
             }
+
+            $('playToggle').onclick = () => {
+                window.EMGPlayer.toggleAnimation();
+                $('playToggle').textContent = window.isAnimationRunning ? '一時停止' : '再生';
+                // 止めた位置のフレームで矩形を合わせ直す（止めてから見るのが普通なので）。
+                for (const r of atlasOverlay.children) {
+                    r.classList.toggle('dim', !isVisible(Number(r.dataset.index)));
+                }
+            };
 
             $('openButton').onclick = () => $('fileInput').click();
             $('fileInput').onchange = e => {

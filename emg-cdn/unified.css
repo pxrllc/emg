@@ -335,7 +335,8 @@ body {
     flex: none;
     padding: 8px 14px;
     border-top: 1px solid var(--line-soft);
-    max-height: 96px;
+    /* パーツ名が長いファイルでも 3 行までは切らずに出す。 */
+    max-height: 118px;
     overflow-y: auto;
 }
 
