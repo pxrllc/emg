@@ -5,7 +5,7 @@ using UnityEngine;
 namespace Emg.Runtime
 {
     /// <summary>
-    /// EMG キャラクターの switch パーツ切り替えとアニメーション再生を管理するコンポーネント。
+    /// EMG の switch パーツ切り替えとアニメーション再生を管理するコンポーネント。
     /// インポートされた .emg Prefab のルート GameObject にアタッチされます。
     /// </summary>
     public class EmgController : MonoBehaviour

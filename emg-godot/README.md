@@ -1,8 +1,8 @@
 # EMG Loader for Godot
 
-A runtime loader that lets Godot 4.x projects load and play `.emg` character files directly, without any conversion step.
+A runtime loader that lets Godot 4.x projects load and play `.emg` files directly, without any conversion step.
 
-`.emg` キャラクターファイルを変換なしで直接読み込み、再生できる Godot 4.x 用のランタイムローダーです。
+`.emg` を変換なしで直接読み込み、再生できる Godot 4.x 用のランタイムローダーです。
 
 ## Setup / セットアップ
 

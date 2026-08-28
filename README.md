@@ -1,6 +1,8 @@
 # EMG (easy Movable Graphic)
 
-EMG は、パーツ分割されたキャラクター素材を「軽量かつ汎用的に動かせる状態」で配布・利用するためのフォーマットです。動画編集ソフトやゲームエンジン（Unity, Web 等）など特定のツールに依存せず、どこでも同じようにキャラクターを表示・制御できることを目指しています。`.emg` ファイルの実体は ZIP アーカイブで、メタデータ（`data.json`）とテクスチャアトラス画像を含みます。
+EMG は、パーツ分割された 2D 素材を「軽量かつ汎用的に動かせる状態」で配布・利用するためのフォーマットです。動画編集ソフトやゲームエンジン（Unity, Web 等）など特定のツールに依存せず、どこでも同じように表示・制御できることを目指しています。`.emg` ファイルの実体は ZIP アーカイブで、メタデータ（`data.json`）とテクスチャアトラス画像を含みます。
+
+扱えるのはキャラクターだけではありません。背景、小物、UI パーツ、シーン切り替え、エフェクトのコマ送りなど、**「重ねて描くレイヤー」と「差し替えるコマ」で表せるものは同じ仕組みで扱えます**。キャラクターは最も作り込まれた用途というだけです（まばたきや口パクの意味づけを与える `mapping.json` は、その用途のための任意の追加ファイルです）。
 
 設計意図の詳細は [`emg-spec-intent.md`](./emg-spec-intent.md) を参照してください。
 
@@ -28,8 +30,8 @@ EMG は、パーツ分割されたキャラクター素材を「軽量かつ汎�
 | ディレクトリ | 内容 |
 |---|---|
 | [`emg-packer/`](./emg-packer/) | PSD から `.emg` を生成する Electron 製パッカー。`mapping.json` の下書き自動生成に対応 |
-| [`emg-editor/`](./emg-editor/) | `emg-packer` v0.1.5 から分岐したアバター編集アプリ。パーツ単位の編集・仕様準拠プレビューを持ち、今後の開発はこちらで進む |
-| [`emg-web-runtime/`](./emg-web-runtime/) | ブラウザ上で EMG アバターを再生・確認するランタイム（WIP） |
+| [`emg-editor/`](./emg-editor/) | `emg-packer` v0.1.5 から分岐した編集アプリ。パーツ単位の編集・仕様準拠プレビューを持ち、今後の開発はこちらで進む |
+| [`emg-web-runtime/`](./emg-web-runtime/) | ブラウザ上で `.emg` を再生・確認するランタイム（WIP） |
 | [`emg-cdn/`](./emg-cdn/) | リファレンスプレイヤー（`emg-player.0.3.0.js` 等）とデモページ。GitHub Pages で配信 |
 | [`emg-unity-importer/`](./emg-unity-importer/) | Unity 向け `.emg` インポーター（WIP） |
 | [`emg-renpy/`](./emg-renpy/) | Ren'Py 向け `.emg` ローダー |
@@ -86,8 +88,8 @@ window.EMGPlayer.setExpression('happy');
 
 ### Parts
 パーツは `type` により挙動が異なります。
-- `static`: 常時表示（体、背景など）
-- `switch`: レイヤーのうち1つだけを表示（目、口など）。`default` で初期表示を指定。
+- `static`: レイヤーを重ねて描く（体、背景、部屋の壁など）
+- `switch`: レイヤーのうち1つだけを表示（目、口、看板の表示内容、エフェクトのコマなど）。`default` で初期表示を指定。
 
 ### Sprites & Triggers
 アニメーションは `sequence` でフレーム順序を定義し、`trigger` で再生タイミングを制御します。
@@ -105,7 +107,7 @@ Some features are currently under development.
 - Error Handling (WIP)
 - Unity Importer (WIP)
 
-EMG アバターをブラウザ上で再生・確認・簡易編集するためのランタイム環境です。OBS などのブラウザソースとして利用することを想定しています。本体の EMG（本ドキュメント上部・[`emg-json-spec.md`](./emg-json-spec.md)）を扱うツールであり、EMG-lite（[`emg-lite/`](./emg-lite/)）とは別物です。
+`.emg` をブラウザ上で再生・確認・簡易編集するためのランタイム環境です。OBS などのブラウザソースとして利用することを想定しています。本体の EMG（本ドキュメント上部・[`emg-json-spec.md`](./emg-json-spec.md)）を扱うツールであり、EMG-lite（[`emg-lite/`](./emg-lite/)）とは別物です。
 
 ### Development
 

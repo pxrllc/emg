@@ -4,14 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository overview
 
-This is a monorepo for **EMG (easy Movable Graphic)**, a lightweight, engine-agnostic format for distributing part-based 2D character art (eyes/mouth swaps, texture-atlas rendering) so the same avatar can be played back in a browser, OBS, AviUtl, Ren'Py, or Unity without re-authoring. An `.emg` file is a ZIP containing `data.json` (parts/layers/textures/sprites metadata) plus one or more texture atlas PNGs.
+This is a monorepo for **EMG (easy Movable Graphic)**, a lightweight, engine-agnostic format for distributing **composable 2D sprite assets** — part-based art with switchable frames and texture-atlas rendering — so the same asset can be played back in a browser, OBS, AviUtl, Ren'Py, or Unity without re-authoring. An `.emg` file is a ZIP containing `data.json` (parts/layers/textures/sprites metadata) plus one or more texture atlas PNGs.
+
+**The format is not character-specific.** Characters are the most developed use case (and the only one `mapping.json` speaks to), but nothing in `data.json` assumes a figure: backgrounds, props, UI kits, scene sets, and effect sheets are all just parts with frames. Keep this in mind when writing docs or UI copy — wording that says "avatar" or "character" where it means "the drawn result" narrows the format for no reason. `mapping.json`, `emg-lite/`, and `emg-ymm4` are the genuine exceptions: they are about eyes/mouths and 立ち絵 by definition.
 
 There is no root build system — each subdirectory below is an **independent npm/Unity/Ren'Py project** with its own `package.json` (or none). Always `cd` into the relevant subdirectory before running install/dev/build commands; there is no workspace tooling tying them together.
 
 | Directory | What it is | Stack |
 |---|---|---|
 | `emg-packer/` | Electron desktop app: loads a PSD (or `.kra`), lets the user assign `partID`/`type` per layer, packs a texture atlas, and exports a `.emg` file. **`emg-editor` forked from this at v0.1.5** — see "Two packer codebases" below | Electron + Vite (electron-vite) + React + TypeScript, `ag-psd` |
-| `emg-editor/` | Fork of `emg-packer` at v0.1.5, renamed and versioned independently (0.2.0). The product that gets developed further: parts-level editing, multi-source import, animation authoring. **Its `services/` is a copy, not a share** | same as `emg-packer` |
+| `emg-editor/` | Fork of `emg-packer` at v0.1.5, renamed and versioned independently (0.2.0). The product that gets developed further: parts-level editing, multi-source import, animation authoring, presets/expressions, and `.emg` re-import (`EmgLoader`, so edit→export→edit round-trips). **Its `services/` is a copy, not a share** | same as `emg-packer` |
 | `emg-web-runtime/` | Browser app for playing/authoring EMG avatars (states, variants, undo history) — WIP. Note `npm run build` runs `tsc` first, so a type error blocks deployment entirely (this silently broke Pages for ~6 months) | Vite + React + TypeScript + styled-components |
 | `emg-lite/` | Spec + adapter + tools for **EMG-lite** (`.emgl`), a *separate*, simpler 5-slot avatar IR (base/mouthOpen/mouthClosed/eyesOpen/eyesClosed) distinct from full EMG — see "Two coexisting specs" below | Spec docs + `adapter/png-adapter.ts` + `tools/emg-viewer` (Vite + Electron) |
 | `emg-cdn/` | Deployable reference player (`emg-player.0.1.0.js`, `.0.2.2.js`, `.0.3.0.js` — **0.3.0 is current**, adds `mapping.json`) and demo page | Vanilla JS + JSZip, no build step |
@@ -188,6 +190,14 @@ times out with "renderer may be frozen". It is neither frozen nor a JSZip bug. K
 foregrounded (an input action such as click/hover reactivates it) before concluding anything about
 load performance. For pure geometry/z-order questions, rendering the composite offline (extract the
 zip, draw the layers with any 2D library) is faster and avoids the issue entirely.
+
+**Never compare two `.emg` files by diffing composited canvases.** Browser canvas compositing is not
+deterministic: the same pair of files compares as 0 differing pixels on one call and ~39 (all ±1/255)
+on the next, and the metric even violates transitivity (A vs B = 0, B vs C = 0, A vs C = 39). Compare
+**per layer** instead — pull each layer's rect out of the atlas with `getImageData` and hash it. That
+path never touches alpha blending, so it is exact. (A genuine ±1/255 loss does exist, but only from
+the *second* generation of load→export onward: canvas stores premultiplied alpha, so extract/repack
+drops one LSB on semi-transparent pixels.)
 
 ### Two coexisting, structurally different specs — don't conflate them
 

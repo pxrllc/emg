@@ -12,7 +12,7 @@ Electron + Vite (electron-vite) + React + TypeScript。
 
 | | `emg-packer`（本プロジェクト） | `emg-editor` |
 |---|---|---|
-| 位置づけ | PSD → `.emg` の変換ツール | アバターを組み立てる編集ツール |
+| 位置づけ | PSD → `.emg` の変換ツール | パーツを組み立てる編集ツール |
 | 状態 | 現行維持 | ここから発展させる |
 | ブラウザ版 | **`emg-web-packer`**（`services/` を alias で共有） | なし |
 

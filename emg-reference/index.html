@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EMG 0.5 リファレンス</title>
-<meta name="description" content="EMG 0.5 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
+<title>EMG 0.5.2 リファレンス</title>
+<meta name="description" content="EMG 0.5.2 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -295,7 +295,7 @@ li { margin-bottom: 5px; }
   <nav class="nav">
     <div class="nav-head">
       <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.2</span></div>
-      <div class="nav-sub">パーツ分割 2D アバターの配布形式</div>
+      <div class="nav-sub">組み合わせ可能な2Dスプライトの配布形式</div>
       <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
     </div>
 
@@ -346,9 +346,8 @@ li { margin-bottom: 5px; }
 
       <h1>EMG 0.5 リファレンス</h1>
       <p class="lede">
-        <code class="inl">.emg</code> は、パーツに分割した 2D キャラクター素材を配布するための
-        エンジン非依存の形式です。ZIP の中に <code class="inl">data.json</code> と
-        テクスチャアトラスの PNG が入っています。
+        <code class="inl">.emg</code> は、組み合わせ可能な2Dスプライトの配布形式です。ZIP の中に <code class="inl">data.json</code>
+		とテクスチャアトラスの PNG が入っています。
       </p>
 
       <div class="legend">
@@ -374,10 +373,20 @@ li { margin-bottom: 5px; }
 
         <p>
           1 つの <code class="inl">.emg</code> は <strong>パーツの集まり</strong>です。
-          パーツは <code class="inl">static</code>（常に全レイヤーを描く。体・背景）か
-          <code class="inl">switch</code>（フレームを 1 つだけ描く。目・口）のどちらかで、
-          この区別が全実装の分岐点になっています。
+          パーツは <code class="inl">static</code>（レイヤーを重ねて描く。体、背景、部屋の壁）か
+          <code class="inl">switch</code>（フレームを 1 つだけ描く。目、口、看板の表示内容、エフェクトのコマ）の
+          どちらかで、この区別が全実装の分岐点になっています。
         </p>
+
+        <div class="note">
+          <p><strong>キャラクター専用の形式ではありません。</strong>
+          <code class="inl">data.json</code> に人物を前提とした構造はどこにもなく、あるのは
+          「重ねるレイヤー」と「差し替えるコマ」だけです。背景、小物、UI パーツ、シーンの切り替え、
+          エフェクトのコマ送りも同じ仕組みで表せます。
+          人物を前提にしているのは、まばたき・口パク・表情という<em>意味</em>を与える
+          任意のコンパニオンファイル <a href="#mapping"><code class="inl">mapping.json</code></a> の側だけです。
+          本書がキャラクターを例に出すのは、それが最も作り込まれた用途だからで、唯一の用途だからではありません。</p>
+        </div>
 
 <pre><span class="c">// data.json の骨格</span>
 {
@@ -954,7 +963,7 @@ li { margin-bottom: 5px; }
       <!-- ─────────────────────────────────────────────── -->
       <section id="states">
         <h2>状態の使い分け</h2>
-        <p class="sec-note">着せ替え・小物・シーン・表情を、どの機構で表現するか。</p>
+        <p class="sec-note">差し替え・on/off・まとめ指定を、どの機構で表現するか。</p>
 
         <p>
           v0.5 には状態を表す機構が 4 つあります。<strong>似て見えますが排他性の扱いが違い</strong>、
@@ -1349,7 +1358,7 @@ li { margin-bottom: 5px; }
           古いファイルは再書き出しするか、<code class="inl">z' = maxZ - z</code> で正規化してください。
         </p>
 
-        <h3>アバター全体が 1 つのパーツになっているファイルがある</h3>
+        <h3>ファイル全体が 1 つのパーツになっているファイルがある</h3>
         <p>
           生成側の不具合で、入れ子のグループが 1 つのパーツに潰れたファイルが存在します
           （36 レイヤーで 1 パーツ）。これは<strong>再書き出しで直すべき</strong>もので、
@@ -1437,8 +1446,8 @@ li { margin-bottom: 5px; }
 
       <footer class="foot">
         <div>
-          <strong>EMG</strong> — パーツ分割 2D アバターの配布形式。
-          Apache License 2.0。
+          <strong>EMG</strong> — 組み合わせ可能な2Dスプライトの配布形式
+          Apache License 2.0
         </div>
         <div class="foot-links">
           <a href="https://github.com/pxrllc/emg">リポジトリ</a>

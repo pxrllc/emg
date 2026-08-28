@@ -1,7 +1,7 @@
 class_name EmgAvatar
 extends Node2D
 
-## Loads and plays an .emg character file (EMG format v0.2.2 / v0.3.0 mapping.json).
+## Loads and plays an .emg file (EMG format v0.2.2 / v0.3.0 mapping.json).
 ## See emg-json-spec.md and emg-mapping-spec.md at the repository root for the
 ## normative format this loader implements.
 

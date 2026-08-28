@@ -1,8 +1,8 @@
 # EMG Loader for Ren'Py
 
-A runtime loader that allows Ren'Py games to directly load and use `.emg` character files without conversion.
+A runtime loader that allows Ren'Py games to directly load and use `.emg` files without conversion.
 
-`.emg` キャラクターファイルを変換なしで直接読み込み、使用できる Ren'Py 用のランタイムローダーです。
+`.emg` を変換なしで直接読み込み、使用できる Ren'Py 用のランタイムローダーです。
 
 ## Setup / セットアップ
 
@@ -20,8 +20,8 @@ In your `script.rpy` or any `init python` block, call `load_emg` to register the
 
 ```renpy
 init python:
-    # Load the character file (path relative to game/)
-    # キャラクターファイルを読み込みます（game/ からの相対パス）
+    # Load the .emg file (path relative to game/)
+    # `.emg` を読み込みます（game/ からの相対パス）
     load_emg("assets/zunda.emg")
 
 label start:
@@ -115,7 +115,7 @@ EMGパーツは標準的なRen'Py画像として登録されるため、Ren'Py�
 - **Direct Loading**: Reads `.emg` (ZIP) files directly.
   - `.emg` (ZIP) ファイルを直接読み込みます。
 - **Dynamic Composition**: Uses `im.Composite` and `im.Crop` to construct characters from the texture atlas at runtime.
-  - 実行時に `im.Composite` と `im.Crop` を使用してテクスチャアトラスからキャラクターを構築します。
+  - 実行時に `im.Composite` と `im.Crop` を使用してテクスチャアトラスから絵を構築します。
 - **Memory Efficient**: Loads the texture atlas once and shares it across all parts.
   - テクスチャアトラスを一度だけ読み込み、全パーツで共有するためメモリ効率が良いです。
 
