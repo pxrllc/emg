@@ -14,6 +14,8 @@ public static class EmgCompat
     /// EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
     /// </summary>
     public static readonly IReadOnlySet<string> SupportedExtensions =
+        // EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
+        // パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
         new HashSet<string> { "EMG_frame_name", "EMG_switch_none" };
 
     /// <summary>

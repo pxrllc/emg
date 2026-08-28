@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EMG 0.5.2 リファレンス</title>
-<meta name="description" content="EMG 0.5.2 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
+<title>EMG 0.5.3 リファレンス</title>
+<meta name="description" content="EMG 0.5.3 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -294,7 +294,7 @@ li { margin-bottom: 5px; }
 <div class="shell">
   <nav class="nav">
     <div class="nav-head">
-      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.2</span></div>
+      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.3</span></div>
       <div class="nav-sub">組み合わせ可能な2Dスプライトの配布形式</div>
       <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
     </div>
@@ -356,6 +356,7 @@ li { margin-bottom: 5px; }
         <div><span class="ver v5">0.5.0</span> 表現力を追加</div>
         <div><span class="ver v5">0.5.1</span> switch の「どれも出さない」</div>
         <div><span class="ver v5">0.5.2</span> 実装間で結果を一致させる規定</div>
+        <div><span class="ver v5">0.5.3</span> レイヤー単位のトランスフォーム</div>
       </div>
 
       <div class="note">
@@ -390,7 +391,7 @@ li { margin-bottom: 5px; }
 
 <pre><span class="c">// data.json の骨格</span>
 {
-  <span class="k">"version"</span>: <span class="s">"0.5.2"</span>,
+  <span class="k">"version"</span>: <span class="s">"0.5.3"</span>,
   <span class="k">"requiredExtensions"</span>: [],          <span class="c">// 0.4.0</span>
   <span class="k">"baseCanvasWidth"</span>: 2894,
   <span class="k">"baseCanvasHeight"</span>: 4093,
@@ -717,6 +718,12 @@ li { margin-bottom: 5px; }
           回転と拡縮の基準点（キャンバス座標）。<a href="#tracks"><code class="inl">tracks[]</code></a> でのみ使います。
           不在時は <code class="inl">basePosition_*</code> と同値です。
         </p>
+        <div class="note">
+          <p><strong>アンカーはレイヤーごとに独立しています</strong> <span class="ver v5">0.5.3 で明文化</span>。
+          トランスフォームは、処理中のレイヤー自身のアンカーを軸に適用されます。パーツ共通の 1 点ではありません。
+          そのため 1 本の <code class="inl">rotation</code> トラックで、髪の房のそれぞれを自分の根元を軸に回せます。
+          パーツ全体を 1 点で回したい場合は、所属レイヤー全部に同じ値を書きます。</p>
+        </div>
 
         <div class="warn">
           <p><strong><code class="inl">textureID</code> はパーツ内でのみ一意です。</strong>
@@ -741,6 +748,7 @@ li { margin-bottom: 5px; }
           <tr><td><code>sequence</code></td><td class="t-type">Sequence</td><td><span class="opt">任意</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
           <tr><td><code>fps</code></td><td class="t-type">number</td><td><span class="opt">任意</span></td><td class="dfl">12</td><td><span class="ver v4">0.4.0 で任意化</span></td></tr>
           <tr><td><code>trigger</code></td><td class="t-type">Trigger</td><td><span class="opt">任意</span></td><td>自律再生しない</td><td><span class="ver">0.3.0</span></td></tr>
+          <tr><td><code>targetLayer</code></td><td class="t-type">string</td><td><span class="opt">任意</span></td><td>パーツ全体</td><td><span class="ver v5">0.5.3</span></td></tr>
           <tr><td><code>tracks</code></td><td class="t-type">Track[]</td><td><span class="opt">任意</span></td><td>—</td><td><span class="ver v5">0.5.0</span></td></tr>
           <tr><td><code>duration</code></td><td class="t-type">number</td><td><span class="req">tracks では必須</span></td><td>—</td><td><span class="ver v5">0.5.0</span></td></tr>
           <tr><td><code>loop</code></td><td class="t-type">"once" | "loop" | "pingpong"</td><td><span class="opt">任意</span></td><td class="dfl">"loop"</td><td><span class="ver v5">0.5.0</span></td></tr>
@@ -885,12 +893,53 @@ li { margin-bottom: 5px; }
         </p>
 
         <h3>適用順序</h3>
+        <p class="sec-note">対象となる<strong>各レイヤー</strong>へ、この順で適用します。1 と 4 で使うのは、そのレイヤー自身のアンカーです。</p>
 <pre>1. アンカー点（anchor_x, anchor_y）を原点へ移動
 2. scale_x / scale_y
 3. rotation
 4. アンカー点を元の位置へ戻す
 5. translate_x / translate_y
 6. opacity を layer.opacity に乗じる</pre>
+
+        <h3><code>targetLayer</code> — パーツの一部だけを動かす <span class="ver v5">0.5.3</span></h3>
+        <p>
+          トランスフォームの対象を、<code class="inl">targetPartID</code> のパーツ内の
+          特定の<a href="#frameid">フレーム識別子</a>に絞ります。不在ならこれまでどおりパーツ全体が対象です。
+        </p>
+
+<pre>{
+  <span class="k">"spriteID"</span>: <span class="s">"hair_sway"</span>,
+  <span class="k">"targetPartID"</span>: <span class="s">"Body"</span>,
+  <span class="k">"targetLayer"</span>: <span class="s">"Back_hair"</span>,   <span class="c">// 0.5.3</span>
+  <span class="k">"duration"</span>: 3.0,
+  <span class="k">"loop"</span>: <span class="s">"pingpong"</span>,
+  <span class="k">"tracks"</span>: [ { <span class="k">"path"</span>: <span class="s">"rotation"</span>, <span class="k">"keys"</span>: [ … ] } ]
+}</pre>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>規則</th><th>内容</th></tr>
+          <tr><td>1</td><td><code>sequence</code> と併用してはいけません。<code>sequence</code> はパーツ内のフレームを切り替えるものなので、対象を 1 つに絞ることと両立しません</td></tr>
+          <tr><td>2</td><td>値は対象パーツに実在するフレーム識別子であること</td></tr>
+          <tr><td>3</td><td>同じフレーム識別子を持つレイヤーが複数ある場合、その<strong>すべて</strong>が対象になります</td></tr>
+          <tr><td>4</td><td>パーツのレイヤーが 1 枚しかない場合は書くべきではありません（効果が同じで宣言義務だけ増える）</td></tr>
+        </table>
+        </div>
+
+        <div class="warn">
+          <p><strong><code class="inl">targetLayer</code> を使うファイルは
+          <code class="inl">EMG_layer_transform</code> の宣言が必須です。</strong>
+          理解しない実装はこのフィールドを無視して<strong>パーツ全体を</strong>動かします。
+          髪だけが揺れるはずの絵で体ごと揺れるので、「動かない」ではなく「違う絵」になります。</p>
+        </div>
+
+        <p class="sec-note">
+          同じことは動かしたい部分を独立した <code class="inl">parts[]</code> に切り出しても表現できます。
+          それでもこの機能があるのは、<strong>パーツが描画の単位であると同時に状態と意味づけの単位でもある</strong>ためです。
+          <code class="inl">presets[]</code> の <code class="inl">parts</code> / <code class="inl">toggles</code>、
+          <code class="inl">mapping.json</code> の <code class="inl">blinkPartKey</code> などはすべて partID で働くので、
+          動きの都合で房を独立させると、衣装の着せ替えプリセットが体を指しても房には及ばなくなります。
+        </p>
 
         <h3><code>interpolation</code> — キーとキーの間をどう埋めるか</h3>
         <div class="tbl-scroll">
@@ -1288,6 +1337,8 @@ li { margin-bottom: 5px; }
               <td>1 つのフレーム識別子に <strong>2 枚以上</strong>のレイヤーが属する場合</td></tr>
           <tr><td><code>EMG_switch_none</code> <span class="ver v5">0.5.1</span></td><td><code>parts[].defaultVisible</code></td>
               <td><code>type: "switch"</code> のパーツに <code>defaultVisible: false</code> を指定した場合</td></tr>
+          <tr><td><code>EMG_layer_transform</code> <span class="ver v5">0.5.3</span></td><td><code>sprites[].targetLayer</code></td>
+              <td><code>targetLayer</code> を持つ sprite が 1 つでもある場合</td></tr>
         </table>
         </div>
 

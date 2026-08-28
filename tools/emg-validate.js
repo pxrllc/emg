@@ -14,7 +14,15 @@ const path = require('path');
 const JSZip = require('../emg-packer/node_modules/jszip');
 
 /** emg-extensions-registry.md に登録されている識別子 */
-const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
+const KNOWN_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none', 'EMG_layer_transform']);
+
+/** v0.5.0 7.3。**この 6 種以外は定義されていない。** */
+const TRANSFORM_PATHS = new Set([
+    'translate_x', 'translate_y', 'rotation', 'scale_x', 'scale_y', 'opacity',
+]);
+/** v0.5.0 7.5 / 7.6。 */
+const INTERPOLATIONS = new Set(['step', 'linear', 'cubic']);
+const LOOP_MODES = new Set(['once', 'loop', 'pingpong']);
 
 /** emg-json-spec-0.4.0.md 5.1（CSS mix-blend-mode と同一） */
 const KNOWN_BLEND_MODES = new Set([
@@ -163,6 +171,71 @@ function validate(data, entryNames, mapping) {
         for (const r of refs) {
             if (!known.has(r)) E(`sprite '${s.spriteID}' が参照するフレーム '${r}' が '${s.targetPartID}' にありません`);
         }
+
+        // --- 0.5.3 7.4.1: targetLayer ---
+        if (s.targetLayer !== undefined) {
+            if (s.sequence) {
+                E(`sprite '${s.spriteID}' は targetLayer と sequence を同時に持っています。`
+                  + `sequence はパーツ内のフレームを切り替えるものなので、対象を 1 つに絞ることと両立しません（0.5.3 7.4.1 規則 1）`);
+            }
+            const frames = new Set((target.layers ?? []).map(frameId));
+            if (!frames.has(s.targetLayer)) {
+                E(`sprite '${s.spriteID}' の targetLayer '${s.targetLayer}' が '${s.targetPartID}' にありません（0.5.3 7.4.1 規則 2）`);
+            }
+            if (frames.size === 1) {
+                W(`sprite '${s.spriteID}' の対象パーツ '${s.targetPartID}' はフレームが 1 つしかないため、`
+                  + `targetLayer は書くべきではありません（0.5.3 7.4.1 規則 4）`);
+            }
+            if (!(data.requiredExtensions ?? []).includes('EMG_layer_transform')) {
+                E(`sprite '${s.spriteID}' が targetLayer を使っていますが、`
+                  + `requiredExtensions に 'EMG_layer_transform' がありません（0.5.3 7.4.1）。`
+                  + `理解しない実装はパーツ全体を動かすため、別の絵になります`);
+            }
+        }
+
+        // --- tracks の中身（v0.5.0 7.3 / 7.5 / 7.6）---
+        for (const tr of s.tracks ?? []) {
+            if (!TRANSFORM_PATHS.has(tr.path)) {
+                E(`sprite '${s.spriteID}' の track path '${tr.path}' は定義されていません`
+                  + `（v0.5.0 7.3 は ${[...TRANSFORM_PATHS].join(' / ')} の 6 種のみ）`);
+            }
+            if (!Array.isArray(tr.keys) || tr.keys.length === 0) {
+                E(`sprite '${s.spriteID}' の track '${tr.path}' に keys がありません（7.2）`);
+                continue;
+            }
+            let prev = -Infinity;
+            for (const k of tr.keys) {
+                if (typeof k.t !== 'number' || typeof k.v !== 'number') {
+                    E(`sprite '${s.spriteID}' の track '${tr.path}' のキーは { t, v } の数値でなければなりません`);
+                    break;
+                }
+                if (k.t < prev) {
+                    E(`sprite '${s.spriteID}' の track '${tr.path}' の keys が t の昇順ではありません（7.2）`);
+                    break;
+                }
+                prev = k.t;
+            }
+            if (tr.interpolation !== undefined && !INTERPOLATIONS.has(tr.interpolation)) {
+                E(`sprite '${s.spriteID}' の track '${tr.path}' の interpolation '${tr.interpolation}' は`
+                  + `定義されていません（7.5 は step / linear / cubic のみ）`);
+            }
+            // 7.6: loop は終端と始端を補間しない。値が食い違うとループで飛ぶ。
+            if ((s.loop ?? 'loop') === 'loop' && tr.keys.length > 1) {
+                const first = tr.keys[0], last = tr.keys[tr.keys.length - 1];
+                if (last.t >= (s.duration ?? 0) && first.v !== last.v) {
+                    W(`sprite '${s.spriteID}' の track '${tr.path}' は loop ですが、`
+                      + `始端 ${first.v} と終端 ${last.v} が違います。ループのたびに値が飛びます（7.6）`);
+                }
+            }
+        }
+        if (s.loop !== undefined && !LOOP_MODES.has(s.loop)) {
+            E(`sprite '${s.spriteID}' の loop '${s.loop}' は定義されていません（7.6 は once / loop / pingpong のみ）`);
+        }
+        // 10.5: loop は tracks にのみ効く。tracks が無いのに書いてあると誤解を生む。
+        if (s.loop !== undefined && !s.tracks) {
+            W(`sprite '${s.spriteID}' は tracks を持たないのに loop があります。`
+              + `loop は tracks にのみ効きます（0.5.2 10.5）`);
+        }
     }
 
     // --- 0.5.2 10.5.1: 同一パーツを自律発火の sequence が奪い合ってはならない ---
@@ -181,6 +254,37 @@ function validate(data, entryNames, mapping) {
                 E(`パーツ '${partID}' を自律発火する sprite が ${ids.length} 個あります`
                   + `（${ids.map(i => `'${i}'`).join(', ')}）。表示できるフレームは 1 つなので`
                   + `取り合いになります（0.5.2 10.5.1）`);
+            }
+        }
+    }
+
+    // --- 0.5.3 7.4: 同一レイヤーを対象にするトランスフォームが 2 つあってはならない ---
+    // 合成順序が未定義なので、実装ごとに違う絵になる。
+    // 0.5.2 までは「同一パーツ」が単位だったが、targetLayer の追加で
+    // 別レイヤーを狙う sprite の併存は正当になった。
+    {
+        const byTarget = new Map();
+        for (const s of data.sprites ?? []) {
+            if (!s.tracks?.length) continue;
+            const key = `${s.targetPartID} ${s.targetLayer ?? '*'}`;
+            if (!byTarget.has(key)) byTarget.set(key, []);
+            byTarget.get(key).push(s.spriteID);
+        }
+        for (const [key, ids] of byTarget) {
+            if (ids.length > 1) {
+                const [partID, layer] = key.split(' ');
+                E(`${layer === '*' ? `パーツ '${partID}'` : `'${partID}' の '${layer}'`} を対象とする`
+                  + `トランスフォーム sprite が ${ids.length} 個あります（${ids.map(i => `'${i}'`).join(', ')}）。`
+                  + `合成順序は未定義です（0.5.3 7.4）`);
+            }
+        }
+        // パーツ全体と、その中のレイヤーを同時に狙うのも同じ理由で避ける。
+        for (const key of byTarget.keys()) {
+            const [partID, layer] = key.split(' ');
+            if (layer === '*') continue;
+            if (byTarget.has(`${partID} *`)) {
+                W(`'${partID}' はパーツ全体を狙う sprite と '${layer}' を狙う sprite の両方の対象です。`
+                  + `そのレイヤーには 2 つのトランスフォームが掛かります（0.5.3 7.4）`);
             }
         }
     }

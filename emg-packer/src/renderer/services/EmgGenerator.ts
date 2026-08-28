@@ -273,7 +273,7 @@ export class EmgGenerator {
         ];
 
         return {
-            version: '0.5.2',
+            version: '0.5.3',
             ...(requiredExtensions.length > 0 ? { requiredExtensions } : {}),
             baseCanvasWidth: psdWidth,
             baseCanvasHeight: psdHeight,
