@@ -658,7 +658,21 @@ export function useEmgPacker() {
      * packItems 配列になり、**全素材が 1 枚のアトラスに詰められる**（要件 R-1）。
      * ソースごとに PackResult を持つ実装にはしない。
      */
+    /**
+     * `.emg` を編集中に足そうとしている。開くのか足すのかを尋ねるまで保留する。
+     *
+     * `.emg` は 1 つで完結したファイルなので、放り込んだ人はたいてい
+     * 「開きたい」。黙って合流させると、元の絵が残ったまま別のものが増え、
+     * しかも意味づけ（まばたき等）が上書きされる。
+     */
+    const [pendingEmgDrop, setPendingEmgDrop] = useState<File | null>(null);
+
     const handleSourceAdd = async (file: File) => {
+        // 空なら迷う余地がないのでそのまま開く。
+        if (isEmgFile(file.name) && (psdRootRef.current?.children?.length ?? 0) > 0) {
+            setPendingEmgDrop(file);
+            return;
+        }
         try {
             // 空から足した最初の素材で名前を決める。以後は上書きしない
             // （2 つ目を足すたびに保存名が変わると探しにくい）。
@@ -681,7 +695,7 @@ export function useEmgPacker() {
      * **元の PSD を置き換えるものではありません。** グループ階層、書き出しに
      * 含めなかったレイヤー、トリミング前の余白は戻りません。
      */
-    const importEmg = async (file: File) => {
+    const importEmg = async (file: File, mode: 'open' | 'merge' = 'open') => {
         const loaded = await EmgLoader.load(file);
         const renamed = mergeSource(loaded.source, file.name);
         if (!renamed) return;
@@ -705,14 +719,40 @@ export function useEmgPacker() {
             lipSyncPartId: loaded.mapping.lipSyncPartId ? pid(loaded.mapping.lipSyncPartId) : '',
         };
 
-        // アニメーションはパーツ単位で独立しているので重ねる。
-        // まばたき・プリセット・表情は presetID の参照で結び付いた一式なので置き換える
-        // （テンプレートの適用と同じ判断）。
+        // アニメーションとトランスフォームはパーツ単位で独立しているので重ねる。
         setPartAnimations(prev => ({ ...prev, ...animations }));
         setPartTransforms(prev => ({ ...prev, ...transforms }));
-        setMapping(mapping);
-        setPresets(presets);
-        setExpressions(loaded.expressions);
+
+        if (mode === 'open') {
+            // まばたき・プリセット・表情は presetID の参照で結び付いた一式なので置き換える。
+            setMapping(mapping);
+            setPresets(presets);
+            setExpressions(loaded.expressions);
+        } else {
+            // **合流のときは今の設定を壊さない。** 以前はここでも置き換えていたため、
+            // 編集中のファイルに `.emg` を足すと、それまでのまばたき・口パクの
+            // 割り当てが黙って消えていた。
+            let keptMapping = false;
+            setMapping(prev => {
+                const touched = !!prev.blink.open || !!prev.blink.closed
+                    || !!prev.lipSync.a || !!prev.lipSync.n;
+                if (touched) { keptMapping = true; return prev; }
+                return mapping;
+            });
+            // プリセットと表情は名前がぶつからないものだけ足す。
+            setPresets(prev => {
+                const used = new Set(prev.map(p => p.presetID));
+                return [...prev, ...presets.filter(p => !used.has(p.presetID))];
+            });
+            setExpressions(prev => {
+                const used = new Set(prev.map(e => e.name));
+                return [...prev, ...loaded.expressions.filter(e => !used.has(e.name))];
+            });
+            if (keptMapping) {
+                loaded.warnings.push('今のまばたき・口パクの割り当てを残したため、'
+                    + '読み込んだ側の割り当ては使いませんでした');
+            }
+        }
 
         if (loaded.warnings.length > 0) {
             setToast({
@@ -1722,6 +1762,20 @@ export function useEmgPacker() {
         projectName,
         setProjectName,
         handleSourceAdd,
+        pendingEmgDrop,
+        resolveEmgDrop: (how: 'open' | 'merge' | 'cancel') => {
+            const file = pendingEmgDrop;
+            setPendingEmgDrop(null);
+            if (!file || how === 'cancel') return;
+            if (how === 'open') { void handlePsdLoad(file); return; }
+            void (async () => {
+                try { await importEmg(file, 'merge'); }
+                catch (e) {
+                    setToast({ title: `${file.name} を取り込めませんでした`,
+                        body: String(e instanceof Error ? e.message : e), tone: 'error' });
+                }
+            })();
+        },
         handleSheetImport,
         handlePsdUpdate,
         handleLayerVisibilityChange,

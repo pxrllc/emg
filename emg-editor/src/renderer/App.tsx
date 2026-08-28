@@ -14,6 +14,7 @@ import { SpriteSheetDialog } from './components/SpriteSheetDialog';
 import { TemplateReportDialog } from './components/TemplateReportDialog';
 import { CanvasSizeDialog } from './components/CanvasSizeDialog';
 import { PreviewExportDialog } from './components/PreviewExportDialog';
+import { EmgDropDialog } from './components/EmgDropDialog';
 import { computeBounds, drawComposite } from './services/composite';
 import { exportPreview, extensionOf } from './services/previewExport';
 import { downloadBlob, prepareSave } from './services/download';
@@ -31,7 +32,8 @@ function App() {
         handleExpressionRename, handleExpressionDelete,
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
-        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, setProjectName, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, setProjectName, handleSourceAdd,
+        pendingEmgDrop, resolveEmgDrop, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, pendingExport, handleSavePending, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
@@ -388,6 +390,9 @@ function App() {
                         setSheetFile(null);
                     }}
                 />
+            )}
+            {pendingEmgDrop && (
+                <EmgDropDialog fileName={pendingEmgDrop.name} onChoose={resolveEmgDrop} />
             )}
             {previewExportOpen && psdRoot && (
                 <PreviewExportDialog
