@@ -51,6 +51,11 @@ EMG は、パーツ分割された 2D 素材を「軽量かつ汎用的に動か
 - `sequence` および `trigger` による自律アニメーション再生
 - `mapping.json` による表情・まばたき・リップシンクの外部制御（`setBlinkState` / `setViseme` / `setExpression`）
 
+`emg-cdn/index.html` はこのライブラリのデモページ（GitHub Pages の `/`）です。
+デモの `.emg` を選ぶか自分のファイルを開くと、描画結果とテクスチャアトラスを並べて表示し、
+どちらか一方でレイヤーを指すともう一方の対応する位置を矩形で示します
+（アトラス座標＝どこから取るか／キャンバス座標＝どこへ描くか）。
+
 ### 使い方
 
 ```html
@@ -64,10 +69,26 @@ EMG は、パーツ分割された 2D 素材を「軽量かつ汎用的に動か
 // URLからロードして指定のコンテナに展開
 window.EMGPlayer.loadEmgFromCDN('https://example.com/character.emg', 'layerContainer');
 
+// ユーザーが選んだ・ドロップしたファイルをそのまま渡すこともできる
+window.EMGPlayer.loadEmgFromFile(file, 'layerContainer', file.name);
+
 // mapping.json が同梱されている場合、外部から状態を制御できる
 window.EMGPlayer.setBlinkState('closed');   // 'open' | 'half' | 'closed'
 window.EMGPlayer.setViseme('a');            // 'a' | 'i' | 'u' | 'e' | 'o' | 'n'
 window.EMGPlayer.setExpression('happy');
+```
+
+読み込みの結果は `window` のイベントで受け取れます。読めなかった場合、
+**表示中の内容はそのまま残ります**（読めると分かるまで差し替えません）。
+
+```javascript
+window.addEventListener('emg:loaded', e => {
+    // e.detail: { source, data, mapping, textures, version, containerId }
+    // textures は textureFile -> Object URL。アトラスを自前で表示するときに使う
+});
+window.addEventListener('emg:error', e => {
+    // e.detail: { source, error }
+});
 ```
 
 `mapping.json` が存在しない、または対象パーツを解決できない場合、これらの呼び出しは何もせず安全に無視されます（`emg-mapping-spec.md` 参照）。

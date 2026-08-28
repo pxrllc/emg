@@ -21,6 +21,25 @@
     const BLINK_KEYWORDS = ['eye', 'eyes', 'eyelid', 'blink', '目'];
     const MOUTH_KEYWORDS = ['mouth', 'lip', 'viseme', '口'];
 
+    function resetMappingState() {
+        Object.assign(mappingState, {
+            blinkPartID: null, blinkExplicit: false,
+            mouthPartID: null, mouthExplicit: false,
+            currentExpression: 'default',
+            activeBlinkOverride: null, activeLipSyncOverride: null
+        });
+    }
+
+    /** 走っているタイマーを全部止める。読み直し・停止・リセットで共通。 */
+    function stopTimers() {
+        window.animationIntervals.forEach(clearInterval);
+        window.timeouts.forEach(clearTimeout);
+        window.animationIntervals = [];
+        window.timeouts = [];
+        if (transformRafId !== null) { cancelAnimationFrame(transformRafId); transformRafId = null; }
+        transformSprites = [];
+    }
+
     // JSZip のロードチェック
     if (typeof JSZip === 'undefined') {
         const jsZipScript = document.createElement('script');
@@ -38,8 +57,14 @@
         // 公開関数
         window.EMGPlayer = {
             loadEmgFromCDN: loadEmgFromCDN,
+            // ローカルの File / Blob を直接読む。fetch できない
+            // （ユーザーが選んだ・ドロップした）ファイル向け。
+            loadEmgFromFile: loadEmgFromBlob,
             toggleAnimation: toggleAnimation,
             resetAnimation: resetAnimation,
+            // 読み込んだアトラスの Object URL（textureFile -> URL）。
+            // 中身を見せる側（アトラス表示など）が同じ画像を二重に展開しないで済むように公開する。
+            getTextures: () => ({ ...textureUrls }),
             // v0.3.0: mapping.json による外部制御API
             setBlinkState: applyBlinkState,
             setViseme: applyViseme,
@@ -49,13 +74,46 @@
         };
     }
 
+    // 展開済みアトラスの Object URL。読み直すたびに revoke しないと、
+    // 何度も読み込むページ（ビューアやデモ）で画像がメモリに残り続ける。
+    // v0.1.0 互換の経路は同じ URL を "default" とファイル名の 2 か所に入れるので、
+    // 捨てるときは重複を除くこと。
+    let textureUrls = {};
+
+    /**
+     * 読み込みの結果を知らせる。`window` に飛ばすので、プレイヤーを
+     * 単に `<script>` で読んだページからも拾える。
+     *   emg:loaded { source, data, mapping, textures, version, containerId }
+     *   emg:error  { source, error }
+     */
+    function emit(name, detail) {
+        window.dispatchEvent(new CustomEvent(name, { detail }));
+    }
+
     async function loadEmgFromCDN(url, containerId = "layerContainer") {
         try {
             console.log(`Loading EMG from: ${url}`);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const blob = await response.blob();
+            return await loadEmgFromBlob(await response.blob(), containerId, url);
+        } catch (error) {
+            // 例外を投げ直さないのは、この関数を await せずに呼ぶ既存の埋め込みが
+            // unhandled rejection を出すようになってしまうため。失敗は emg:error で伝える。
+            console.error("Failed to load EMG:", error);
+            emit('emg:error', { source: url, error });
+            return false;
+        }
+    }
 
+    async function loadEmgFromBlob(blob, containerId = "layerContainer", source = null) {
+        const label = source ?? (blob && blob.name) ?? '(blob)';
+        try {
+            /*
+             * 読めると分かるまで、いま表示しているものには手を付けない。
+             * 先に消してしまうと、EMG でないファイルを渡されたときに
+             * 画面だけ壊れて「何も出ていないのに理由が分からない」状態になる。
+             * 差し替えは下の「ここから差し替え」以降でまとめて行う。
+             */
             const zip = new JSZip();
             const zipContent = await zip.loadAsync(blob);
 
@@ -64,41 +122,45 @@
                 Object.keys(zipContent.files).find(name => name.endsWith(".json") && !name.endsWith("mapping.json"));
 
             if (!jsonFile) {
-                console.error("EMGファイル内に JSON が見つかりません！");
-                return;
+                throw new Error("この .emg には data.json がありません（ZIP の中身が EMG ではないようです）");
             }
 
             const jsonText = await zipContent.files[jsonFile].async("text");
-            window.jsonData = JSON.parse(jsonText);
-            window.emgVersion = window.jsonData.version || "0.1.0";
+            const data = JSON.parse(jsonText);
+            const version = data.version || "0.1.0";
 
-            console.log(`EMG Version: ${window.emgVersion}`);
+            console.log(`EMG Version: ${version}`);
 
             // v0.4.0 §2.2: mapping やテクスチャの展開より前に判定する
-            checkRequiredExtensions(window.jsonData);
+            checkRequiredExtensions(data);
 
             // mapping.json (任意のコンパニオンファイル。無ければ無視する)
+            let mapping = null;
             const mappingFile = Object.keys(zipContent.files).find(name => name.endsWith("mapping.json"));
             if (mappingFile) {
                 try {
-                    const mappingText = await zipContent.files[mappingFile].async("text");
-                    window.emgMapping = JSON.parse(mappingText);
-                    console.log("mapping.json loaded:", window.emgMapping.avatarId);
+                    mapping = JSON.parse(await zipContent.files[mappingFile].async("text"));
+                    console.log("mapping.json loaded:", mapping.avatarId);
                 } catch (e) {
                     console.warn("Failed to parse mapping.json, ignoring:", e);
-                    window.emgMapping = null;
+                    mapping = null;
                 }
-            } else {
-                window.emgMapping = null;
             }
 
-            // テクスチャ読み込み
-            // v0.2.2: textures 配列からファイル名を取得
-            // v0.1.0: ファイル検索で画像を探す
-            const textureBlobs = {};
+            // ---- ここから差し替え ----
+            stopTimers();
+            resetMappingState();
+            window.isAnimationRunning = true;
+            window.jsonData = data;
+            window.emgVersion = version;
+            window.emgMapping = mapping;
 
-            if (window.jsonData.textures && Array.isArray(window.jsonData.textures)) {
-                for (const texMeta of window.jsonData.textures) {
+            // 前のアトラスは、新しいものを作り終えてから捨てる。
+            const previous = textureUrls;
+            const textureBlobs = textureUrls = {};
+
+            if (data.textures && Array.isArray(data.textures)) {
+                for (const texMeta of data.textures) {
                     const fileName = texMeta.textureFile;
                     const fileInZip = Object.keys(zipContent.files).find(name => name.endsWith(fileName));
                     if (fileInZip) {
@@ -119,15 +181,29 @@
                 }
             }
 
-            renderLayers(window.jsonData, textureBlobs, containerId);
+            for (const url of new Set(Object.values(previous))) URL.revokeObjectURL(url);
+
+            renderLayers(data, textureBlobs, containerId);
 
             // mapping.json のパーツ役割解決（mapping が無ければ両方 null のまま）
             resolvePartRoles();
 
             startAnimation();
 
+            emit('emg:loaded', {
+                source: label,
+                data: window.jsonData,
+                mapping: window.emgMapping,
+                textures: { ...textureUrls },
+                version: window.emgVersion,
+                containerId
+            });
+            return true;
+
         } catch (error) {
-            console.error("Failed to load EMG from CDN:", error);
+            console.error("Failed to load EMG:", error);
+            emit('emg:error', { source: label, error });
+            return false;
         }
     }
 
@@ -315,6 +391,11 @@
         container.style.position = 'relative';
         container.style.overflow = 'hidden';
 
+        // レイヤーの通し番号。(partID, フレーム識別子) はレイヤーを一意に指さない
+        // （frameName で複数レイヤーが同じ識別子を共有する）ので、
+        // 1 枚を名指ししたい側のために宣言順の番号を振っておく。
+        let layerIndex = 0;
+
         if (jsonData.parts) {
             // v0.2.2+ render logic
             jsonData.parts.forEach(part => {
@@ -331,6 +412,7 @@
                     div.classList.add('layer');
                     div.dataset.partId = part.partID;
                     div.dataset.type = partType;
+                    div.dataset.layerIndex = String(layerIndex++);
                     div.id = layer.textureID; // 後方互換のため維持
                     // textureID はパーツ間で重複しうる（senti では "01" が Mouth/Eyes/Eyebrows に存在）ため、
                     // 切り替えの一致判定には id ではなく data 属性を使う。
@@ -400,6 +482,7 @@
             jsonData.layers.forEach(layer => {
                 const div = document.createElement('div');
                 div.classList.add('layer');
+                div.dataset.layerIndex = String(layerIndex++);
                 applyLayerStyles(div);
 
                 if (layer.imgType === 'Texture') {
@@ -653,17 +736,12 @@
         if (!window.isAnimationRunning) return;
         if (!window.jsonData) return;
 
-        // Clear existing intervals
-        window.animationIntervals.forEach(clearInterval);
-        window.timeouts.forEach(clearTimeout);
-        window.animationIntervals = [];
-        window.timeouts = [];
+        stopTimers();
 
         // v0.5.0 §7: tracks を持つ sprite は毎フレーム評価する経路へ回す。
         transformSprites = (window.jsonData.sprites ?? [])
             .filter(sp => Array.isArray(sp.tracks) && sp.tracks.length > 0)
             .filter(sp => !isPartHidden(sp.targetPartID));
-        if (transformRafId !== null) { cancelAnimationFrame(transformRafId); transformRafId = null; }
         startTransformLoop();
 
         if (window.jsonData.sprites) {
@@ -814,19 +892,13 @@
         if (window.isAnimationRunning) {
             startAnimation();
         } else {
-            window.animationIntervals.forEach(clearInterval);
-            window.timeouts.forEach(clearTimeout);
-            window.animationIntervals = [];
-            window.timeouts = [];
+            stopTimers();
         }
     }
 
     function resetAnimation() {
         window.isAnimationRunning = false;
-        window.animationIntervals.forEach(clearInterval);
-        window.timeouts.forEach(clearTimeout);
-        window.animationIntervals = [];
-        window.timeouts = [];
+        stopTimers();
 
         const container = document.getElementById('layerContainer');
         if (container) {

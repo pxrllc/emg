@@ -5,6 +5,10 @@
     <meta charset="UTF-8">
     <title>EMG Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;600&display=swap">
     <link rel="stylesheet" href="unified.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
     <!-- TODO: アップデート -->
@@ -14,23 +18,558 @@
 </head>
 
 <body>
-    <div id="layerContainer"></div>
-    <div class="upload-section">
-        <button id="loadZipButton">emgをロード</button>
-    </div>
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-name">EMG Viewer</span>
+            <span class="brand-note">リファレンスプレイヤーのデモ</span>
+        </div>
+
+        <div class="loaders">
+            <span class="label">デモ</span>
+            <div class="chips" id="demoChips"></div>
+            <span class="sep" aria-hidden="true"></span>
+            <button class="btn" id="openButton">.emg を開く</button>
+            <input type="file" id="fileInput" accept=".emg,application/zip" hidden>
+            <span class="drop-note">ドラッグ&amp;ドロップでも開けます</span>
+        </div>
+    </header>
+
+    <div class="banner" id="banner" hidden></div>
+
+    <main class="workspace">
+        <section class="panel">
+            <div class="panel-head">
+                <h2>キャンバス</h2>
+                <span class="dims" id="canvasDims">—</span>
+                <span class="flex"></span>
+                <span class="src" id="sourceName">読み込み中…</span>
+            </div>
+            <div class="viewport checker" id="stageViewport">
+                <div class="sheet" id="stageSheet">
+                    <div id="stageScale">
+                        <div id="layerContainer"></div>
+                    </div>
+                    <div class="overlay" id="stageOverlay"></div>
+                </div>
+                <p class="empty" id="stageEmpty">デモを選ぶか、.emg をここにドロップしてください。</p>
+            </div>
+            <div class="panel-foot">
+                <div class="chips parts" id="partChips"></div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-head">
+                <h2>アトラス</h2>
+                <span class="dims" id="atlasDims">—</span>
+                <span class="flex"></span>
+                <div class="chips" id="texChips"></div>
+                <div class="zoom" id="zoomChips">
+                    <button class="zoom-item active" data-zoom="fit">全体</button>
+                    <button class="zoom-item" data-zoom="1">100%</button>
+                    <button class="zoom-item" data-zoom="2">200%</button>
+                </div>
+            </div>
+            <div class="viewport atlas-viewport" id="atlasViewport">
+                <div class="sheet" id="atlasSheet">
+                    <img id="atlasImage" alt="テクスチャアトラス">
+                    <div class="overlay" id="atlasOverlay"></div>
+                </div>
+            </div>
+            <div class="panel-foot">
+                <p class="hint">アトラスの矩形にマウスを乗せると、そのレイヤーがキャンバスのどこに置かれるかを示します。</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="readout" id="readout">
+        <div class="readout-idle">レイヤーにマウスを乗せると、ここに座標が出ます。</div>
+        <div class="readout-body" hidden>
+            <div class="ident">
+                <span class="part" id="roPart"></span>
+                <span class="frame" id="roFrame"></span>
+                <span class="tag" id="roType"></span>
+            </div>
+            <div class="coord coord-atlas">
+                <span class="coord-label">アトラス座標</span>
+                <span class="coord-val" id="roAtlas"></span>
+                <span class="coord-sub">どこから取るか</span>
+            </div>
+            <div class="coord coord-canvas">
+                <span class="coord-label">キャンバス座標</span>
+                <span class="coord-val" id="roCanvas"></span>
+                <span class="coord-sub">どこへ描くか</span>
+            </div>
+            <div class="coord">
+                <span class="coord-label">z / 不透明度</span>
+                <span class="coord-val" id="roMisc"></span>
+                <span class="coord-sub" id="roVisible"></span>
+            </div>
+        </div>
+    </footer>
+
+    <div class="dropveil" id="dropVeil" hidden><span>.emg をドロップ</span></div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const cdnUrl = "./assets/senti-demo.emg";
+        (() => {
+            'use strict';
 
-            document.getElementById('loadZipButton').addEventListener('click', () => {
-                if (window.EMGPlayer && window.EMGPlayer.loadEmgFromCDN) {
-                    window.EMGPlayer.loadEmgFromCDN(cdnUrl);
-                } else {
-                    console.error('EMGPlayer not loaded');
+            const DEMOS = [
+                { name: 'senti', url: './assets/senti-demo.emg', note: '0.3.0 / 7 パーツ' },
+                { name: 'zunda', url: './assets/zunda.emg', note: '旧 0.1 形式' },
+                { name: 'room', url: './assets/room.emg', note: '背景素材' },
+            ];
+
+            // アルファ判定用にアトラスを canvas へ写す上限。これを超えるアトラスは
+            // メモリを食うので写さず、矩形の面積が小さい順に当てる方式へ落とす。
+            const PROBE_LIMIT = 4096 * 4096;
+
+            const $ = id => document.getElementById(id);
+            const stageViewport = $('stageViewport'), stageSheet = $('stageSheet');
+            const stageScale = $('stageScale'), stageOverlay = $('stageOverlay');
+            const atlasViewport = $('atlasViewport'), atlasSheet = $('atlasSheet');
+            const atlasImage = $('atlasImage'), atlasOverlay = $('atlasOverlay');
+            const readout = $('readout');
+
+            const state = {
+                data: null,
+                layers: [],        // 正規化したレイヤー一覧（宣言順 = data-layer-index）
+                els: [],           // 対応する DOM 要素
+                texes: [],         // [{ file, url, width, height, probe }]
+                activeTex: 0,
+                zoom: 'fit',
+                hover: null,       // レイヤーの通し番号
+                pinnedPart: null,
+            };
+
+            // ---- 読み込み ------------------------------------------------------
+
+            function showError(error) {
+                const raw = error?.message ?? String(error);
+                // JSZip の失敗はそのまま出すと英語 + URL で、何をすればいいか分からない。
+                const message = /central directory|corrupted|zip file/i.test(raw)
+                    ? 'ZIP として読めませんでした。.emg ファイルか確かめてください。'
+                    : raw;
+                const b = $('banner');
+                b.textContent = `読み込めませんでした — ${message}`;
+                b.hidden = false;
+                layout();   // バナーの分だけ表示領域が縮むので倍率を取り直す
+            }
+            function clearError() {
+                if ($('banner').hidden) return;
+                $('banner').hidden = true;
+                layout();
+            }
+
+            function markActiveDemo(url) {
+                for (const el of $('demoChips').children) {
+                    el.classList.toggle('active', el.dataset.url === url);
                 }
+            }
+
+            // 見出しの更新は emg:loaded まで待つ。失敗したときに、実際に映っている
+            // ものと名前が食い違わないようにするため。
+            function loadDemo(demo) {
+                clearError();
+                window.EMGPlayer.loadEmgFromCDN(demo.url);
+            }
+
+            function loadFile(file) {
+                clearError();
+                window.EMGPlayer.loadEmgFromFile(file, 'layerContainer', file.name);
+            }
+
+            // ---- data.json の正規化 --------------------------------------------
+
+            // v0.4.0 F2: 未知の type は default の有無で決める。生の type では分岐しない。
+            function partType(part) {
+                if (part.type === 'static' || part.type === 'switch') return part.type;
+                return part.default != null ? 'switch' : 'static';
+            }
+
+            /**
+             * parts[] と、0.1 系のフラットな layers[] の両方を同じ形にならす。
+             * 番号はプレイヤーが振る data-layer-index と同じ順序であること。
+             */
+            function collectLayers(data) {
+                const out = [];
+                const defaultFile = data.textures?.[0]?.textureFile ?? null;
+                const push = (partID, type, l) => out.push({
+                    index: out.length,
+                    partID, type,
+                    // フレーム識別子は frameName ?? textureID。textureID 単体で参照しない。
+                    frame: l.frameName ?? l.textureID ?? l.assignID ?? '—',
+                    file: l.textureFile ?? defaultFile,
+                    x: l.x, y: l.y, w: l.width, h: l.height,
+                    bx: l.basePosition_x, by: l.basePosition_y,
+                    z: l.textureZIndex ?? 0,
+                    opacity: typeof l.opacity === 'number' ? l.opacity : 1,
+                });
+
+                if (Array.isArray(data.parts)) {
+                    for (const part of data.parts) {
+                        for (const l of part.layers) push(part.partID, partType(part), l);
+                    }
+                } else if (Array.isArray(data.layers)) {
+                    for (const l of data.layers) push('—', '—', l);
+                }
+                return out;
+            }
+
+            function collectTextures(data, textures) {
+                if (Array.isArray(data.textures) && data.textures.length > 0) {
+                    return data.textures.map(t => ({
+                        file: t.textureFile,
+                        url: textures[t.textureFile],
+                        width: t.width, height: t.height, probe: null,
+                    }));
+                }
+                // 0.1 系はテクスチャ定義を持たないので、展開された画像をそのまま使う。
+                const url = textures['default'] ?? Object.values(textures)[0];
+                return url ? [{ file: null, url, width: 0, height: 0, probe: null }] : [];
+            }
+
+            // ---- 画面の組み立て ------------------------------------------------
+
+            async function onLoaded(detail) {
+                state.data = detail.data;
+                state.layers = collectLayers(detail.data);
+                state.texes = collectTextures(detail.data, detail.textures);
+                state.activeTex = 0;
+                state.hover = null;
+                state.pinnedPart = null;
+
+                const container = $('layerContainer');
+                state.els = state.layers.map(l =>
+                    container.querySelector(`[data-layer-index="${l.index}"]`));
+
+                // レイヤーが textureFile を持たないファイル向けに、唯一のアトラスへ寄せる。
+                if (state.texes.length === 1) {
+                    for (const l of state.layers) l.file = state.texes[0].file;
+                }
+
+                $('stageEmpty').hidden = state.layers.length > 0;
+                $('sourceName').textContent = String(detail.source).split('/').pop();
+                markActiveDemo(detail.source);
+                $('canvasDims').textContent =
+                    `${detail.data.baseCanvasWidth ?? '?'} × ${detail.data.baseCanvasHeight ?? '?'} px`;
+
+                buildTexChips();
+                buildPartChips();
+                updateReadout();   // 前のファイルで指していたレイヤーが残らないようにする
+                await showTexture(0);
+                layout();
+            }
+
+            function buildTexChips() {
+                const box = $('texChips');
+                box.innerHTML = '';
+                if (state.texes.length < 2) return;   // 1 枚なら選ぶ意味がない
+                state.texes.forEach((t, i) => {
+                    const b = document.createElement('button');
+                    b.className = 'chip' + (i === 0 ? ' active' : '');
+                    b.textContent = t.file ?? `#${i}`;
+                    b.onclick = () => showTexture(i).then(layout);
+                    box.appendChild(b);
+                });
+            }
+
+            function buildPartChips() {
+                const box = $('partChips');
+                box.innerHTML = '';
+
+                // 0.1 系はパーツを持たず、レイヤーが一列に並ぶだけ。並べても意味がないので
+                // そう書く（パーツ分けが後から入った機能であることが分かるように）。
+                if (!Array.isArray(state.data.parts)) {
+                    const p = document.createElement('p');
+                    p.className = 'hint';
+                    p.textContent = `パーツ定義のない旧 0.1 形式です（レイヤー ${state.layers.length} 枚）。`;
+                    box.appendChild(p);
+                    return;
+                }
+
+                const parts = new Map();
+                for (const l of state.layers) {
+                    if (!parts.has(l.partID)) parts.set(l.partID, { type: l.type, n: 0 });
+                    parts.get(l.partID).n++;
+                }
+                for (const [partID, info] of parts) {
+                    const b = document.createElement('button');
+                    b.className = 'chip part-chip';
+                    b.innerHTML =
+                        `<span class="chip-type ${info.type}">${info.type}</span>` +
+                        `<span>${escapeHtml(partID)}</span>` +
+                        `<span class="chip-count">${info.n}</span>`;
+                    b.onmouseenter = () => { if (!state.pinnedPart) highlightPart(partID); };
+                    b.onmouseleave = () => { if (!state.pinnedPart) highlightPart(null); };
+                    b.onclick = () => {
+                        state.pinnedPart = state.pinnedPart === partID ? null : partID;
+                        highlightPart(state.pinnedPart ?? partID);
+                        for (const c of box.children) c.classList.remove('active');
+                        if (state.pinnedPart) b.classList.add('active');
+                    };
+                    box.appendChild(b);
+                }
+            }
+
+            async function showTexture(i) {
+                state.activeTex = i;
+                for (const [j, el] of [...$('texChips').children].entries()) {
+                    el.classList.toggle('active', j === i);
+                }
+                const tex = state.texes[i];
+                if (!tex) { atlasImage.removeAttribute('src'); return; }
+
+                atlasImage.src = tex.url;
+                // decode() ではなく load を待つ。バックグラウンドのタブでは
+                // デコードが後回しにされて decode() が返らず、そこで止まってしまう。
+                await new Promise(done => {
+                    if (atlasImage.complete && atlasImage.naturalWidth) return done();
+                    atlasImage.onload = atlasImage.onerror = done;
+                });
+                // 表示の寸法は宣言値ではなく実物から取る。両者が食い違うファイルがあるため。
+                tex.width = atlasImage.naturalWidth;
+                tex.height = atlasImage.naturalHeight;
+                $('atlasDims').textContent = `${tex.width} × ${tex.height} px`;
+
+                if (!tex.probe && tex.width * tex.height <= PROBE_LIMIT) {
+                    const c = document.createElement('canvas');
+                    c.width = tex.width; c.height = tex.height;
+                    const ctx = c.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(atlasImage, 0, 0);
+                    tex.probe = ctx;
+                }
+            }
+
+            // ---- 配置（拡大率の算出とオーバーレイ）------------------------------
+
+            function scaleToFit(vp, w, h) {
+                if (!w || !h) return 1;
+                const pad = 24;
+                return Math.min(1,
+                    (vp.clientWidth - pad) / w,
+                    (vp.clientHeight - pad) / h);
+            }
+
+            function layout() {
+                if (!state.data) return;
+
+                // キャンバス側
+                const cw = state.data.baseCanvasWidth || 1, ch = state.data.baseCanvasHeight || 1;
+                const ks = scaleToFit(stageViewport, cw, ch);
+                stageSheet.style.width = `${cw * ks}px`;
+                stageSheet.style.height = `${ch * ks}px`;
+                stageScale.style.transform = `scale(${ks})`;
+                state.stageScale = ks;
+
+                // アトラス側
+                const tex = state.texes[state.activeTex];
+                const ka = !tex ? 1
+                    : state.zoom === 'fit' ? scaleToFit(atlasViewport, tex.width, tex.height)
+                        : Number(state.zoom);
+                state.atlasScale = ka;
+                if (tex) {
+                    atlasImage.style.width = `${tex.width * ka}px`;
+                    atlasImage.style.height = `${tex.height * ka}px`;
+                    atlasSheet.style.width = `${tex.width * ka}px`;
+                    atlasSheet.style.height = `${tex.height * ka}px`;
+                }
+
+                renderOverlays();
+            }
+
+            /** そのレイヤーがいま画面に出ているか（switch の非選択フレームは出ていない）。 */
+            function isVisible(index) {
+                const el = state.els[index];
+                return !!el && el.style.display !== 'none';
+            }
+
+            function renderOverlays() {
+                const tex = state.texes[state.activeTex];
+                atlasOverlay.innerHTML = '';
+                stageOverlay.innerHTML = '';
+                if (!tex) return;
+
+                const ka = state.atlasScale;
+                for (const l of state.layers) {
+                    if (l.file !== tex.file) continue;
+                    const r = document.createElement('div');
+                    r.className = 'rect' + (isVisible(l.index) ? '' : ' dim');
+                    r.dataset.index = String(l.index);
+                    r.style.left = `${l.x * ka}px`;
+                    r.style.top = `${l.y * ka}px`;
+                    r.style.width = `${l.w * ka}px`;
+                    r.style.height = `${l.h * ka}px`;
+                    r.onmouseenter = () => setHover(l.index);
+                    atlasOverlay.appendChild(r);
+                }
+                atlasOverlay.onmouseleave = () => setHover(null);
+                applyHighlight();
+            }
+
+            // ---- ハイライトと読み取り ------------------------------------------
+
+            function setHover(index) {
+                if (state.hover === index) return;
+                state.hover = index;
+                applyHighlight();
+                updateReadout();
+            }
+
+            function highlightPart(partID) {
+                state.hoverPart = partID;
+                applyHighlight();
+            }
+
+            function applyHighlight() {
+                const hovered = state.hover;
+                const part = state.pinnedPart ?? state.hoverPart ?? null;
+
+                for (const r of atlasOverlay.children) {
+                    const i = Number(r.dataset.index);
+                    r.classList.toggle('hot', i === hovered);
+                    r.classList.toggle('kin', part != null && state.layers[i].partID === part && i !== hovered);
+                }
+
+                stageOverlay.innerHTML = '';
+                const ks = state.stageScale;
+                const draw = (l, cls) => {
+                    const d = document.createElement('div');
+                    d.className = `rect ${cls}`;
+                    d.style.left = `${l.bx * ks}px`;
+                    d.style.top = `${l.by * ks}px`;
+                    d.style.width = `${l.w * ks}px`;
+                    d.style.height = `${l.h * ks}px`;
+                    stageOverlay.appendChild(d);
+                };
+                if (part != null) {
+                    for (const l of state.layers) {
+                        if (l.partID === part && l.index !== hovered && isVisible(l.index)) draw(l, 'kin');
+                    }
+                }
+                if (hovered != null) {
+                    draw(state.layers[hovered], 'hot');
+                    const label = document.createElement('div');
+                    label.className = 'rect-label';
+                    const l = state.layers[hovered];
+                    label.textContent = `${l.partID} / ${l.frame}`;
+                    label.style.left = `${l.bx * ks}px`;
+                    label.style.top = `${l.by * ks}px`;
+                    stageOverlay.appendChild(label);
+                }
+            }
+
+            function updateReadout() {
+                const idle = readout.querySelector('.readout-idle');
+                const body = readout.querySelector('.readout-body');
+                if (state.hover == null) { idle.hidden = false; body.hidden = true; return; }
+                idle.hidden = true; body.hidden = false;
+
+                const l = state.layers[state.hover];
+                $('roPart').textContent = l.partID;
+                $('roFrame').textContent = l.frame;
+                $('roType').textContent = l.type;
+                $('roType').className = `tag ${l.type}`;
+                $('roAtlas').textContent = `x ${l.x}, y ${l.y} · ${l.w} × ${l.h}`;
+                $('roCanvas').textContent = `x ${l.bx}, y ${l.by}`;
+                $('roMisc').textContent = `${l.z} / ${l.opacity}`;
+                $('roVisible').textContent = isVisible(l.index) ? '表示中' : 'いまは非表示';
+            }
+
+            // ---- キャンバス側からの当たり判定 ----------------------------------
+
+            /**
+             * キャンバス座標 (cx, cy) にあるレイヤーを前面から探す。
+             * アトラスを写した canvas があれば実際のアルファを見る。無ければ
+             * 面積の小さいものを優先する（口や目のような小さな差分を拾うため）。
+             */
+            function pickAt(cx, cy) {
+                const hits = state.layers.filter(l =>
+                    isVisible(l.index) &&
+                    cx >= l.bx && cx < l.bx + l.w && cy >= l.by && cy < l.by + l.h);
+                if (hits.length === 0) return null;
+
+                hits.sort((a, b) => b.z - a.z);
+                for (const l of hits) {
+                    const tex = state.texes.find(t => t.file === l.file) ?? state.texes[0];
+                    if (!tex?.probe) continue;
+                    const px = l.x + (cx - l.bx), py = l.y + (cy - l.by);
+                    if (tex.probe.getImageData(px, py, 1, 1).data[3] > 8) return l.index;
+                }
+                if (state.texes.some(t => t.probe)) return null;   // 判定できたが全部透明
+                hits.sort((a, b) => a.w * a.h - b.w * b.h);
+                return hits[0].index;
+            }
+
+            let pending = null;
+            stageViewport.addEventListener('mousemove', e => {
+                if (!state.data || pending) return;
+                pending = requestAnimationFrame(() => {
+                    pending = null;
+                    const box = stageSheet.getBoundingClientRect();
+                    const cx = Math.floor((e.clientX - box.left) / state.stageScale);
+                    const cy = Math.floor((e.clientY - box.top) / state.stageScale);
+                    setHover(pickAt(cx, cy));
+                });
             });
-        });
+            stageViewport.addEventListener('mouseleave', () => setHover(null));
+
+            // ---- 入り口 --------------------------------------------------------
+
+            function escapeHtml(s) {
+                return String(s).replace(/[&<>"]/g, c =>
+                    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+            }
+
+            for (const demo of DEMOS) {
+                const b = document.createElement('button');
+                b.className = 'chip';
+                b.dataset.url = demo.url;
+                b.innerHTML = `<span>${escapeHtml(demo.name)}</span><span class="chip-count">${escapeHtml(demo.note)}</span>`;
+                b.onclick = () => loadDemo(demo);
+                $('demoChips').appendChild(b);
+            }
+
+            $('openButton').onclick = () => $('fileInput').click();
+            $('fileInput').onchange = e => {
+                const file = e.target.files?.[0];
+                if (file) loadFile(file);
+                e.target.value = '';
+            };
+
+            for (const b of $('zoomChips').children) {
+                b.onclick = () => {
+                    state.zoom = b.dataset.zoom;
+                    for (const o of $('zoomChips').children) o.classList.toggle('active', o === b);
+                    layout();
+                };
+            }
+
+            let dragDepth = 0;
+            window.addEventListener('dragenter', e => {
+                e.preventDefault(); dragDepth++; $('dropVeil').hidden = false;
+            });
+            window.addEventListener('dragover', e => e.preventDefault());
+            window.addEventListener('dragleave', () => {
+                if (--dragDepth <= 0) { dragDepth = 0; $('dropVeil').hidden = true; }
+            });
+            window.addEventListener('drop', e => {
+                e.preventDefault(); dragDepth = 0; $('dropVeil').hidden = true;
+                const file = e.dataTransfer?.files?.[0];
+                if (file) loadFile(file);
+            });
+
+            window.addEventListener('emg:loaded', e => { onLoaded(e.detail); });
+            window.addEventListener('emg:error', e => {
+                showError(e.detail.error);
+                // 失敗しても前の内容はそのまま残る（プレイヤーが読めるまで差し替えない）。
+                // 何も出ていないときだけ案内を出す。
+                if (!state.data) $('stageEmpty').hidden = false;
+            });
+            window.addEventListener('resize', layout);
+
+            document.addEventListener('DOMContentLoaded', () => loadDemo(DEMOS[0]));
+        })();
     </script>
 </body>
 

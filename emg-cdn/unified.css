@@ -1,36 +1,543 @@
+/*
+ * EMG Viewer — リファレンスプレイヤーのデモページ。
+ *
+ * 色は EMG が持つ 2 つの座標系に割り当てている。
+ *   琥珀 = アトラス座標（どこから取るか）
+ *   青緑 = キャンバス座標（どこへ描くか）
+ * この 2 つの取り違えが実装側で一番よく起きるので、画面上でも別の色にしている。
+ *
+ * 計器としての見え方に寄せた暗い一色構成。明暗の切り替えは持たないが、
+ * 背景・文字色はすべて明示するので、埋め込み先の地色に影響されない。
+ */
+
+:root {
+    --ink: #14161d;
+    --panel: #1a1e27;
+    --raised: #222836;
+    --line: #2f3646;
+    --line-soft: #262c39;
+    --text: #dfe3ec;
+    --muted: #8892a6;
+    --atlas: #f2a83c;
+    --canvas: #56c8dd;
+    --danger: #e4726a;
+
+    --sans: "IBM Plex Sans JP", system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/*
+ * `hidden` を効かせる。UA スタイルの `[hidden] { display: none }` は作成者側の
+ * どんな display 指定にも負けるので、`display: grid` を持つ要素に hidden を
+ * 立てても消えない（ドロップ用の覆いが出たままになる）。
+ */
+[hidden] {
+    display: none !important;
+}
+
+html,
 body {
-    background-color: #222;
+    height: 100%;
+}
+
+body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.6;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    font-family: Arial, sans-serif;
-}
-
-.upload-section {
-    margin-bottom: 20px;
-}
-
-.container {
-    position: relative;
-    background-color: rgba(255, 255, 255, 0.2);
     overflow: hidden;
-    width: 800px; /* JSONデータから変更 */
-    height: 600px; /* JSONデータから変更 */
 }
+
+/* ---- 上部バー ---------------------------------------------------------- */
+
+.topbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+}
+
+.brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+.brand-name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.brand-note,
+.drop-note {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.loaders {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.sep {
+    width: 1px;
+    height: 20px;
+    background: var(--line);
+}
+
+/* ---- チップ・ボタン ---------------------------------------------------- */
+
+.chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.chip,
+.btn,
+.zoom-item {
+    font: inherit;
+    color: var(--text);
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+
+.chip:hover,
+.btn:hover,
+.zoom-item:hover {
+    border-color: #435067;
+}
+
+.chip.active {
+    border-color: var(--atlas);
+    color: #ffd79a;
+}
+
+.btn {
+    font-weight: 600;
+}
+
+.chip-count {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+}
+
+.chip-type {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #2c3547;
+    color: var(--muted);
+}
+
+/* static と switch はレンダリングの分岐点なので、一覧でも見分けられるようにする。 */
+.chip-type.static {
+    background: rgba(86, 200, 221, 0.14);
+    color: var(--canvas);
+}
+
+.chip-type.switch {
+    background: rgba(242, 168, 60, 0.14);
+    color: var(--atlas);
+}
+
+.zoom {
+    display: flex;
+    gap: 0;
+}
+
+.zoom-item {
+    border-radius: 0;
+    padding: 3px 9px;
+    font-family: var(--mono);
+    font-size: 11px;
+}
+
+.zoom-item:first-child {
+    border-radius: 5px 0 0 5px;
+}
+
+.zoom-item:last-child {
+    border-radius: 0 5px 5px 0;
+}
+
+.zoom-item+.zoom-item {
+    border-left: none;
+}
+
+.zoom-item.active {
+    background: #2e3849;
+    color: #fff;
+}
+
+/* ---- 通知 -------------------------------------------------------------- */
+
+.banner {
+    flex: none;
+    padding: 9px 20px;
+    background: rgba(228, 114, 106, 0.12);
+    border-bottom: 1px solid rgba(228, 114, 106, 0.35);
+    color: #f2a49e;
+    font-size: 12px;
+}
+
+/* ---- 作業領域 ---------------------------------------------------------- */
+
+.workspace {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 1px;
+    background: var(--line);
+}
+
+.panel {
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.panel-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--line-soft);
+}
+
+.panel-head h2 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.dims,
+.src {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+}
+
+.src {
+    color: var(--text);
+    max-width: 28ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.flex {
+    flex: 1;
+}
+
+.viewport {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    overflow: auto;
+    display: grid;
+    place-items: center;
+    padding: 12px;
+}
+
+/* キャンバスの地。市松にしておくと、透明の抜けと白い塗りを取り違えない。 */
+.checker {
+    background-color: #0f1116;
+    background-image:
+        linear-gradient(45deg, #191d25 25%, transparent 25%),
+        linear-gradient(-45deg, #191d25 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #191d25 75%),
+        linear-gradient(-45deg, transparent 75%, #191d25 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.atlas-viewport {
+    background: #0f1116;
+    place-items: start;
+}
+
+.sheet {
+    position: relative;
+    flex: none;
+}
+
+#stageScale {
+    position: absolute;
+    inset: 0;
+    transform-origin: top left;
+}
+
+/* src が入るまでは壊れた画像アイコンが出るので隠しておく。 */
+#atlasImage:not([src]) {
+    display: none;
+}
+
+#atlasImage {
+    display: block;
+    /* アトラスは等倍以上に拡大して中身を確かめることがあるので、補間しない。 */
+    image-rendering: pixelated;
+}
+
+.empty {
+    position: absolute;
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.panel-foot {
+    flex: none;
+    padding: 8px 14px;
+    border-top: 1px solid var(--line-soft);
+    max-height: 96px;
+    overflow-y: auto;
+}
+
+.hint {
+    margin: 0;
+    color: var(--muted);
+    font-size: 11.5px;
+}
+
+/* ---- レイヤーの矩形 ---------------------------------------------------- */
+
+.overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.rect {
+    position: absolute;
+    border: 1px solid rgba(136, 146, 166, 0.28);
+}
+
+#atlasOverlay .rect {
+    pointer-events: auto;
+}
+
+/* いま画面に出ていないレイヤー（switch の非選択フレーム）。 */
+.rect.dim {
+    border-color: rgba(136, 146, 166, 0.12);
+}
+
+/* 同じパーツの仲間。 */
+.rect.kin {
+    border-color: rgba(242, 168, 60, 0.55);
+    background: rgba(242, 168, 60, 0.07);
+}
+
+#stageOverlay .rect.kin {
+    border-color: rgba(86, 200, 221, 0.45);
+    background: rgba(86, 200, 221, 0.05);
+}
+
+/* 指しているレイヤー本体。アトラス側は琥珀、キャンバス側は青緑。 */
+#atlasOverlay .rect.hot {
+    border: 1.5px solid var(--atlas);
+    background: rgba(242, 168, 60, 0.18);
+    box-shadow: 0 0 0 1px rgba(20, 22, 29, 0.9), 0 0 14px rgba(242, 168, 60, 0.35);
+}
+
+#stageOverlay .rect.hot {
+    border: 1.5px solid var(--canvas);
+    background: rgba(86, 200, 221, 0.12);
+    box-shadow: 0 0 0 1px rgba(20, 22, 29, 0.9), 0 0 14px rgba(86, 200, 221, 0.3);
+}
+
+.rect-label {
+    position: absolute;
+    transform: translateY(-100%);
+    margin-top: -3px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--canvas);
+    color: #06222a;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* ---- 読み取り ---------------------------------------------------------- */
+
+.readout {
+    flex: none;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    padding: 10px 20px;
+    /*
+     * 高さを固定する。中身が入ったときに伸びると上のパネルが縮み、
+     * すでに算出した表示倍率と食い違ってキャンバスが少しはみ出す。
+     */
+    height: 76px;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.readout-idle {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.readout-body {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    white-space: nowrap;
+}
+
+.ident {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ident .part {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.ident .frame {
+    font-family: var(--mono);
+    color: var(--atlas);
+}
+
+.tag {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #2c3547;
+    color: var(--muted);
+}
+
+.tag.static {
+    background: rgba(86, 200, 221, 0.14);
+    color: var(--canvas);
+}
+
+.tag.switch {
+    background: rgba(242, 168, 60, 0.14);
+    color: var(--atlas);
+}
+
+.coord {
+    display: grid;
+    gap: 1px;
+    padding-left: 11px;
+    border-left: 2px solid var(--line);
+}
+
+.coord-atlas {
+    border-left-color: var(--atlas);
+}
+
+.coord-canvas {
+    border-left-color: var(--canvas);
+}
+
+.coord-label {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+}
+
+.coord-val {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.coord-sub {
+    font-size: 10.5px;
+    color: var(--muted);
+}
+
+/* ---- ドロップ ---------------------------------------------------------- */
+
+.dropveil {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    background: rgba(20, 22, 29, 0.86);
+    border: 2px dashed var(--atlas);
+    color: var(--atlas);
+    font-size: 18px;
+    font-weight: 600;
+    pointer-events: none;
+}
+
+/* ---- プレイヤーが作るレイヤー ------------------------------------------ */
 
 .layer {
     position: absolute;
     background-repeat: no-repeat;
     background-size: cover;
-    opacity: 1; /* 初期状態で表示する */
-    /*transition: opacity 0.5s ease-in-out;*/
 }
 
-.layer.visible {
-    opacity: 1;
+@media (max-width: 900px) {
+    body {
+        overflow: auto;
+    }
+
+    .workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .panel {
+        min-height: 60vh;
+    }
 }

@@ -180,6 +180,39 @@ Test files in `emg-packer/asset/` (gitignored) are the ground truth for what act
   for backwards compatibility, but every lookup goes through `data-part-id` + `data-texture-id`.
 - The JSON entry is found by `endsWith("data.json")` with a fallback to any non-`mapping.json`
   `.json`, so both `data.json` and `model.json` work.
+- **A load does not touch what is on screen until it is known to parse.** `loadEmgFromBlob`
+  builds the whole new state locally and only then stops timers, swaps the globals, extracts the
+  new atlases and revokes the old object URLs. Clearing first meant a wrong file left a blank
+  page with no way to tell what happened, and revoked the previous atlas's URLs on the way out.
+- `loadEmgFromCDN` / `loadEmgFromFile` never reject — embedders call them without `await`, so a
+  thrown error would surface as an unhandled rejection. They return a boolean and announce the
+  outcome on `window` as `emg:loaded` / `emg:error`. `emg:loaded.detail.textures` is the
+  `textureFile → object URL` map, so a page can show the atlas without unzipping it again.
+- Layer divs carry `data-layer-index` (declaration order). `(partID, frame identifier)` does
+  **not** name one layer — `frameName` lets several share an identifier — so anything addressing
+  a single layer goes through the index.
+
+### emg-cdn's demo page (`index.html`, deployed at `/`)
+
+The demo for the reference player: pick a bundled `.emg` or open/drop your own, and it shows the
+composited canvas beside the texture atlas. Hovering a layer in either panel outlines it in both,
+colour-keyed to the coordinate system it belongs to — amber for atlas px, cyan for canvas px,
+which is the pair that gets confused (see fact 4 above). Its own JS lives inline in `index.html`;
+`unified.css` is its stylesheet (`develop/unified.css` is an unrelated copy).
+
+- **Canvas-side hovering alpha-tests against the atlas**, drawn once into an offscreen canvas per
+  texture, front to back. Bounding boxes alone always pick the big transparent layer in front.
+  Skipped above 4096² so a large atlas does not cost 256MB of readback memory; it falls back to
+  the smallest containing rect, which picks eyes and mouths correctly in practice.
+- **Do not `await img.decode()`** to learn an atlas's size — a background tab defers decoding and
+  the promise never settles, stranding the page mid-load. Wait for `load`/`error` and read
+  `naturalWidth`; take the display geometry from that rather than from `textures[].width`, since
+  the two disagree in some files.
+- `[hidden]` loses to any author `display` rule, so a `display: grid` overlay with `hidden` set
+  stays visible. The stylesheet carries an explicit `[hidden] { display: none !important }`.
+- Scale is computed from the viewport once per load, so anything that changes the available
+  height afterwards (the error banner, the readout filling in) must re-run `layout()` or the
+  canvas ends up scrolling. The readout has a fixed height for this reason.
 
 ### Verifying player changes in a browser
 
