@@ -1,7 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Move3d, Crosshair, Pause, Play, SkipBack } from 'lucide-react';
-import { evaluateTransform, foldTime, ownsPath, transformMatrix } from '../services/transform';
-import { TransformOverlay, type PartBounds } from './TransformOverlay';
+import { Move3d, Crosshair, Clapperboard, Pause, Play, SkipBack } from 'lucide-react';
+import { evaluateTransform, foldTime, ownsPath } from '../services/transform';
+import { computeBounds, drawComposite, itemMatrix, type Bounds } from '../services/composite';
+import { TransformOverlay } from './TransformOverlay';
 import { emptyTransform, transformKey, type PartTransform } from '../types';
 
 export interface PreviewItem {
@@ -41,12 +42,14 @@ interface PreviewPanelProps {
     canPlay: boolean;
     /** キャンバス寸法の変更を開く。 */
     onResizeCanvas: () => void;
+    /** プレビューを GIF / 動画で書き出す。 */
+    onExportPreview: () => void;
 }
 
 export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     atlasUrls, compositionItems, width, height,
     transforms, selectedPartId, transformTarget, onSelectPart, onTransformChange, time, playing,
-    onPlayAll, onRewind, playingAll, canPlay, onResizeCanvas,
+    onPlayAll, onRewind, playingAll, canPlay, onResizeCanvas, onExportPreview,
 }) => {
     // 掴む対象を切り替える。アンカーは「回転の中心」なので、絵を動かすのと
     // 同じ操作にすると必ず取り違える。
@@ -115,28 +118,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
      * 今表示されているレイヤーだけから作る。switch パーツで差分を切り替えると
      * 矩形も変わるが、それが「今掴めるもの」なので正しい。
      */
-    const partBounds = useMemo(() => {
-        const out: Record<string, PartBounds> = {};
-        const add = (key: string, partId: string, item: PreviewItem) => {
-            const r = item.left + item.image.width;
-            const b = item.top + item.image.height;
-            const cur = out[key];
-            if (!cur) {
-                out[key] = { partId, left: item.left, top: item.top, right: r, bottom: b };
-            } else {
-                cur.left = Math.min(cur.left, item.left);
-                cur.top = Math.min(cur.top, item.top);
-                cur.right = Math.max(cur.right, r);
-                cur.bottom = Math.max(cur.bottom, b);
-            }
-        };
-        for (const item of compositionItems) {
-            // パーツ全体と、フレーム単位（0.5.3 §7.4.1）の両方を持つ。
-            add(transformKey(item.partId), item.partId, item);
-            add(transformKey(item.partId, item.frameId), item.partId, item);
-        }
-        return out;
-    }, [compositionItems]);
+    const partBounds = useMemo(() => computeBounds(compositionItems), [compositionItems]);
 
     const displayStyle = useMemo(() => ({
         width: imgSize.w > 0 ? imgSize.w * scale + 'px' : undefined,
@@ -208,35 +190,9 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                 // So compositionItems are Back -> Front order.
                 // We draw in order (Back first).
 
-                // パーツ単位でトランスフォームを掛ける（v0.5.0 §7）。
-                // 適用順序は transform.ts の transformMatrix が持っている。
-                for (const item of compositionItems) {
-                    ctx.save();
-                    let alpha = item.opacity;
-                    // パーツ全体を狙うものと、このフレームを狙うもの（0.5.3 §7.4.1）を
-                    // 順に掛ける。両方あるときは重なる — validator が警告する状態だが、
-                    // 見えている絵と書き出しを一致させるためここでも同じ扱いにする。
-                    let m: DOMMatrix | null = null;
-                    for (const key of [transformKey(item.partId),
-                                       transformKey(item.partId, item.frameId)]) {
-                        const tf = transforms[key];
-                        const bounds = partBounds[key];
-                        if (!tf || !bounds) continue;
-                        const v = evaluateTransform(tf, time);
-                        const anchor = tf.anchor ?? {
-                            x: (bounds.left + bounds.right) / 2,
-                            y: (bounds.top + bounds.bottom) / 2,
-                        };
-                        const next = transformMatrix(v, anchor.x, anchor.y);
-                        m = m ? m.multiply(next) : next;
-                        alpha *= v.opacity;
-                    }
-                    if (m) ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
-                    ctx.globalAlpha = alpha;
-
-                    ctx.drawImage(item.image, item.left, item.top);
-                    ctx.restore();
-                }
+                // 描画は composite.ts に置く。書き出しと同じ関数を通すので、
+                // 画面で見た絵と GIF が食い違わない。
+                drawComposite(ctx, compositionItems, transforms, partBounds, time);
 
                 updateViewport();
             }
@@ -296,21 +252,13 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
         for (let i = compositionItems.length - 1; i >= 0; i--) {
             const item = compositionItems[i];
-            let x = cx, y = cy;
-            // 変形済みの絵を掴むので、逆行列で変形前の座標に戻してから当てる。
-            for (const key of [transformKey(item.partId), transformKey(item.partId, item.frameId)]) {
-                const tf = transforms[key];
-                const b = partBounds[key];
-                if (!tf || !b) continue;
-                const anchor = tf.anchor ?? {
-                    x: (b.left + b.right) / 2, y: (b.top + b.bottom) / 2,
-                };
-                const p = transformMatrix(evaluateTransform(tf, time), anchor.x, anchor.y)
-                    .inverse().transformPoint(new DOMPoint(x, y));
-                x = p.x; y = p.y;
-            }
-            const lx = Math.floor(x - item.left);
-            const ly = Math.floor(y - item.top);
+            // 変形済みの絵を掴むので、描画と同じ行列の逆で戻してから当てる。
+            const { matrix } = itemMatrix(item, transforms, partBounds, time);
+            const p = matrix
+                ? matrix.inverse().transformPoint(new DOMPoint(cx, cy))
+                : { x: cx, y: cy };
+            const lx = Math.floor(p.x - item.left);
+            const ly = Math.floor(p.y - item.top);
             if (lx < 0 || ly < 0 || lx >= item.image.width || ly >= item.image.height) continue;
             const px = item.image.getContext('2d', { willReadFrequently: true })
                 ?.getImageData(lx, ly, 1, 1).data;
@@ -477,6 +425,13 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                         <span className="tf-hint" style={{ minWidth: '46px' }}>
                             {time.toFixed(2)}s
                         </span>
+                        <button
+                            className="btn btn-sm btn-ghost"
+                            onClick={onExportPreview}
+                            title="今のプレビューを GIF / 動画で書き出す"
+                        >
+                            <Clapperboard size={13} />
+                        </button>
                     </>
                 )}
                 {mode === 'composition' && (

@@ -11,7 +11,7 @@ import { defaultPartAnimation, emptyExpression, emptyMapping, emptyTransform, pa
 import type { ToastMessage } from '../components/Toast';
 import { buildParts, flattenLayers, frameIdOf, type PartInfo } from '../parts';
 import { useHistory, type DocumentSnapshot } from './useHistory';
-import { isPlayable, sequenceFrameAt } from '../services/sequence';
+import { isPlayable, sequenceDuration, sequenceFrameAt } from '../services/sequence';
 import { hasAnimation } from '../services/transform';
 import {
     applyTemplate, buildTemplate, isTemplate, TEMPLATE_EXT,
@@ -893,7 +893,14 @@ export function useEmgPacker() {
         return out;
     }, [partAnimations, playScope, transformTime]);
 
-    const compositionItems = useMemo<PreviewItem[]>(() => {
+    /**
+     * 合成対象を組み立てる。
+     *
+     * `time` を渡すと**その時刻の姿**（コマ送りを含む）を返します。渡さなければ
+     * 今のプレビュー状態です。書き出しは前者を使うので、画面と同じ規則で
+     * 任意の時刻を描けます。
+     */
+    const composeAt = useCallback((time?: number): PreviewItem[] => {
         const items: (PreviewItem & { z: number })[] = [];
         const layers = flattenLayers(psdRoot);
         // 書き出しと同じ z 順で並べる。走査順のまま描くと、`.emg` から読み込んだ
@@ -914,9 +921,12 @@ export function useEmgPacker() {
             if (off) continue;
 
             if (part.type === 'switch') {
-                // 再生中はコマ送りが優先。手で選んだ差分は再生を止めたら戻る。
-                const active = playingFrame[part.partId]
-                    ?? previewFrame[part.partId] ?? part.defaultFrameId;
+                // 時刻を指定されたら、その時刻のコマ。指定が無ければ
+                // 再生中のコマ → 手で選んだ差分 → 既定 の順。
+                const active = time !== undefined
+                    ? (sequenceFrameAt(partAnimations[part.partId], time)
+                        ?? previewFrame[part.partId] ?? part.defaultFrameId)
+                    : (playingFrame[part.partId] ?? previewFrame[part.partId] ?? part.defaultFrameId);
                 if (frameIdOf(layer, meta) !== active) continue;
             }
 
@@ -933,7 +943,24 @@ export function useEmgPacker() {
         }
         items.sort((a, b) => a.z - b.z);
         return items;
-    }, [psdRoot, layerMeta, partById, previewFrame, previewOff, playingFrame]);
+    }, [psdRoot, layerMeta, partById, previewFrame, previewOff, playingFrame, partAnimations]);
+
+    const compositionItems = useMemo<PreviewItem[]>(() => composeAt(), [composeAt]);
+
+    /**
+     * 動くものの中で一番長い尺（秒）。書き出しの既定値に使う。
+     * `pingpong` は往復で 1 周なので 2 倍。
+     */
+    const contentDuration = useMemo(() => {
+        let d = 0;
+        for (const a of Object.values(partAnimations)) {
+            if (a.enabled) d = Math.max(d, sequenceDuration(a));
+        }
+        for (const t of Object.values(partTransforms)) {
+            if (hasAnimation(t)) d = Math.max(d, t.loop === 'pingpong' ? t.duration * 2 : t.duration);
+        }
+        return Math.round(d * 100) / 100;
+    }, [partAnimations, partTransforms]);
 
     useEffect(() => {
         if (!psdRoot) return;
@@ -1618,6 +1645,8 @@ export function useEmgPacker() {
         selectedLayer,
         layerMeta,
         compositionItems,
+        composeAt,
+        contentDuration,
         packResult,
         emgData,
         parts,

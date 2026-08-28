@@ -13,11 +13,14 @@ import { SpriteSheetLoader } from './services/SpriteSheetLoader';
 import { SpriteSheetDialog } from './components/SpriteSheetDialog';
 import { TemplateReportDialog } from './components/TemplateReportDialog';
 import { CanvasSizeDialog } from './components/CanvasSizeDialog';
+import { PreviewExportDialog } from './components/PreviewExportDialog';
+import { computeBounds, drawComposite } from './services/composite';
+import { exportPreview, extensionOf } from './services/previewExport';
 
 function App() {
     const {
         psdRoot, atlasUrls, selectedLayer, layerMeta,
-        compositionItems, emgData,
+        compositionItems, composeAt, contentDuration, emgData,
         parts, selectedPartId, previewFrame, previewOff, partAnimations,
         partTransforms, transformTarget, setTransformTarget, transformTime, playScope,
         handleTransformChange, handlePlayToggle, handleTransformReset, setTransformTime,
@@ -91,6 +94,49 @@ function App() {
 
     // 新規作成 / キャンバスサイズ変更。同じ画面を使い分ける。
     const [sizeDialog, setSizeDialog] = useState<'new' | 'resize' | null>(null);
+
+    // プレビューの書き出し（GIF / 動画）。
+    const [previewExportOpen, setPreviewExportOpen] = useState(false);
+    const [previewBusy, setPreviewBusy] = useState<{ phase: string; ratio: number } | null>(null);
+
+    /**
+     * プレビューをアニメーションとして書き出す。
+     *
+     * 描画は `composite.ts` を通すので、画面で見たものと同じ規則で出ます。
+     * トランスフォームは範囲を絞る前の `partTransforms` を使う — 書き出しでは
+     * 全部が動いてほしいため（単体再生の絞り込みは画面上の都合）。
+     */
+    const runPreviewExport = async (o: {
+        format: 'gif' | 'webm'; duration: number; fps: number;
+        scale: number; background: 'transparent' | string;
+    }) => {
+        if (!psdRoot) return;
+        setPreviewBusy({ phase: '準備しています', ratio: 0 });
+        try {
+            const blob = await exportPreview({
+                ...o,
+                width: psdRoot.width ?? 0,
+                height: psdRoot.height ?? 0,
+                frameAt: t => composeAt(t),
+                draw: (ctx, items, t, base) => drawComposite(ctx, items, partTransforms, computeBounds(items), t, base),
+                onProgress: (phase, ratio) => setPreviewBusy({ phase, ratio }),
+            });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `preview.${extensionOf(o.format)}`;
+            link.click();
+            setPreviewExportOpen(false);
+            setToast({
+                title: 'プレビューを書き出しました',
+                body: `${link.download} — ${o.duration}s / ${o.fps}fps / ${Math.round(blob.size / 1024)} KB`,
+            });
+        } catch (e) {
+            console.error(e);
+            setToast({ title: '書き出せませんでした', body: String(e instanceof Error ? e.message : e), tone: 'error' });
+        } finally {
+            setPreviewBusy(null);
+        }
+    };
 
     /**
      * 今の中身が占めている範囲（キャンバス座標）。
@@ -219,6 +265,7 @@ function App() {
                         playingAll={playScope === 'all'}
                         canPlay={anyPlayable}
                         onResizeCanvas={() => setSizeDialog('resize')}
+                        onExportPreview={() => setPreviewExportOpen(true)}
                     />
                 }
                 rightPanel={
@@ -306,6 +353,15 @@ function App() {
                         handleSheetImport(name, SpriteSheetLoader.slice(source, grid, fps, name));
                         setSheetFile(null);
                     }}
+                />
+            )}
+            {previewExportOpen && psdRoot && (
+                <PreviewExportDialog
+                    contentDuration={contentDuration}
+                    canvas={{ width: psdRoot.width ?? 0, height: psdRoot.height ?? 0 }}
+                    busy={previewBusy}
+                    onCancel={() => setPreviewExportOpen(false)}
+                    onExport={runPreviewExport}
                 />
             )}
             {sizeDialog && (
