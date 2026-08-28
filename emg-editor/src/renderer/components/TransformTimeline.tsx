@@ -17,6 +17,8 @@ interface TransformTimelineProps {
     transform: PartTransform;
     /** 今の再生時刻（秒）。停止中も位置を保つ。 */
     time: number;
+    /** 別の対象を再生中で、この対象は止まっている。 */
+    frozen?: boolean;
     playing: boolean;
     onChange: (patch: Partial<PartTransform>) => void;
     onSeek: (t: number) => void;
@@ -49,7 +51,7 @@ const round = (v: number, n = 3) => Math.round(v * 10 ** n) / 10 ** n;
  */
 export const TransformTimeline: React.FC<TransformTimelineProps> = ({
     partId, frames, target, onTargetChange, hasTransform,
-    transform, time, playing, onChange, onSeek, onPlayToggle, onReset,
+    transform, time, frozen, playing, onChange, onSeek, onPlayToggle, onReset,
 }) => {
     const laneRef = useRef<HTMLDivElement>(null);
     const duration = Math.max(0.05, transform.duration);
@@ -149,6 +151,9 @@ export const TransformTimeline: React.FC<TransformTimelineProps> = ({
                     <RotateCcw size={12} />
                 </button>
                 <span className="tl-time">{time.toFixed(2)}s</span>
+                {frozen && (
+                    <span className="part-meta">別のパーツを再生中（ここは停止）</span>
+                )}
 
                 <label className="tl-lbl">尺</label>
                 <input

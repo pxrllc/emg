@@ -311,6 +311,11 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                             {selectedPartId === part.partId && (() => {
                                 const target = transformTarget[part.partId];
                                 const key = transformKey(part.partId, target);
+                                // **再生範囲の外なら時刻を進めない。** 単体再生中に別の
+                                // パーツを選ぶと、絵は止まっているのに数値とプレイヘッドだけ
+                                // 動く、という食い違いになる（プレビューは範囲外を 0 に
+                                // 固定しているので、パネルもそれに合わせる）。
+                                const live = !playScope || playScope === 'all' || playScope === key;
                                 return (
                                     <TransformTimeline
                                         partId={part.partId}
@@ -319,10 +324,13 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                         onTargetChange={f => onTransformTargetChange(part.partId, f)}
                                         hasTransform={f => !!partTransforms[transformKey(part.partId, f)]}
                                         transform={partTransforms[key] ?? emptyTransform()}
-                                        time={transformTime}
+                                        time={live ? transformTime : 0}
+                                        frozen={!live}
                                         playing={playScope === key || playScope === 'all'}
                                         onChange={patch => onTransformChange(key, patch)}
-                                        onSeek={onSeek}
+                                        // 止まって見えるタイムラインを掴んだら、
+                                        // 掴んだ方を見たいはずなので再生を止めてから送る。
+                                        onSeek={t => { if (!live) onTransformReset(); onSeek(t); }}
                                         onPlayToggle={() => onPlayToggle(key)}
                                         onReset={onTransformReset}
                                     />
