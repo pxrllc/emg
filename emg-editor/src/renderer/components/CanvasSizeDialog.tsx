@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Frame, X } from 'lucide-react';
+import { FolderOpen, Frame, X } from 'lucide-react';
 import { NumberInput } from './NumberInput';
 
 /** 既存の中身を、広くなった／狭くなったキャンバスのどこに置くか。 */
@@ -12,6 +12,13 @@ interface CanvasSizeDialogProps {
     contentBounds?: { left: number; top: number; right: number; bottom: number } | null;
     onCancel: () => void;
     onApply: (width: number, height: number, align: CanvasAlign) => void;
+    /**
+     * 既存の `.emg` から始める（新規のときだけ）。
+     *
+     * 「新規」は空から作るためのものだが、書き出した `.emg` の続きを始めたい
+     * ことも同じくらいある。「開く」を探し直させないよう、ここにも置く。
+     */
+    onOpenEmg?: () => void;
 }
 
 const numStyle: React.CSSProperties = {
@@ -33,7 +40,7 @@ const PRESETS: { label: string; w: number; h: number }[] = [
 const MAX = 8192;   // アトラスの上限と揃える（emg-json-spec.md 1.3）
 
 export const CanvasSizeDialog: React.FC<CanvasSizeDialogProps> = ({
-    current, contentBounds, onCancel, onApply,
+    current, contentBounds, onCancel, onApply, onOpenEmg,
 }) => {
     const [w, setW] = useState(current?.width || 1024);
     const [h, setH] = useState(current?.height || 1024);
@@ -128,10 +135,23 @@ export const CanvasSizeDialog: React.FC<CanvasSizeDialogProps> = ({
                     )}
 
                     {!resizing && (
-                        <div className="part-meta" style={{ lineHeight: 1.7 }}>
-                            空のキャンバスから始めます。素材はドラッグ&amp;ドロップか
-                            「素材を追加」で足してください。
-                        </div>
+                        <>
+                            <div className="part-meta" style={{ lineHeight: 1.7 }}>
+                                空のキャンバスから始めます。素材はドラッグ&amp;ドロップか
+                                「素材を追加」で足してください。
+                            </div>
+                            {onOpenEmg && (
+                                <div className="map-block">
+                                    <div className="part-meta" style={{ lineHeight: 1.7 }}>
+                                        書き出した <code>.emg</code> の続きから始めることもできます。
+                                        パーツ・差分・アニメーション・まばたきの設定まで戻ります。
+                                    </div>
+                                    <button className="btn btn-block" onClick={onOpenEmg}>
+                                        <FolderOpen size={14} /> 既存の .emg を開く
+                                    </button>
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
 

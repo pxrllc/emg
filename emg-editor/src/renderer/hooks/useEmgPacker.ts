@@ -1720,6 +1720,7 @@ export function useEmgPacker() {
         handleNewProject,
         handleCanvasResize,
         projectName,
+        setProjectName,
         handleSourceAdd,
         handleSheetImport,
         handlePsdUpdate,

@@ -7,6 +7,8 @@ interface PreviewExportDialogProps {
     /** 一番長いアセットの尺（秒）。0 なら動くものがない。 */
     contentDuration: number;
     canvas: { width: number; height: number };
+    /** 既定のファイル名（拡張子なし）。 */
+    defaultName: string;
     busy: { phase: string; ratio: number } | null;
     /**
      * 出来上がったが、まだ保存していないもの。
@@ -20,7 +22,7 @@ interface PreviewExportDialogProps {
     onCancel: () => void;
     onExport: (o: {
         format: PreviewFormat; duration: number; fps: number;
-        scale: number; background: 'transparent' | string;
+        scale: number; background: 'transparent' | string; name: string;
     }) => void;
 }
 
@@ -36,8 +38,9 @@ const numStyle: React.CSSProperties = {
  * 作ったものが 1 周する長さで出るのが普通に欲しい結果なので。
  */
 export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
-    contentDuration, canvas, busy, result, onSaveResult, onCancel, onExport,
+    contentDuration, canvas, defaultName, busy, result, onSaveResult, onCancel, onExport,
 }) => {
+    const [name, setName] = useState(defaultName);
     const [format, setFormat] = useState<PreviewFormat>('gif');
     // 動くものが無ければ 1 秒。0 秒だと 1 コマも出ない。
     const [duration, setDuration] = useState(contentDuration > 0 ? contentDuration : 1);
@@ -64,6 +67,18 @@ export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
                 </div>
 
                 <div className="modal-body">
+                    <div className="anim-row">
+                        <label>名前</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            placeholder={defaultName}
+                            style={{ ...numStyle, flex: 1, width: 'auto', minWidth: 0 }}
+                        />
+                        <span className="part-meta">.{format === 'gif' ? 'gif' : 'webm'}</span>
+                    </div>
+
                     <div className="anim-row">
                         <label>形式</label>
                         <div className="seg">
@@ -153,6 +168,7 @@ export const PreviewExportDialog: React.FC<PreviewExportDialogProps> = ({
                         onClick={() => onExport({
                             format, duration, fps, scale,
                             background: transparent ? 'transparent' : '#ffffff',
+                            name: name.trim() || defaultName,
                         })}
                     >
                         {busy ? '書き出し中…' : result ? 'もう一度書き出す' : '書き出す'}

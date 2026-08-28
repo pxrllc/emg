@@ -31,7 +31,7 @@ function App() {
         handleExpressionRename, handleExpressionDelete,
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
-        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
+        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, setProjectName, handleSourceAdd, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, pendingExport, handleSavePending, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
@@ -111,7 +111,7 @@ function App() {
      */
     const runPreviewExport = async (o: {
         format: 'gif' | 'webm'; duration: number; fps: number;
-        scale: number; background: 'transparent' | string;
+        scale: number; background: 'transparent' | string; name: string;
     }) => {
         if (!psdRoot) return;
         // **保存先は押された瞬間に押さえる。** 書き出しに数秒かかるので、
@@ -120,7 +120,7 @@ function App() {
         let target;
         try {
             target = await prepareSave(
-                `${projectName}.${extensionOf(o.format)}`,
+                `${o.name}.${extensionOf(o.format)}`,
                 o.format === 'gif' ? 'image/gif' : 'video/webm',
                 [`.${extensionOf(o.format)}`]);
         } catch {
@@ -246,6 +246,18 @@ function App() {
                     if (file) setSheetFile(file);
                 }}
             />
+            {/* 「新規」から既存の .emg を開くための入口。`.emg` に絞る */}
+            <input
+                type="file"
+                accept=".emg"
+                style={{ display: 'none' }}
+                id="emg-open-input"
+                onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (file) handlePsdLoad(file);
+                }}
+            />
             <MainLayout
                 hasFile={!!psdRoot}
                 leftPanel={
@@ -351,6 +363,8 @@ function App() {
                         onExport={handleExport}
                         pendingExport={pendingExport && { name: pendingExport.name, size: pendingExport.blob.size }}
                         onSavePending={handleSavePending}
+                        projectName={projectName}
+                        onProjectNameChange={setProjectName}
                         onSaveProject={handleSaveProject}
                         onLoadProject={handleLoadProject}
                         onTemplateSave={handleTemplateSave}
@@ -379,6 +393,7 @@ function App() {
                 <PreviewExportDialog
                     contentDuration={contentDuration}
                     canvas={{ width: psdRoot.width ?? 0, height: psdRoot.height ?? 0 }}
+                    defaultName={projectName}
                     busy={previewBusy}
                     result={previewResult && { name: previewResult.name, size: previewResult.blob.size }}
                     onSaveResult={() => {
@@ -398,6 +413,9 @@ function App() {
                         ? { width: psdRoot.width ?? 0, height: psdRoot.height ?? 0 } : undefined}
                     contentBounds={sizeDialog === 'resize' ? contentBounds : null}
                     onCancel={() => setSizeDialog(null)}
+                    onOpenEmg={sizeDialog === 'new'
+                        ? () => { setSizeDialog(null); document.getElementById('emg-open-input')?.click(); }
+                        : undefined}
                     onApply={(w, h, align) => {
                         if (sizeDialog === 'new') handleNewProject(w, h);
                         else handleCanvasResize(w, h, align);

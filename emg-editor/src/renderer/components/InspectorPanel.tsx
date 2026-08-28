@@ -84,6 +84,9 @@ interface InspectorPanelProps {
     /** 出来上がったが未保存の `.emg`。あれば書き出しボタンを「保存する」にする。 */
     pendingExport: { name: string; size: number } | null;
     onSavePending: () => void;
+    /** 保存名の芯。`.emg` もプレビューもテンプレートもここから決まる。 */
+    projectName: string;
+    onProjectNameChange: (name: string) => void;
     onSaveProject: () => void;
     onLoadProject: () => void;
     onTemplateSave: () => void;
@@ -225,6 +228,24 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
             </div>
 
             <div className="action-bar">
+                {props.hasFile && (
+                    <div className="anim-row">
+                        <label style={{ minWidth: '52px' }}>名前</label>
+                        <input
+                            type="text"
+                            value={props.projectName}
+                            onChange={e => props.onProjectNameChange(e.target.value)}
+                            onBlur={e => { if (!e.target.value.trim()) props.onProjectNameChange('untitled'); }}
+                            placeholder="untitled"
+                            title="保存するときのファイル名になります"
+                            style={{
+                                flex: 1, minWidth: 0, padding: '5px 7px', background: '#1a1a1c',
+                                border: '1px solid #3e3e42', color: '#fff', borderRadius: '4px', fontSize: '12px',
+                            }}
+                        />
+                        <span className="part-meta">.emg</span>
+                    </div>
+                )}
                 {props.pendingExport && !props.exportProgress ? (
                     <button className="btn btn-primary btn-block" onClick={props.onSavePending}>
                         <Download size={15} />
