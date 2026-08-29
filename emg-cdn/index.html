@@ -526,6 +526,12 @@
                 const tex = state.texes[i];
                 if (!tex) { atlasImage.removeAttribute('src'); return; }
 
+                // 大きさが決まるまで場所を取らせない。8192px のアトラスは
+                // 読み終えた瞬間に原寸で描かれ、layout() が寸法を入れるまでの間
+                // パネルからあふれてスクロールバーが出る。
+                atlasImage.classList.add('sizing');
+                atlasSheet.style.width = atlasSheet.style.height = '0px';
+
                 atlasImage.src = tex.url;
                 // decode() ではなく load を待つ。バックグラウンドのタブでは
                 // デコードが後回しにされて decode() が返らず、そこで止まってしまう。
@@ -593,6 +599,7 @@
                     atlasImage.style.height = `${tex.height * ka}px`;
                     atlasSheet.style.width = `${tex.width * ka}px`;
                     atlasSheet.style.height = `${tex.height * ka}px`;
+                    atlasImage.classList.remove('sizing');
                 }
 
                 renderOverlays();
