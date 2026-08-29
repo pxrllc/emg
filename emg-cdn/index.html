@@ -390,7 +390,12 @@
                 for (const c of $('partChips').children) {
                     if (c.dataset) c.classList.toggle('active', c.dataset.part === partID);
                 }
+                const had = !$('partControl').hidden;
                 renderPartControl();
+                // 操作の帯が出入りすると絵の欄の高さが変わる。倍率は出したときの
+                // 高さで決めているので、取り直さないとキャンバスがはみ出して
+                // スクロールバーが生える。
+                if (had !== !$('partControl').hidden) layout();
                 applyHighlight();
             }
 
@@ -656,8 +661,11 @@
                 if (hovered != null) {
                     draw(state.layers[hovered], 'hot');
                     const label = document.createElement('div');
-                    label.className = 'rect-label';
                     const l = state.layers[hovered];
+                    // 既定では矩形の上に出す。上端に近いレイヤーだと切り取られて
+                    // 見えなくなるので、そのときだけ矩形の中へ入れる。
+                    const above = l.by * ks >= 20;
+                    label.className = `rect-label${above ? '' : ' inside'}`;
                     label.textContent = `${l.partID} / ${l.frame}`;
                     label.style.left = `${l.bx * ks}px`;
                     label.style.top = `${l.by * ks}px`;
@@ -748,6 +756,16 @@
                 // 止めた位置のフレームで矩形を合わせ直す（止めてから見るのが普通なので）。
                 syncAtlasDim();
             };
+
+            // 横に流れる帯はスクロールバーを出していないので、ふつうの縦ホイールで
+            // 横に動くようにする（マウスだけだと他に動かす手が無い）。
+            for (const el of [$('partChips'), $('ctlFrames'), document.querySelector('.loaders')]) {
+                el.addEventListener('wheel', e => {
+                    if (e.deltaY === 0 || el.scrollWidth <= el.clientWidth) return;
+                    e.preventDefault();
+                    el.scrollLeft += e.deltaY;
+                }, { passive: false });
+            }
 
             $('openButton').onclick = () => $('fileInput').click();
             $('fileInput').onchange = e => {

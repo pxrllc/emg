@@ -56,6 +56,56 @@ body {
     overflow: hidden;
 }
 
+/* ---- スクロールバー ------------------------------------------------------
+ *
+ * 既定のスクロールバーは明るく太く、暗い画面では白い帯として目立つ。
+ * 横に流れる要素が縦に重なる場所があるので、細くして地の色に寄せる。
+ */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #394254 transparent;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #394254;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4d586e;
+    background-clip: content-box;
+}
+
+/*
+ * チップの帯は端でチップが切れているのが見えるので、バーが無くても
+ * 続きがあることは分かる。3 本が縦に並ぶのを避けるため出さない。
+ * （バーが無いぶん、ふつうのホイールでも横に動くようにしてある）
+ */
+.loaders,
+.chips.parts,
+.frame-strip {
+    scrollbar-width: none;
+}
+
+.loaders::-webkit-scrollbar,
+.chips.parts::-webkit-scrollbar,
+.frame-strip::-webkit-scrollbar {
+    height: 0;
+}
+
 /* ---- 上部バー ---------------------------------------------------------- */
 
 .topbar {
@@ -463,9 +513,16 @@ body {
 
 /* ---- レイヤーの矩形 ---------------------------------------------------- */
 
+/*
+ * キャンバスの外へ出るレイヤーがある（basePosition + 幅 が baseCanvas を
+ * 超えるファイルは普通にある）。絵そのものは #layerContainer が切っているが、
+ * 矩形は絶対配置なので、切らないとスクロールできる範囲を広げてしまい、
+ * パーツを選んだ瞬間にスクロールバーが生える。
+ */
 .overlay {
     position: absolute;
     inset: 0;
+    overflow: hidden;
     pointer-events: none;
 }
 
@@ -505,6 +562,11 @@ body {
     border: 1.5px solid var(--canvas);
     background: rgba(86, 200, 221, 0.12);
     box-shadow: 0 0 0 1px rgba(20, 22, 29, 0.9), 0 0 14px rgba(86, 200, 221, 0.3);
+}
+
+.rect-label.inside {
+    transform: none;
+    margin-top: 0;
 }
 
 .rect-label {
