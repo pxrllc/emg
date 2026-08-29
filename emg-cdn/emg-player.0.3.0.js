@@ -65,6 +65,18 @@
             // 読み込んだアトラスの Object URL（textureFile -> URL）。
             // 中身を見せる側（アトラス表示など）が同じ画像を二重に展開しないで済むように公開する。
             getTextures: () => ({ ...textureUrls }),
+            // パーツ単位の上書き（ファイルの内容は変えず、見え方と動きだけ止める）
+            showPart: setPartShown,
+            // レイヤー 1 枚の表示。(partID, フレーム識別子) は frameName があると
+            // 1 枚を指さないので、宣言順の通し番号（data-layer-index）で指す。
+            showLayer: (layerIndex, shown) => {
+                const el = document.querySelector(`div.layer[data-layer-index="${layerIndex}"]`);
+                if (el) setLayerVisible(el, shown);
+            },
+            setPartPlaying: setPartPlaying,
+            isPartPlaying: partID => !isPartPaused(partID),
+            // switch パーツの表示コマを選ぶ。識別子は frameName ?? textureID。
+            setFrame: switchTexture,
             // v0.3.0: mapping.json による外部制御API
             setBlinkState: applyBlinkState,
             setViseme: applyViseme,
@@ -90,12 +102,22 @@
         window.dispatchEvent(new CustomEvent(name, { detail }));
     }
 
+    /*
+     * 読み込みの通し番号。読み込みは非同期なので、前のものが終わる前に次を
+     * 頼まれることがある（デモを続けて押す、読み込み中にファイルを落とす）。
+     * 遅れて終わった古いほうが後から画面を書き換えると、レイヤーは新しい
+     * ファイル・パーツ一覧は古いファイル、という混ざった状態になる。
+     * 番号は「頼まれた順」に取り、差し替える直前に自分が最新か確かめる。
+     */
+    let loadTicket = 0;
+
     async function loadEmgFromCDN(url, containerId = "layerContainer") {
+        const ticket = ++loadTicket;
         try {
             console.log(`Loading EMG from: ${url}`);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return await loadEmgFromBlob(await response.blob(), containerId, url);
+            return await loadEmgFromBlob(await response.blob(), containerId, url, ticket);
         } catch (error) {
             // 例外を投げ直さないのは、この関数を await せずに呼ぶ既存の埋め込みが
             // unhandled rejection を出すようになってしまうため。失敗は emg:error で伝える。
@@ -105,7 +127,7 @@
         }
     }
 
-    async function loadEmgFromBlob(blob, containerId = "layerContainer", source = null) {
+    async function loadEmgFromBlob(blob, containerId = "layerContainer", source = null, ticket = ++loadTicket) {
         const label = source ?? (blob && blob.name) ?? '(blob)';
         try {
             /*
@@ -148,8 +170,16 @@
             }
 
             // ---- ここから差し替え ----
+            // 待っている間に次の読み込みが始まっていたら、こちらは捨てる。
+            if (ticket !== loadTicket) {
+                console.log(`Load of '${label}' superseded by a newer load`);
+                return false;
+            }
             stopTimers();
             resetMappingState();
+            // 前のファイルで消した／止めたパーツの指定は持ち越さない。
+            hiddenParts.clear();
+            pausedParts.clear();
             window.isAnimationRunning = true;
             window.jsonData = data;
             window.emgVersion = version;
@@ -346,14 +376,21 @@
         });
     }
 
+    /**
+     * 時刻は sprite ごとに持ち、止めているパーツの分だけ進めない。
+     * 開始時刻からの経過で出すと、止めても裏で時間が進み、戻した瞬間に飛ぶ。
+     */
     function startTransformLoop() {
         if (transformSprites.length === 0) return;
         transformStart = performance.now();
         const tick = () => {
             if (!window.isAnimationRunning) { transformRafId = null; return; }
-            const time = (performance.now() - transformStart) / 1000;
+            const now = performance.now();
+            const delta = Math.min((now - transformStart) / 1000, 0.1);   // タブ復帰時の飛びを抑える
+            transformStart = now;
             for (const sp of transformSprites) {
-                applyTransformToPart(sp.targetPartID, resolveTransformAt(sp, time));
+                if (!pausedParts.has(sp.targetPartID)) sp._time = (sp._time ?? 0) + delta;
+                applyTransformToPart(sp.targetPartID, resolveTransformAt(sp, sp._time ?? 0));
             }
             transformRafId = requestAnimationFrame(tick);
         };
@@ -367,13 +404,45 @@
         element.style.opacity = "1";
     }
 
+    // ------------------------------------------------------------------
+    // 外から掛ける「パーツ単位の上書き」
+    //
+    // ファイルが決めた状態（switch のどのフレームを出すか、sprite が回っているか）
+    // とは別の層として持つ。混ぜると、消したパーツの上を sprite が次のコマで
+    // 塗り直して勝手に復活する。
+    // ------------------------------------------------------------------
+
+    const hiddenParts = new Set();   // 利用者が消したパーツ
+    const pausedParts = new Set();   // 利用者が止めたパーツ
+
     // 表示/非表示は display で行う。
     // 以前は opacity:0 で隠していたが、それだと (1) 非表示レイヤーも合成対象として残り
     // （senti は 36 レイヤー中 18 枚が常時非表示）、(2) レイヤー固有の不透明度
     // （data.json の layer.opacity）を上書きしてしまい反映できなかった。
     // opacity は layer.opacity 専用に使う。
+    //
+    // ファイル側が決めた「出すつもりかどうか」は dataset.on に残す。display だけだと、
+    // パーツを消している間に切り替わったコマが分からず、再表示で古いコマに戻る。
     function setLayerVisible(el, visible) {
-        el.style.display = visible ? 'block' : 'none';
+        el.dataset.on = visible ? '1' : '0';
+        el.style.display = (visible && !hiddenParts.has(el.dataset.partId)) ? 'block' : 'none';
+    }
+
+    /** パーツごと消す / 戻す。戻したときはその時点のコマが出る。 */
+    function setPartShown(partID, shown) {
+        if (shown) hiddenParts.delete(partID); else hiddenParts.add(partID);
+        document.querySelectorAll(`div[data-part-id="${partID}"]`).forEach(el => {
+            el.style.display = (shown && el.dataset.on !== '0') ? 'block' : 'none';
+        });
+    }
+
+    /** パーツごとに動きを止める / 動かす。止めた位置のコマと変形を保つ。 */
+    function setPartPlaying(partID, playing) {
+        if (playing) pausedParts.delete(partID); else pausedParts.add(partID);
+    }
+
+    function isPartPaused(partID) {
+        return pausedParts.has(partID);
     }
 
     function renderLayers(jsonData, textureBlobs, containerId) {
@@ -701,10 +770,13 @@
     }
 
     // v0.5.0 §4: パーツ全体が非表示か（レイヤーが 1 枚も表示されていない状態）
+    // 見るのは display ではなく dataset.on。利用者が手で消しただけのパーツを
+    // ここで拾うと、§4.5 の「非表示のパーツは sprite を発火しない」に引っかかって
+    // 再表示しても二度と動かなくなる。
     function isPartHidden(partID) {
         const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
         if (layers.length === 0) return false;
-        return [...layers].every(el => el.style.display === 'none');
+        return [...layers].every(el => el.dataset.on === '0');
     }
 
     /**
@@ -810,6 +882,7 @@
         } else if (triggerType === 'random_interval') {
             const scheduleNext = () => {
                 if (!window.isAnimationRunning) return;
+                if (pausedParts.has(targetPartID)) { later(scheduleNext, HOLD_MS); return; }
                 const min = trigger.intervalMin || 1.0;
                 const max = trigger.intervalMax || 5.0;
                 const delay = (min + Math.random() * (max - min)) * 1000;
@@ -834,30 +907,39 @@
         });
     }
 
+    /** 止めているパーツの間だけ待つ。止めた時点のコマを保つ。 */
+    const HOLD_MS = 100;
+    function later(fn, ms) {
+        const tm = setTimeout(fn, ms);
+        window.timeouts.push(tm);
+    }
+
     /**
      * v0.5.0 §6: 不等間隔のキー列を再生する。
      * 各キーの t（秒・再生開始からの絶対時刻）でフレームを切り替える。
      * 尺は最後のキーの t（§6.4）。
+     *
+     * キーごとに 1 本ずつタイマーを張るのではなく 1 本の鎖にしてある。
+     * まとめて張ると、途中で止めたときに待っているタイマーを持てず、
+     * 再開したときに溜まった分が一度に発火する。
      */
     function playKeyedSequence(partID, keys, loop) {
         if (!Array.isArray(keys) || keys.length === 0) return;
 
-        const start = () => {
+        let i = 0;
+        const step = () => {
             if (!window.isAnimationRunning) return;
-            for (const k of keys) {
-                const tm = setTimeout(() => {
-                    if (!window.isAnimationRunning) return;
-                    switchTexture(partID, k.frame);
-                }, k.t * 1000);
-                window.timeouts.push(tm);
-            }
-            if (loop) {
-                const duration = keys[keys.length - 1].t * 1000;
-                const tm = setTimeout(start, duration);
-                window.timeouts.push(tm);
-            }
+            if (pausedParts.has(partID)) { later(step, HOLD_MS); return; }
+
+            switchTexture(partID, keys[i].frame);
+            const isLast = i === keys.length - 1;
+            if (isLast && !loop) return;
+            // 最後のキーから先頭へ戻る間隔は、尺（最後のキーの t）から最後のキーまでの残り。
+            const wait = isLast ? 0 : (keys[i + 1].t - keys[i].t) * 1000;
+            i = isLast ? 0 : i + 1;
+            later(step, Math.max(wait, 0));
         };
-        start();
+        step();
     }
 
     function playOrderedSequence(partID, frames, frameInterval, loop) {
@@ -865,6 +947,7 @@
 
         function nextFrame() {
             if (!window.isAnimationRunning) return;
+            if (pausedParts.has(partID)) { later(nextFrame, HOLD_MS); return; }
             if (idx >= frames.length) {
                 if (loop) {
                     idx = 0;

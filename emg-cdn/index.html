@@ -56,6 +56,16 @@
             </div>
             <div class="panel-foot">
                 <div class="chips parts" id="partChips"></div>
+                <!--
+                    パーツごとの操作は、選んだ 1 つぶんだけをここに出す。
+                    一覧の各行にボタンを並べると、パーツ 5 個で 15 個のボタンが常に見える。
+                -->
+                <div class="part-control" id="partControl" hidden>
+                    <span class="ctl-name" id="ctlName"></span>
+                    <button class="ctl" id="ctlShow"></button>
+                    <button class="ctl" id="ctlPlay"></button>
+                    <div class="frame-strip" id="ctlFrames"></div>
+                </div>
             </div>
         </section>
 
@@ -140,8 +150,19 @@
                 texes: [],         // [{ file, url, width, height, probe }]
                 activeTex: 0,
                 zoom: 'fit',
-                hover: null,       // レイヤーの通し番号
-                pinnedPart: null,
+                hover: null,        // レイヤーの通し番号
+                selectedPart: null, // 操作の対象に選んでいるパーツ
+                hoverPart: null,    // 一覧でマウスが乗っているだけのパーツ
+                hidden: new Set(),
+                paused: new Set(),
+            };
+
+            // アイコン。ボタンに文字を並べると横幅を食い、スマホで折り返す。
+            const ICON = {
+                eye: '<svg viewBox="0 0 24 24"><path d="M1 12s4-7.5 11-7.5S23 12 23 12s-4 7.5-11 7.5S1 12 1 12z"/><circle cx="12" cy="12" r="3.2"/></svg>',
+                eyeOff: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7.5 10-7.5c1.6 0 3 .4 4.3 1M22 12s-4 7.5-10 7.5c-1.6 0-3-.4-4.3-1"/><path d="M4 3l16 18"/></svg>',
+                play: '<svg viewBox="0 0 24 24"><path d="M7 4.5l12 7.5-12 7.5z" fill="currentColor" stroke="none"/></svg>',
+                pause: '<svg viewBox="0 0 24 24"><path d="M8 4.5v15M16 4.5v15"/></svg>',
             };
 
             // ---- 読み込み ------------------------------------------------------
@@ -233,13 +254,25 @@
 
             // ---- 画面の組み立て ------------------------------------------------
 
+            /*
+             * 画面の組み立ても非同期（アトラスの読み込みを待つ）なので、
+             * 待っている間に次のファイルが来ると 2 本が絡み合う。古いほうの
+             * アトラスは新しい読み込みで revoke 済みなので、そのまま進むと
+             * 「絵は新しいファイル・一覧は古いファイル・アトラスは 0 × 0」になる。
+             */
+            let loadSeq = 0;
+
             async function onLoaded(detail) {
+                const seq = ++loadSeq;
                 state.data = detail.data;
                 state.layers = collectLayers(detail.data);
                 state.texes = collectTextures(detail.data, detail.textures);
                 state.activeTex = 0;
                 state.hover = null;
-                state.pinnedPart = null;
+                state.selectedPart = null;
+                state.hoverPart = null;
+                state.hidden = new Set();     // 消したパーツ / レイヤー（プレイヤーと同期）
+                state.paused = new Set();     // 止めたパーツ
 
                 const container = $('layerContainer');
                 state.els = state.layers.map(l =>
@@ -260,6 +293,7 @@
                 buildPartChips();
                 updateReadout();   // 前のファイルで指していたレイヤーが残らないようにする
                 await showTexture(0);
+                if (seq !== loadSeq) return;   // 待っている間に次のファイルが来た
                 // 再生ボタンの出し入れはパネル見出しの高さを変えるので、倍率を出す前に済ませる。
                 startFrameWatch();
                 layout();
@@ -287,10 +321,7 @@
                 $('playToggle').textContent = '一時停止';
                 if (!playing) return;
                 frameWatch = setInterval(() => {
-                    if (!window.isAnimationRunning) return;
-                    for (const r of atlasOverlay.children) {
-                        r.classList.toggle('dim', !isVisible(Number(r.dataset.index)));
-                    }
+                    if (window.isAnimationRunning) syncAtlasDim();
                 }, 100);
             }
 
@@ -321,27 +352,161 @@
                     return;
                 }
 
+                for (const [partID, info] of partList()) {
+                    const b = document.createElement('button');
+                    b.className = 'chip part-chip';
+                    b.dataset.part = partID;
+                    b.innerHTML =
+                        `<span class="chip-type ${info.type}">${info.type}</span>` +
+                        `<span>${escapeHtml(partID)}</span>` +
+                        `<span class="chip-count">${info.n}</span>`;
+                    b.onmouseenter = () => { state.hoverPart = partID; applyHighlight(); };
+                    b.onmouseleave = () => { state.hoverPart = null; applyHighlight(); };
+                    b.onclick = () => selectPart(state.selectedPart === partID ? null : partID);
+                    box.appendChild(b);
+                }
+                selectPart(null);
+            }
+
+            function partList() {
                 const parts = new Map();
                 for (const l of state.layers) {
                     if (!parts.has(l.partID)) parts.set(l.partID, { type: l.type, n: 0 });
                     parts.get(l.partID).n++;
                 }
-                for (const [partID, info] of parts) {
-                    const b = document.createElement('button');
-                    b.className = 'chip part-chip';
-                    b.innerHTML =
-                        `<span class="chip-type ${info.type}">${info.type}</span>` +
-                        `<span>${escapeHtml(partID)}</span>` +
-                        `<span class="chip-count">${info.n}</span>`;
-                    b.onmouseenter = () => { if (!state.pinnedPart) highlightPart(partID); };
-                    b.onmouseleave = () => { if (!state.pinnedPart) highlightPart(null); };
-                    b.onclick = () => {
-                        state.pinnedPart = state.pinnedPart === partID ? null : partID;
-                        highlightPart(state.pinnedPart ?? partID);
-                        for (const c of box.children) c.classList.remove('active');
-                        if (state.pinnedPart) b.classList.add('active');
-                    };
-                    box.appendChild(b);
+                return parts;
+            }
+
+            /** そのパーツが自分で動くか（sprite を持つか）。 */
+            function partHasMotion(partID) {
+                return (state.data?.sprites ?? []).some(s =>
+                    s.targetPartID === partID && (s.trigger || s.tracks?.length));
+            }
+
+            // ---- 選んだパーツの操作 ---------------------------------------------
+
+            function selectPart(partID) {
+                state.selectedPart = partID;
+                for (const c of $('partChips').children) {
+                    if (c.dataset) c.classList.toggle('active', c.dataset.part === partID);
+                }
+                renderPartControl();
+                applyHighlight();
+            }
+
+            function renderPartControl() {
+                const box = $('partControl');
+                const partID = state.selectedPart;
+                box.hidden = !partID;
+                if (!partID) return;
+
+                const info = partList().get(partID);
+                const shown = !state.hidden.has(partID);
+                $('ctlName').textContent = partID;
+
+                const show = $('ctlShow');
+                show.innerHTML = shown ? ICON.eye : ICON.eyeOff;
+                show.title = shown ? 'このパーツを隠す' : 'このパーツを出す';
+                show.classList.toggle('off', !shown);
+                show.onclick = () => {
+                    const next = state.hidden.has(partID);
+                    if (next) state.hidden.delete(partID); else state.hidden.add(partID);
+                    window.EMGPlayer.showPart(partID, next);
+                    renderPartControl();
+                    refreshChipStates();
+                    syncAtlasDim();
+                };
+
+                const play = $('ctlPlay');
+                const moves = partHasMotion(partID);
+                play.hidden = !moves;
+                if (moves) {
+                    const running = !state.paused.has(partID);
+                    play.innerHTML = running ? ICON.pause : ICON.play;
+                    play.title = running ? 'このパーツだけ止める' : 'このパーツだけ動かす';
+                    play.classList.toggle('off', !running);
+                    play.onclick = () => setPartPlaying(partID, state.paused.has(partID));
+                }
+
+                renderFrameStrip(partID, info);
+            }
+
+            function setPartPlaying(partID, playing) {
+                if (playing) state.paused.delete(partID); else state.paused.add(partID);
+                window.EMGPlayer.setPartPlaying(partID, playing);
+                renderPartControl();
+                refreshChipStates();
+            }
+
+            /**
+             * switch なら「どのコマを出すか」、static なら「どのレイヤーを出すか」。
+             * 形式が持つ static / switch の違いがそのまま操作の違いになるので、
+             * 同じ帯で見せて中身だけ変える。
+             */
+            function renderFrameStrip(partID, info) {
+                const strip = $('ctlFrames');
+                strip.innerHTML = '';
+                const mine = state.layers.filter(l => l.partID === partID);
+                if (mine.length < 2 && info?.type !== 'switch') return;
+
+                if (info?.type === 'switch') {
+                    // frameName で複数レイヤーが同じ識別子を共有しうるので、識別子で畳む。
+                    const frames = [...new Set(mine.map(l => l.frame))];
+                    for (const frame of frames) {
+                        const first = mine.find(l => l.frame === frame);
+                        const b = document.createElement('button');
+                        b.className = 'frame-chip';
+                        b.textContent = frame;
+                        b._layers = mine.filter(l => l.frame === frame).map(l => l.index);
+                        b.onmouseenter = () => setHover(first.index);
+                        b.onclick = () => {
+                            // 動いているパーツで選ぶと次のコマで塗り替えられる。止めてから出す。
+                            if (partHasMotion(partID) && !state.paused.has(partID)) {
+                                setPartPlaying(partID, false);
+                            }
+                            window.EMGPlayer.setFrame(partID, frame);
+                            syncAtlasDim();
+                            refreshFrameStrip();
+                        };
+                        strip.appendChild(b);
+                    }
+                } else {
+                    for (const l of mine) {
+                        const b = document.createElement('button');
+                        b.className = 'frame-chip';
+                        b.textContent = l.frame;
+                        b._layers = [l.index];
+                        b.onmouseenter = () => setHover(l.index);
+                        b.onclick = () => {
+                            const next = !isVisible(l.index);
+                            window.EMGPlayer.showLayer(l.index, next);
+                            syncAtlasDim();
+                            refreshFrameStrip();
+                        };
+                        strip.appendChild(b);
+                    }
+                }
+                strip.onmouseleave = () => setHover(null);
+                refreshFrameStrip();
+            }
+
+            /**
+             * 帯のどれが「いま出ている」かを画面から取り直す。
+             * 再生中は 10 回/秒 呼ばれるので、どのレイヤーを見ればいいかは
+             * 帯を作るときに決めておく（毎回 232 コマ × 232 レイヤーを突き合わせない）。
+             */
+            function refreshFrameStrip() {
+                for (const b of $('ctlFrames').children) {
+                    b.classList.toggle('previewing', (b._layers ?? []).some(isVisible));
+                }
+            }
+
+            function refreshChipStates() {
+                for (const c of $('partChips').children) {
+                    const partID = c.dataset?.part;
+                    if (!partID) continue;
+                    c.classList.toggle('off', state.hidden.has(partID));
+                    c.classList.toggle('held', state.paused.has(partID));
                 }
             }
 
@@ -360,6 +525,8 @@
                     if (atlasImage.complete && atlasImage.naturalWidth) return done();
                     atlasImage.onload = atlasImage.onerror = done;
                 });
+                // 待っている間に別のアトラスへ差し替わっていたら、こちらは書かない。
+                if (atlasImage.src !== tex.url) return;
                 // 表示の寸法は宣言値ではなく実物から取る。両者が食い違うファイルがあるため。
                 tex.width = atlasImage.naturalWidth;
                 tex.height = atlasImage.naturalHeight;
@@ -434,10 +601,21 @@
                     r.style.width = `${l.w * ka}px`;
                     r.style.height = `${l.h * ka}px`;
                     r.onmouseenter = () => setHover(l.index);
+                    // タッチにはホバーが無いので、触れた時点で指したことにする。
+                    r.onpointerdown = () => setHover(l.index);
                     atlasOverlay.appendChild(r);
                 }
                 atlasOverlay.onmouseleave = () => setHover(null);
                 applyHighlight();
+            }
+
+            /** アトラスの矩形の「いま出ている／出ていない」を画面から取り直す。 */
+            function syncAtlasDim() {
+                for (const r of atlasOverlay.children) {
+                    r.classList.toggle('dim', !isVisible(Number(r.dataset.index)));
+                }
+                refreshFrameStrip();
+                updateReadout();   // 「いまは非表示」の行が切り替え前のまま残らないように
             }
 
             // ---- ハイライトと読み取り ------------------------------------------
@@ -449,14 +627,9 @@
                 updateReadout();
             }
 
-            function highlightPart(partID) {
-                state.hoverPart = partID;
-                applyHighlight();
-            }
-
             function applyHighlight() {
                 const hovered = state.hover;
-                const part = state.pinnedPart ?? state.hoverPart ?? null;
+                const part = state.selectedPart ?? state.hoverPart ?? null;
 
                 for (const r of atlasOverlay.children) {
                     const i = Number(r.dataset.index);
@@ -538,7 +711,7 @@
             }
 
             let pending = null;
-            stageViewport.addEventListener('mousemove', e => {
+            const pickFromEvent = e => {
                 if (!state.data || pending) return;
                 pending = requestAnimationFrame(() => {
                     pending = null;
@@ -547,7 +720,10 @@
                     const cy = Math.floor((e.clientY - box.top) / state.stageScale);
                     setHover(pickAt(cx, cy));
                 });
-            });
+            };
+            stageViewport.addEventListener('mousemove', pickFromEvent);
+            // タッチはホバーしないので、触れた点で拾う。
+            stageViewport.addEventListener('pointerdown', pickFromEvent);
             stageViewport.addEventListener('mouseleave', () => setHover(null));
 
             // ---- 入り口 --------------------------------------------------------
@@ -570,9 +746,7 @@
                 window.EMGPlayer.toggleAnimation();
                 $('playToggle').textContent = window.isAnimationRunning ? '一時停止' : '再生';
                 // 止めた位置のフレームで矩形を合わせ直す（止めてから見るのが普通なので）。
-                for (const r of atlasOverlay.children) {
-                    r.classList.toggle('dim', !isVisible(Number(r.dataset.index)));
-                }
+                syncAtlasDim();
             };
 
             $('openButton').onclick = () => $('fileInput').click();
