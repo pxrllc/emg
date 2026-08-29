@@ -292,6 +292,9 @@
                 buildTexChips();
                 buildPartChips();
                 updateReadout();   // 前のファイルで指していたレイヤーが残らないようにする
+                // アトラスを待つ前にキャンバスだけ先に合わせる。待っている間、
+                // 絵は原寸で置かれたままなので、そのままだとスクロールバーが出る。
+                layoutStage();
                 await showTexture(0);
                 if (seq !== loadSeq) return;   // 待っている間に次のファイルが来た
                 // 再生ボタンの出し入れはパネル見出しの高さを変えるので、倍率を出す前に済ませる。
@@ -556,16 +559,28 @@
                     (vp.clientHeight - pad) / h);
             }
 
-            function layout() {
+            /**
+             * キャンバス側だけ合わせる。
+             *
+             * アトラスの読み込みを待たずに呼べることが要る。プレイヤーは
+             * レイヤーを並べ終えてから emg:loaded を出すので、ここで倍率を
+             * 決めるまでの間、絵は原寸のまま置かれている。8192px のアトラスだと
+             * その間が数秒あり、ずっとスクロールバーが出たままになる。
+             */
+            function layoutStage() {
                 if (!state.data) return;
-
-                // キャンバス側
                 const cw = state.data.baseCanvasWidth || 1, ch = state.data.baseCanvasHeight || 1;
                 const ks = scaleToFit(stageViewport, cw, ch);
                 stageSheet.style.width = `${cw * ks}px`;
                 stageSheet.style.height = `${ch * ks}px`;
                 stageScale.style.transform = `scale(${ks})`;
                 state.stageScale = ks;
+            }
+
+            function layout() {
+                if (!state.data) return;
+
+                layoutStage();
 
                 // アトラス側
                 const tex = state.texes[state.activeTex];
