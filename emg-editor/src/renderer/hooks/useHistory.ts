@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { Psd } from 'ag-psd';
 import type {
     AvatarExpression, AvatarMapping, AvatarPreset,
-    LayerMeta, PartAnimation, PartTransform,
+    LayerMeta, PartAnimation, PartTransform, SourceEntry, TransformGroup,
 } from '../types';
 
 /**
@@ -26,11 +26,18 @@ export interface DocumentSnapshot {
     mapping: AvatarMapping;
     presets: AvatarPreset[];
     expressions: AvatarExpression[];
+    /**
+     * 取り込んだ素材の一覧。配置（移動・拡大縮小・回転）を持つので書き出しに
+     * 影響し、素材の削除はツリーの変更と対で戻さなければならない。
+     */
+    sources: SourceEntry[];
+    /** ヌル。メンバーの構成が変われば共有アンカーも変わるので、書き出しに影響する。 */
+    transformGroups: TransformGroup[];
 }
 
 const KEYS = [
     'psdRoot', 'layerMeta', 'partAnimations', 'partTransforms',
-    'mapping', 'presets', 'expressions',
+    'mapping', 'presets', 'expressions', 'sources', 'transformGroups',
 ] as const;
 
 /**

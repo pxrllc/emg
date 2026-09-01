@@ -1,3 +1,87 @@
+/**
+ * 取り込んだ素材 1 件をまとめて置き直すための変換（移動・拡大縮小・回転）。
+ *
+ * **書き出し時に各レイヤーへ焼き込みます。** `sprites[].tracks`（§7）とは別物で、
+ * あちらは再生時に動かすもの、こちらは「素材をどこに、どの大きさで置くか」という
+ * 配置そのものです。EMG の静的なレイヤーは `basePosition` と矩形しか持たず
+ * **回転を表現できない**ため、焼き込む以外の方法がありません。
+ *
+ * 非破壊で持ちます。倍率を何度いじっても、書き出しの再標本化は 1 回だけです。
+ */
+export interface SourceTransform {
+    /** キャンバス座標の平行移動（px）。 */
+    x: number;
+    y: number;
+    /** 拡大率。1 が等倍。縦横は同率にする（素材の見た目を崩さないため）。 */
+    scale: number;
+    /** 回転角（度）。時計回りが正（§7.3 の rotation に合わせる）。 */
+    rotation: number;
+}
+
+export const IDENTITY_SOURCE_TRANSFORM: SourceTransform =
+    { x: 0, y: 0, scale: 1, rotation: 0 };
+
+export function isIdentitySourceTransform(t: SourceTransform): boolean {
+    return t.x === 0 && t.y === 0 && t.scale === 1 && t.rotation === 0;
+}
+
+/**
+ * 取り込んだ素材 1 件の記録。一覧・削除・一括配置のために持ちます。
+ *
+ * 合流したあとの木には「どこから来たか」が残らないため、取り込んだ時点で
+ * 控えておく必要があります（`mergeSource`）。
+ */
+export interface SourceEntry {
+    /** 内部キー。 */
+    id: string;
+    /** 表示名。合流時に作ったグループ名（＝ partID）。 */
+    name: string;
+    /** 元のファイル名（拡張子つき）。同名に改名されたときの手掛かりになる。 */
+    fileName: string;
+    kind: 'document' | 'image' | 'animation' | 'emg';
+    /**
+     * この素材が持ち込んだ**葉レイヤー**の id。
+     *
+     * 木の位置ではなく id で持ちます。並べ替え・改名・グループの移動をしても
+     * 追随し、他の素材のグループへ移したレイヤーも「元の素材のもの」として
+     * 正しく扱えるためです。
+     */
+    layerIds: number[];
+    transform: SourceTransform;
+}
+
+export const SOURCE_KIND_LABEL: Record<SourceEntry['kind'], string> = {
+    document: 'PSD / KRA',
+    image: '画像',
+    animation: 'アニメーション',
+    emg: '.emg',
+};
+
+/**
+ * 9 スライス。枠の絵を、角を潰さずに好きな大きさへ引き伸ばす設定。
+ *
+ * **EMG のレイヤーに 9 スライスはありません。** `layers[]` が持つのは矩形と
+ * `basePosition` だけで、「中央だけ伸ばす」を表す場所がありません。§7 の
+ * `scale_x` / `scale_y` はレイヤー全体に掛かるので、角も一緒に潰れます。
+ *
+ * したがってここでの 9 スライスは**書き出し時に画素へ焼き込む編集操作**です。
+ * 出来上がった `.emg` はただの 1 枚のレイヤーになり、どの実装でも正しく描けます。
+ * 逆に言うと、**再生時に大きさを変えることはできません**（EMG にレイアウトの
+ * 概念が無いため、そもそも変える契機がありません）。
+ *
+ * `left` / `top` / `right` / `bottom` は元画像の各辺から数えた**余白（px）**で、
+ * 伸ばさない部分の幅です。`width` / `height` は焼き上がりの大きさ。
+ */
+export interface LayerSlice {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    /** 焼き上がりの大きさ（px）。元画像より小さくもできる。 */
+    width: number;
+    height: number;
+}
+
 export interface LayerMeta {
     id: number;
     partId: string;
@@ -30,6 +114,11 @@ export interface LayerMeta {
      * ツリーはパーツごとの塊なので、走査順からはこの並びを再現できない。
      */
     zIndex?: number;
+    /**
+     * 9 スライス（{@link LayerSlice}）。不在なら等倍でそのまま描く。
+     * 枠・吹き出し・帯のような「伸ばしても角を保ちたい」素材のためのもの。
+     */
+    slice?: LayerSlice;
 }
 
 /**
@@ -126,6 +215,32 @@ export interface PartTransform {
     duration: number;
     loop: 'once' | 'loop' | 'pingpong';
     phaseOffset: number;
+}
+
+/**
+ * 複数パーツを 1 つの対象としてまとめて動かす入れ物（After Effects のヌルに相当）。
+ *
+ * **EMG にグループやペアレントはありません。** 表現の実体は「所属パーツが同じ
+ * トランスフォームと同じアンカーを共有している」状態です。書き出しでは所属パーツ
+ * それぞれに同じ `tracks` を持つ sprite が出て、所属レイヤー全部に同じ
+ * `anchor_x` / `anchor_y` が書かれます。§7.4 の「パーツ全体を 1 点を軸に回したい
+ * 場合は所属レイヤー全部に同じアンカーを書く」を、パーツをまたいで広げた形です。
+ * 結果の絵は親子付けと同じになります。
+ *
+ * したがって**所属パーツは自分だけのトランスフォームを持てません**。同じレイヤーを
+ * 対象とする sprite が複数あるときの合成順序は §7.4 で未定義であり、アンカーも
+ * レイヤーに 1 つしか書けないためです。編集器はメンバーへの変更を全員へ配ることで
+ * この制約を守ります（`handleTransformChange`）。
+ *
+ * 入れ子（ヌルの中のヌル）は持ちません。合成を焼き込む先が結局レイヤー 1 枚ぶんの
+ * アンカーしか無いため、2 段以上は表現できません。
+ */
+export interface TransformGroup {
+    id: string;
+    /** 表示名。利用者が付ける。 */
+    name: string;
+    /** 所属パーツ。1 つのパーツは高々 1 つのヌルにしか入れない。 */
+    partIds: string[];
 }
 
 /**

@@ -1,22 +1,19 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Move3d, Crosshair, Clapperboard, Pause, Play, SkipBack } from 'lucide-react';
 import { evaluateTransform, foldTime, ownsPath } from '../services/transform';
-import { computeBounds, drawComposite, itemMatrix, type Bounds } from '../services/composite';
+import { computeBounds, drawComposite, itemMatrix, type Bounds, type CompositeItem } from '../services/composite';
 import { TransformOverlay } from './TransformOverlay';
-import { emptyTransform, transformKey, type PartTransform } from '../types';
+import { emptyTransform, transformKey, type LayerSlice, type PartTransform } from '../types';
+import { SliceGuides } from './SliceGuides';
 
-export interface PreviewItem {
-    id: number;
-    /** どのパーツのレイヤーか。 */
-    partId: string;
-    /** フレーム識別子。0.5.3 §7.4.1 のフレーム単位トランスフォームの宛先。 */
-    frameId: string;
-    image: HTMLCanvasElement;
-    left: number;
-    top: number;
-    /** レイヤー自身の不透明度。§7.4 の 6 番目でトランスフォーム側と掛け合わせる。 */
-    opacity: number;
-}
+/**
+ * 合成に渡す 1 枚。`CompositeItem` と同一。
+ *
+ * 以前はここに同じ形を書き写していたため、`composite.ts` にフィールドを足しても
+ * こちらが受け取れず（素材の一括配置がまさにそれ）、型で弾かれるまで
+ * 気づけなかった。**定義は 1 つに保つ。**
+ */
+export type PreviewItem = CompositeItem;
 
 interface PreviewPanelProps {
     /** アトラス画像。分割されている場合は複数枚（emg-json-spec.md 1.3）。 */
@@ -32,6 +29,49 @@ interface PreviewPanelProps {
     transformTarget: Record<string, string | undefined>;
     onSelectPart: (partId: string) => void;
     onTransformChange: (key: string, patch: Partial<PartTransform>) => void;
+
+    /**
+     * 素材の一括配置（移動・拡大縮小・回転）。選んでいる素材があるときだけ入る。
+     *
+     * パーツの枠とは**排他**。両方出すと、掴んだものがどちらに効くのか
+     * 分からなくなる。選択の排他は呼び出し側（`handleSelectSource`）が担う。
+     */
+    sourceBox?: {
+        bounds: { partId: string; left: number; top: number; right: number; bottom: number };
+        transform: PartTransform;
+        label: string;
+    } | null;
+    onSourceBoxChange?: (patch: Partial<PartTransform>) => void;
+
+    /**
+     * 選択中のパーツがヌルに属しているときの、ヌル全体の外接矩形。
+     *
+     * パーツ単体の枠と差し替えます。ヌルはメンバー全員が同じ動きを共有している
+     * 状態なので、1 パーツぶんの枠を出すと「掴んだ範囲」と「動く範囲」が食い違います。
+     * 掛かる変換もハンドルの扱いもパーツと同じなので、差し替えるのは矩形だけです。
+     */
+    groupBounds?: Bounds | null;
+
+    /**
+     * 9 スライスの仕上がり寸法を掴む枠。オンのレイヤーを選んでいるときだけ入る。
+     *
+     * 中身は「元画像の矩形」と「倍率として表した仕上がり寸法」です。座標変換では
+     * ないので、受け取った `scale_x` / `scale_y` を px に戻して `slice` に書きます。
+     * ハンドルの実装を別に起こさないための言い換えで、枠の挙動はほかと同じです。
+     */
+    sliceBox?: {
+        bounds: Bounds;
+        transform: PartTransform;
+        /** ガイド線（各辺からの余白）を出すための、仕上がりの矩形と元画像の大きさ。 */
+        rect: { left: number; top: number; width: number; height: number };
+        source: { width: number; height: number };
+        slice: LayerSlice;
+    } | null;
+    onSliceBoxChange?: (patch: Partial<PartTransform>) => void;
+    /** ガイド線から来る余白の変更。 */
+    onSliceChange?: (patch: Partial<LayerSlice>) => void;
+    /** 仕上がり寸法の枠で、いま掴んでいるハンドル。左・上を掴んだときの補正に要る。 */
+    onSliceHandle?: (handle: string | null) => void;
     /** 再生時刻（秒）。停止中は 0。 */
     time: number;
     playing: boolean;
@@ -50,6 +90,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     atlasUrls, compositionItems, width, height,
     transforms, selectedPartId, transformTarget, onSelectPart, onTransformChange, time, playing,
     onPlayAll, onRewind, playingAll, canPlay, onResizeCanvas, onExportPreview,
+    sourceBox, onSourceBoxChange, groupBounds, sliceBox, onSliceBoxChange, onSliceChange, onSliceHandle,
 }) => {
     // 掴む対象を切り替える。アンカーは「回転の中心」なので、絵を動かすのと
     // 同じ操作にすると必ず取り違える。
@@ -235,7 +276,12 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
     // 体全体の枠が出ていると、掴んだものと数値が別物になる。
     const selectedKey = selectedPartId
         ? transformKey(selectedPartId, transformTarget[selectedPartId]) : null;
-    const selectedBounds = selectedKey ? partBounds[selectedKey] : undefined;
+    // ヌルに属していれば、パーツ単体ではなくヌル全体の矩形を出す。
+    // フレーム単位（§7.4.1）を狙っているときは、パーツより内側の話なので差し替えない。
+    const selectedBounds = selectedKey
+        ? ((groupBounds && selectedPartId && !transformTarget[selectedPartId])
+            ? groupBounds : partBounds[selectedKey])
+        : undefined;
 
     /**
      * その位置にある一番手前のパーツ（の不透明な画素）を探す。
@@ -281,6 +327,39 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
      */
     const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
         if (playing) return;
+
+        // 素材を選んでいる間は、引く操作が素材の移動になる。
+        // 押しただけ（動かさなかった）ならパーツの選択に落とす — そうしないと
+        // 素材を選んだあとパーツへ戻る手段が一覧のクリックしか無くなる。
+        if (sourceBox && onSourceBoxChange) {
+            e.preventDefault();
+            const sx = e.clientX, sy = e.clientY;
+            const base = { ...sourceBox.transform.base };
+            let moved = false;
+            const move = (ev: PointerEvent) => {
+                if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 3) return;
+                moved = true;
+                const dx = Math.round(((ev.clientX - sx) / scale) * 100) / 100;
+                const dy = Math.round(((ev.clientY - sy) / scale) * 100) / 100;
+                onSourceBoxChange({
+                    base: { ...base, translate_x: base.translate_x + dx, translate_y: base.translate_y + dy },
+                });
+                setHint(`素材を移動 ${base.translate_x + dx}, ${base.translate_y + dy} px`);
+            };
+            const up = () => {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+                setHint(null);
+                if (!moved) {
+                    const hit = partAt(sx, sy);
+                    if (hit) onSelectPart(hit);   // 呼び出し側が素材の選択を解く
+                }
+            };
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+            return;
+        }
+
         const partId = partAt(e.clientX, e.clientY);
         if (!partId) return;   // 何も無いところ。選択は保つ。
         if (partId !== selectedPartId) onSelectPart(partId);
@@ -346,7 +425,7 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
         };
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
-    }, [partAt, playing, selectedPartId, onSelectPart, transforms, transformTarget, time, scale, onTransformChange]);
+    }, [partAt, playing, selectedPartId, onSelectPart, transforms, transformTarget, time, scale, onTransformChange, sourceBox, onSourceBoxChange]);
 
     /** 絵の上ならつかめることを見せる。 */
     const handleCanvasHover = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -504,7 +583,47 @@ export const PreviewPanel: React.FC<PreviewPanelProps> = ({
                             className="preview-canvas"
                             style={displayStyle}
                         />
-                        {mode === 'composition' && selectedBounds && (
+                        {/* 9 スライスの枠が最優先。次に素材、最後にパーツ。
+                            同時に 2 つ出すと、掴んだものがどちらに効くのか分からない。 */}
+                        {mode === 'composition' && sliceBox && (
+                            <TransformOverlay
+                                bounds={sliceBox.bounds}
+                                transform={sliceBox.transform}
+                                scale={scale}
+                                anchorMode={false}
+                                time={0}
+                                playing={false}
+                                sizeOnly
+                                onHandle={onSliceHandle}
+                                onChange={patch => onSliceBoxChange?.(patch)}
+                                onHint={setHint}
+                            />
+                        )}
+                        {/* 余白のガイド線。枠（仕上がり寸法）より上に重ねる。 */}
+                        {mode === 'composition' && sliceBox && (
+                            <SliceGuides
+                                rect={sliceBox.rect}
+                                source={sliceBox.source}
+                                slice={sliceBox.slice}
+                                scale={scale}
+                                onChange={patch => onSliceChange?.(patch)}
+                                onHint={setHint}
+                            />
+                        )}
+                        {mode === 'composition' && !sliceBox && sourceBox && (
+                            <TransformOverlay
+                                bounds={sourceBox.bounds}
+                                transform={sourceBox.transform}
+                                scale={scale}
+                                // 素材の軸は外接矩形の中心に固定。置き直す操作は無い。
+                                anchorMode={false}
+                                time={0}
+                                playing={false}
+                                onChange={patch => onSourceBoxChange?.(patch)}
+                                onHint={setHint}
+                            />
+                        )}
+                        {mode === 'composition' && !sliceBox && !sourceBox && selectedBounds && (
                             <TransformOverlay
                                 bounds={selectedBounds}
                                 transform={transforms[selectedKey!] ?? emptyTransform()}

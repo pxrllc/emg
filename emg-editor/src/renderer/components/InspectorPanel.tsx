@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Bookmark, Download, Eye, FileJson, Layers, Sliders } from 'lucide-react';
+import { Bookmark, Download, Eye, FileJson, Layers, Layers3, Sliders } from 'lucide-react';
 import { JsonViewer } from './JsonViewer';
 import { PartsPanel } from './PartsPanel';
 import { PropertiesPanel } from './PropertiesPanel';
 import { MappingPanel } from './MappingPanel';
 import { PresetsPanel } from './PresetsPanel';
+import { ZOrderPanel, type ZOrderRow } from './ZOrderPanel';
 import { ExpressionsPanel } from './ExpressionsPanel';
 import type { EmgData } from '../services/EmgGenerator';
 import type { PartInfo } from '../parts';
 import type { AvatarExpression, AvatarMapping, AvatarPreset, LayerMeta, PartAnimation, PartTransform } from '../types';
 
-type Tab = 'parts' | 'mapping' | 'presets' | 'layer' | 'json';
+type Tab = 'parts' | 'mapping' | 'presets' | 'layer' | 'z' | 'json';
 
 interface InspectorPanelProps {
     hasFile: boolean;
@@ -38,6 +39,20 @@ interface InspectorPanelProps {
     mappingControlled: Set<string>;
     onAnimationToggle: (partId: string, enabled: boolean) => void;
     onAnimationChange: (partId: string, patch: Partial<PartAnimation>) => void;
+    onAnimationSet: (partId: string, anim: PartAnimation) => void;
+    onDuplicatePart: (partId: string) => void;
+    partBlendModes: Record<string, string | null>;
+    onPartBlendModeChange: (partId: string, mode: string) => void;
+
+    /** 重なり順（背面 → 前面）。木の並びとは別に持つ。 */
+    zOrder: ZOrderRow[];
+    onReorderZ: (ids: number[]) => void;
+    onResetZ: () => void;
+    onSelectLayerById: (layerId: number) => void;
+    /** 選択中レイヤーの元画像の大きさ。9 スライスの初期値に使う。 */
+    layerSize?: { width: number; height: number } | null;
+    /** 選択中レイヤーが属するパーツの種別。 */
+    partType?: 'static' | 'switch';
     onAnimationAddFrame: (partId: string, frameId: string) => void;
     onAnimationRemoveFrame: (partId: string, index: number) => void;
     onAnimationDurationChange: (partId: string, index: number, seconds: number) => void;
@@ -81,6 +96,11 @@ interface InspectorPanelProps {
 
     emgData?: EmgData;
     onExport: () => void;
+    /** `.emg` に動き（`sprites[]`）を含めるか。 */
+    includeAnimation: boolean;
+    onIncludeAnimationChange: (v: boolean) => void;
+    /** 動きを持っているものの数。切ったときに何が落ちるかを示す。 */
+    animationCount: number;
     /** 出来上がったが未保存の `.emg`。あれば書き出しボタンを「保存する」にする。 */
     pendingExport: { name: string; size: number } | null;
     onSavePending: () => void;
@@ -98,6 +118,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'mapping', label: '目と口', icon: <Eye size={13} /> },
     { id: 'presets', label: '状態', icon: <Bookmark size={13} /> },
     { id: 'layer', label: 'レイヤー', icon: <Sliders size={13} /> },
+    { id: 'z', label: '重なり', icon: <Layers3 size={13} /> },
     { id: 'json', label: 'JSON', icon: <FileJson size={13} /> },
 ];
 
@@ -146,6 +167,9 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         previewFrame={props.previewFrame}
                         previewOff={props.previewOff}
                         onSelectPart={props.onSelectPart}
+                        onDuplicatePart={props.onDuplicatePart}
+                        partBlendModes={props.partBlendModes}
+                        onPartBlendModeChange={props.onPartBlendModeChange}
                         onTypeChange={props.onTypeChange}
                         onExportChange={props.onExportChange}
                         onDefaultFrameChange={props.onDefaultFrameChange}
@@ -182,6 +206,9 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         mapping={props.mapping}
                         onChange={props.onMappingChange}
                         onPreviewFrame={props.onPreviewFrame}
+                        partAnimations={props.partAnimations}
+                        onAnimationChange={props.onAnimationChange}
+                        onAnimationSet={props.onAnimationSet}
                     />
                 )}
                 {activeTab === 'presets' && (
@@ -218,6 +245,17 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         layerId={props.layerId}
                         meta={props.meta}
                         onChange={props.onMetaChange}
+                        layerSize={props.layerSize}
+                        partType={props.partType}
+                    />
+                )}
+                {activeTab === 'z' && (
+                    <ZOrderPanel
+                        rows={props.zOrder}
+                        selectedLayerId={props.layerId}
+                        onReorder={props.onReorderZ}
+                        onSelectLayer={props.onSelectLayerById}
+                        onReset={props.onResetZ}
                     />
                 )}
                 {activeTab === 'json' && (
@@ -245,6 +283,23 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = (props) => {
                         />
                         <span className="part-meta">.emg</span>
                     </div>
+                )}
+                {/* 動きを含めるか。§7 を描画へ反映している再生側は 6 実装中 3 つなので、
+                    静止したものを配りたい場面が実際にある。 */}
+                {props.hasFile && !props.exportProgress && (
+                    <label className="export-opt" title="切ると sprites[] を書きません（まばたき・口パクとプリセットは残ります）">
+                        <input
+                            type="checkbox"
+                            checked={props.includeAnimation}
+                            onChange={e => props.onIncludeAnimationChange(e.target.checked)}
+                        />
+                        動きを含める
+                        <span className="export-opt-note">
+                            {props.animationCount > 0
+                                ? `コマ送り・トランスフォーム ${props.animationCount} 件`
+                                : '（まだ動きはありません）'}
+                        </span>
+                    </label>
                 )}
                 {props.pendingExport && !props.exportProgress ? (
                     <button className="btn btn-primary btn-block" onClick={props.onSavePending}>

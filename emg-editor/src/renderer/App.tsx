@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { parseTransformKey } from './types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { emptyTransform, parseTransformKey, transformKey, type LayerSlice, type PartTransform } from './types';
+import { TransformTimeline } from './components/TransformTimeline';
 import { useEmgPacker } from './hooks/useEmgPacker';
 import { MainLayout } from './components/MainLayout';
 import { LayerTree } from './components/LayerTree';
+import { SourcesPanel } from './components/SourcesPanel';
+import { GroupsPanel } from './components/GroupsPanel';
 import { PreviewPanel } from './components/PreviewPanel';
 import { InspectorPanel } from './components/InspectorPanel';
 import { Toast } from './components/Toast';
@@ -16,6 +19,8 @@ import { CanvasSizeDialog } from './components/CanvasSizeDialog';
 import { PreviewExportDialog } from './components/PreviewExportDialog';
 import { EmgDropDialog } from './components/EmgDropDialog';
 import { computeBounds, drawComposite } from './services/composite';
+import { flattenLayers } from './parts';
+import { toPartTransform } from './services/sourceTransform';
 import { exportPreview, extensionOf } from './services/previewExport';
 import { downloadBlob, prepareSave } from './services/download';
 
@@ -32,16 +37,24 @@ function App() {
         handleExpressionRename, handleExpressionDelete,
         previewDelta, handlePresetSave, handlePresetApply,
         handlePresetUpdate, handlePresetRename, handlePresetDelete,
-        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, setProjectName, handleSourceAdd,
+        handlePsdLoad, handleNewProject, handleCanvasResize, projectName, setProjectName, handleSourceAdd, handleSourcesAdd,
+        sources, handleSourceRemove, handleSourceTransform, handleSourceTransformReset,
+        handlePartDuplicate,
+        selectedSourceId, handleSelectSource, selectedSource, handleSourceBoxChange,
+        zOrder, handleReorderZ, handleResetZ,
+        includeAnimation, setIncludeAnimation,
+        transformGroups, groupOfPart, groupBounds: groupBoundsById,
+        handleGroupCreate, handleGroupToggleMember, handleGroupRename, handleGroupDelete,
         pendingEmgDrop, resolveEmgDrop, handleSheetImport, handlePsdUpdate, handleLayerVisibilityChange,
         handleExport, pendingExport, handleSavePending, handleSaveProject, handleLoadProject,
         handleTemplateSave, handleTemplateLoad, templateReport, setTemplateReport,
         handleVisibilityAll, handleTypeAll,
         handlePartTypeChange, handlePartDefaultFrameChange,
+        handlePartBlendModeChange, partBlendModes, handleLayerMetaChange,
         handlePartDefaultVisibleChange, handlePartExportChange,
         handlePreviewFrame, handlePreviewNone, handlePreviewToggle, handlePreviewReset,
         handleAnimationToggle, handleAnimationChange, handleAnimationAddFrame,
-        handleAnimationRemoveFrame, handleAnimationDurationChange,
+        handleAnimationRemoveFrame, handleAnimationDurationChange, handleAnimationSet, handleLayerOffset,
         handleGroupSelected, handleRenamePart,
         setSelectedPartId, setSelectedLayer, setLayerMeta,
         exportProgress, history, toast, setToast,
@@ -179,7 +192,92 @@ function App() {
      * 合流処理が同じ木を同時に書き換えて取りこぼす。
      */
     const addFiles = async (files: File[]) => {
-        for (const f of files) await handleSourceAdd(f);
+        // 連番の判定にはファイルの並び全体が要るので、まとめて渡す。
+        await handleSourcesAdd(files);
+    };
+
+    /**
+     * 9 スライスの仕上がり寸法を掴む枠。
+     *
+     * 枠は**元画像の矩形**に出し、仕上がり寸法を倍率として渡します。`TransformOverlay`
+     * は倍率で拡縮するので、そのまま px に戻せば `slice` に書けます。軸は左上に置き、
+     * 掴んだ辺だけが伸びる（＝ふつうのリサイズ）ようにします。
+     */
+    const sliceLayerMeta = selectedLayer?.id !== undefined ? layerMeta[selectedLayer.id] : undefined;
+    const sliceSrc = selectedLayer?.canvas;
+
+    /**
+     * いまの木にある選択レイヤー。
+     *
+     * `selectedLayer` は**選んだ時点のスナップショット**で、木を作り直しても
+     * 差し替わりません。位置をそこから読むと、動かした直後に枠だけ元の場所へ
+     * 取り残されます（左のハンドルを引くと右側が動いて見えたのはこれ）。
+     */
+    const liveSelectedLayer = useMemo(() => {
+        if (selectedLayer?.id === undefined) return null;
+        return flattenLayers(psdRoot).find(l => l.id === selectedLayer.id) ?? null;
+    }, [psdRoot, selectedLayer]);
+    const sliceBox = useMemo(() => {
+        const s = sliceLayerMeta?.slice;
+        if (!s || !sliceSrc || !liveSelectedLayer) return null;
+        const left = liveSelectedLayer.left ?? 0;
+        const top = liveSelectedLayer.top ?? 0;
+        return {
+            bounds: {
+                partId: sliceLayerMeta!.partId,
+                left, top,
+                right: left + sliceSrc.width,
+                bottom: top + sliceSrc.height,
+            },
+            transform: {
+                ...emptyTransform(),
+                base: {
+                    ...emptyTransform().base,
+                    scale_x: s.width / Math.max(1, sliceSrc.width),
+                    scale_y: s.height / Math.max(1, sliceSrc.height),
+                },
+                anchor: { x: left, y: top },
+            },
+            rect: { left, top, width: s.width, height: s.height },
+            source: { width: sliceSrc.width, height: sliceSrc.height },
+            slice: s,
+        };
+    }, [sliceLayerMeta, sliceSrc, liveSelectedLayer]);
+
+    /** ガイド線から来る余白の変更。数値欄と同じ経路（`LayerMeta.slice`）へ書く。 */
+    const onSliceChange = (patch: Partial<LayerSlice>) => {
+        const s = sliceLayerMeta?.slice;
+        if (!s || selectedLayer?.id === undefined) return;
+        setLayerMeta(prev => ({
+            ...prev,
+            [selectedLayer.id!]: { ...prev[selectedLayer.id!], slice: { ...s, ...patch } },
+        }));
+    };
+
+    /** 仕上がり寸法の枠で、いま掴んでいるハンドル。 */
+    const sliceHandle = useRef<string | null>(null);
+
+    const onSliceBoxChange = (patch: Partial<PartTransform>) => {
+        const s = sliceLayerMeta?.slice;
+        if (!s || !sliceSrc || !patch.base || selectedLayer?.id === undefined) return;
+        const width = Math.max(1, Math.round(patch.base.scale_x * sliceSrc.width));
+        const height = Math.max(1, Math.round(patch.base.scale_y * sliceSrc.height));
+
+        // **左・上を掴んだときは、反対側を固定する。** 仕上がりはレイヤーの左上から
+        // 描かれるので、寸法だけ変えると掴んでいない側（右・下）が動いてしまう。
+        // 縮んだ分だけ左上を送り返して、掴んだ辺のほうが動くようにする。
+        const h = sliceHandle.current ?? '';
+        const dx = h.includes('w') ? s.width - width : 0;
+        const dy = h.includes('n') ? s.height - height : 0;
+        if (dx !== 0 || dy !== 0) handleLayerOffset(selectedLayer.id, dx, dy);
+
+        setLayerMeta(prev => ({
+            ...prev,
+            [selectedLayer.id!]: {
+                ...prev[selectedLayer.id!],
+                slice: { ...s, width, height },
+            },
+        }));
     };
 
     const unassigned = useMemo(() => countUnassigned(mapping), [mapping]);
@@ -263,6 +361,28 @@ function App() {
             <MainLayout
                 hasFile={!!psdRoot}
                 leftPanel={
+                    <div className="left-stack">
+                    {/* 素材の一覧はツリーの上。ツリーは合流後の形しか見せないので、
+                        「何を読み込んだか」はここでしか分からない。 */}
+                    <SourcesPanel
+                        sources={sources}
+                        exportedByLayer={visibility}
+                        onRemove={handleSourceRemove}
+                        onTransform={handleSourceTransform}
+                        onTransformReset={handleSourceTransformReset}
+                        selectedId={selectedSourceId}
+                        onSelect={handleSelectSource}
+                    />
+                    <GroupsPanel
+                        groups={transformGroups}
+                        partIds={parts.map(p => p.partId)}
+                        selectedPartId={selectedPartId}
+                        onCreate={handleGroupCreate}
+                        onToggleMember={handleGroupToggleMember}
+                        onRename={handleGroupRename}
+                        onDelete={handleGroupDelete}
+                        onSelectPart={setSelectedPartId}
+                    />
                     <LayerTree
                         psd={psdRoot}
                         visibility={visibility}
@@ -278,7 +398,48 @@ function App() {
                         onGroupSelected={handleGroupSelected}
                         onNewProject={() => setSizeDialog('new')}
                     />
+                    </div>
                 }
+                bottomPanel={(() => {
+                    const part = parts.find(p => p.partId === selectedPartId);
+                    if (!part) {
+                        return (
+                            <div className="empty-state" style={{ fontSize: '12px' }}>
+                                パーツを選ぶと、動き（§7 のトランスフォーム）をここで編集できます。
+                            </div>
+                        );
+                    }
+                    // ヌルに属していれば、それは「メンバーが 1 つの動きを共有している」状態。
+                    // フレーム単位（§7.4.1）はパーツの内側の話で、メンバーへ配れないため
+                    // 対象の選択は出さず、パーツ全体に固定する。
+                    const group = groupOfPart(part.partId);
+                    const target = group ? undefined : transformTarget[part.partId];
+                    const key = transformKey(part.partId, target);
+                    // **再生範囲の外なら時刻を進めない。** 単体再生中に別のパーツを選ぶと、
+                    // 絵は止まっているのに数値とプレイヘッドだけ動く、という食い違いになる
+                    // （プレビューは範囲外を 0 に固定しているので、こちらも合わせる）。
+                    const live = !playScope || playScope === 'all' || playScope === key;
+                    return (
+                        <TransformTimeline
+                            partId={part.partId}
+                            label={group ? `${group.name}（${group.partIds.length} パーツ）` : undefined}
+                            frames={group ? [] : part.frames.map(f => f.frameId)}
+                            target={target}
+                            onTargetChange={f => setTransformTarget(prev => ({ ...prev, [part.partId]: f }))}
+                            hasTransform={f => !!partTransforms[transformKey(part.partId, f)]}
+                            transform={partTransforms[key] ?? emptyTransform()}
+                            time={live ? transformTime : 0}
+                            frozen={!live}
+                            playing={playScope === key || playScope === 'all'}
+                            onChange={patch => handleTransformChange(key, patch)}
+                            // 止まって見えるタイムラインを掴んだら、掴んだ方を見たいはずなので
+                            // 再生を止めてから送る。
+                            onSeek={t => { if (!live) handleTransformReset(); setTransformTime(t); }}
+                            onPlayToggle={() => handlePlayToggle(key)}
+                            onReset={handleTransformReset}
+                        />
+                    );
+                })()}
                 centerPanel={
                     <PreviewPanel
                         atlasUrls={atlasUrls}
@@ -288,7 +449,22 @@ function App() {
                         transforms={scopedTransforms}
                         selectedPartId={selectedPartId}
                         transformTarget={transformTarget}
-                        onSelectPart={setSelectedPartId}
+                        // キャンバスでパーツを掴んだら素材の選択は解く。
+                        // 枠が 2 つ出ていると、掴んだものがどちらに効くのか分からない。
+                        onSelectPart={(id) => { handleSelectSource(null); setSelectedPartId(id); }}
+                        sourceBox={selectedSource ? {
+                            bounds: selectedSource.bounds,
+                            transform: toPartTransform(selectedSource.entry.transform, selectedSource.pivot),
+                            label: selectedSource.entry.name,
+                        } : null}
+                        onSourceBoxChange={handleSourceBoxChange}
+                        sliceBox={sliceBox}
+                        onSliceBoxChange={onSliceBoxChange}
+                        onSliceChange={onSliceChange}
+                        onSliceHandle={h => { sliceHandle.current = h; }}
+                        groupBounds={selectedPartId
+                            ? (groupBoundsById[groupOfPart(selectedPartId)?.id ?? ''] ?? null)
+                            : null}
                         onTransformChange={handleTransformChange}
                         time={transformTime}
                         playing={!!playScope}
@@ -351,18 +527,39 @@ function App() {
                         mappingControlled={mappingControlled}
                         onAnimationToggle={handleAnimationToggle}
                         onAnimationChange={handleAnimationChange}
+                        onAnimationSet={handleAnimationSet}
+                        onDuplicatePart={handlePartDuplicate}
+                        partBlendModes={partBlendModes}
+                        onPartBlendModeChange={handlePartBlendModeChange}
+                        zOrder={zOrder}
+                        onReorderZ={handleReorderZ}
+                        onResetZ={handleResetZ}
+                        onSelectLayerById={(id) => {
+                            const l = flattenLayers(psdRoot).find(x => x.id === id);
+                            if (l) setSelectedLayer(l);
+                        }}
+                        layerSize={selectedLayer?.canvas
+                            ? { width: selectedLayer.canvas.width, height: selectedLayer.canvas.height }
+                            : null}
                         onAnimationAddFrame={handleAnimationAddFrame}
                         onAnimationRemoveFrame={handleAnimationRemoveFrame}
                         onAnimationDurationChange={handleAnimationDurationChange}
                         layerName={selectedLayer?.name}
                         layerId={selectedLayer?.id ?? null}
                         meta={selectedLayer?.id !== undefined ? layerMeta[selectedLayer.id] : undefined}
-                        onMetaChange={(newMeta) =>
-                            selectedLayer?.id !== undefined &&
-                            setLayerMeta(prev => ({ ...prev, [selectedLayer.id!]: newMeta }))
-                        }
+                        onMetaChange={(newMeta) => {
+                            if (selectedLayer?.id === undefined) return;
+                            handleLayerMetaChange(selectedLayer.id, newMeta);
+                        }}
+                        partType={parts.find(p => p.partId === sliceLayerMeta?.partId)?.type}
                         emgData={emgData}
                         onExport={handleExport}
+                        includeAnimation={includeAnimation}
+                        onIncludeAnimationChange={setIncludeAnimation}
+                        animationCount={
+                            Object.values(partAnimations).filter(a => a.enabled && a.frames.length > 1).length
+                            + Object.keys(partTransforms).length
+                        }
                         pendingExport={pendingExport && { name: pendingExport.name, size: pendingExport.blob.size }}
                         onSavePending={handleSavePending}
                         projectName={projectName}

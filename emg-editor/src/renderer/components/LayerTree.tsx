@@ -12,7 +12,11 @@ interface LayerTreeProps {
     layerMeta?: Record<number, LayerMeta>;
     onLayerVisibilityChange: (layer: Layer, visible: boolean) => void;
     onSelectionChange?: (layer: Layer) => void;
-    onPsdUpdate?: (psd: Psd) => void;
+    /**
+     * `movedLayerId` は並べ替えのときだけ渡す。受け取った側が明示 z
+     * （`.emg` 由来の `textureZIndex`）を振り直すのに要る。
+     */
+    onPsdUpdate?: (psd: Psd, movedLayerId?: number) => void;
     selectedLayer?: Layer | null;
     onVisibilityAll?: (visible: boolean) => void;
     onLoadPsd?: () => void;
@@ -150,7 +154,7 @@ export const LayerTree: React.FC<LayerTreeProps> = ({
         newPsd.children = childrenAfterRemoval;
 
         if (insertLayer(newPsd.children)) {
-            onPsdUpdate(newPsd);
+            onPsdUpdate(newPsd, draggedId);
         } else {
             console.error('Failed to insert layer. Reverting.');
             // Do not call onPsdUpdate, effectively reverting.

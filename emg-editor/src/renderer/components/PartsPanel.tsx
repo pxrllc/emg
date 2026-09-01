@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Pause, Pencil, Play, RotateCcw } from 'lucide-react';
+import { Copy, Eye, EyeOff, Pause, Pencil, Play, RotateCcw } from 'lucide-react';
 import type { PartInfo } from '../parts';
 import { emptyTransform, transformKey, type PartAnimation, type PartTransform } from '../types';
 import { AnimationEditor } from './AnimationEditor';
@@ -21,6 +21,14 @@ interface PartsPanelProps {
     onPreviewToggle: (partId: string) => void;
     onPreviewReset: () => void;
     onRenamePart: (partId: string, newName: string) => void;
+    /** 同じパーツをもう 1 つ置く。新しい partID の別パーツになる。 */
+    onDuplicatePart: (partId: string) => void;
+    /**
+     * パーツごとの合成モード。全レイヤーで一致していればその値、混ざっていれば null。
+     * 連番やシートは 1 パーツ = コマ数ぶんのレイヤーなので、ここで一括して入れる。
+     */
+    partBlendModes: Record<string, string | null>;
+    onPartBlendModeChange: (partId: string, mode: string) => void;
     onTypeAll: (type: 'static' | 'switch') => void;
 
     /** partID -> アニメーション設定（emg-json-spec.md 7 章）。 */
@@ -65,6 +73,7 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
     parts, selectedPartId, previewFrame, previewOff,
     onSelectPart, onTypeChange, onExportChange, onDefaultFrameChange, onDefaultVisibleChange,
     onPreviewFrame, onPreviewNone, onPreviewToggle, onPreviewReset, onRenamePart, onTypeAll,
+    onDuplicatePart, partBlendModes, onPartBlendModeChange,
     partAnimations, mappingControlled,
     onAnimationToggle, onAnimationChange, onAnimationAddFrame,
     onAnimationRemoveFrame, onAnimationDurationChange,
@@ -181,6 +190,14 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                 onClick={e => { e.stopPropagation(); startRename(part.partId); }}
                             >
                                 <Pencil size={12} color="#777" />
+                            </button>
+
+                            <button
+                                className="icon-btn"
+                                title="このパーツを複製する（別 partID の新しいパーツになります）"
+                                onClick={e => { e.stopPropagation(); onDuplicatePart(part.partId); }}
+                            >
+                                <Copy size={12} color="#777" />
                             </button>
 
                             {/* このパーツだけ再生。コマ送りも変形も対象。 */}
@@ -306,36 +323,39 @@ export const PartsPanel: React.FC<PartsPanelProps> = ({
                                 </label>
                             )}
 
-                            {/* トランスフォーム（§7）。static / switch のどちらにも付く。
-                                差分の切り替えとは別の軸なので、常に出しておく。 */}
-                            {selectedPartId === part.partId && (() => {
-                                const target = transformTarget[part.partId];
-                                const key = transformKey(part.partId, target);
-                                // **再生範囲の外なら時刻を進めない。** 単体再生中に別の
-                                // パーツを選ぶと、絵は止まっているのに数値とプレイヘッドだけ
-                                // 動く、という食い違いになる（プレビューは範囲外を 0 に
-                                // 固定しているので、パネルもそれに合わせる）。
-                                const live = !playScope || playScope === 'all' || playScope === key;
-                                return (
-                                    <TransformTimeline
-                                        partId={part.partId}
-                                        frames={part.frames.map(f => f.frameId)}
-                                        target={target}
-                                        onTargetChange={f => onTransformTargetChange(part.partId, f)}
-                                        hasTransform={f => !!partTransforms[transformKey(part.partId, f)]}
-                                        transform={partTransforms[key] ?? emptyTransform()}
-                                        time={live ? transformTime : 0}
-                                        frozen={!live}
-                                        playing={playScope === key || playScope === 'all'}
-                                        onChange={patch => onTransformChange(key, patch)}
-                                        // 止まって見えるタイムラインを掴んだら、
-                                        // 掴んだ方を見たいはずなので再生を止めてから送る。
-                                        onSeek={t => { if (!live) onTransformReset(); onSeek(t); }}
-                                        onPlayToggle={() => onPlayToggle(key)}
-                                        onReset={onTransformReset}
-                                    />
-                                );
-                            })()}
+                            {/* 合成モード。**パーツの全レイヤーへ入れる。**
+                                連番やシートは 1 パーツ = コマ数ぶんのレイヤーなので、
+                                1 枚だけ変えても表示中のコマ以外は素のまま描かれる
+                                （塵や光は「パーツ全体をスクリーンで乗せる」使い方が普通）。 */}
+                            {selectedPartId === part.partId && (
+                                <div className="anim-row">
+                                    <label className="tl-lbl">合成</label>
+                                    <select
+                                        value={partBlendModes[part.partId] ?? ''}
+                                        onChange={e => onPartBlendModeChange(part.partId, e.target.value)}
+                                        style={{
+                                            flex: 1, minWidth: 0, padding: '3px 4px', background: '#1a1a1c',
+                                            border: '1px solid #3e3e42', color: '#fff', borderRadius: '3px', fontSize: '11px',
+                                        }}
+                                        title="このパーツの全レイヤーに入れます（v0.4.0 §5）"
+                                    >
+                                        {partBlendModes[part.partId] === null && (
+                                            <option value="" disabled>（レイヤーごとに違う）</option>
+                                        )}
+                                        <option value="normal">通常</option>
+                                        <option value="multiply">乗算</option>
+                                        <option value="screen">スクリーン</option>
+                                        <option value="plus-lighter">加算</option>
+                                        <option value="overlay">オーバーレイ</option>
+                                        <option value="lighten">比較（明）</option>
+                                        <option value="darken">比較（暗）</option>
+                                    </select>
+                                </div>
+                            )}
+
+                            {/* トランスフォーム（§7）のタイムラインは**画面下の全幅**に移した。
+                                ここ（右パネル）は幅が 90px 程度しかなく、2 秒の尺で 1px ≒ 0.02 秒。
+                                キーを掴んで時刻を合わせるには粗すぎたため。 */}
                         </div>
                     </div>
                 );

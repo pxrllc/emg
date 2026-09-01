@@ -34,10 +34,18 @@ function hash(n: number): number {
 /**
  * 時刻 `time` に表示するフレーム識別子。動かせない場合は `undefined`。
  *
- * `trigger` は見ません。**再生ボタンは「作ったものを見る」ための操作**であり、
- * `trigger` は書き出したファイルを再生する側が「いつ始めるか」を決めるものです
- * （7 章）。ここで `external` を再生しないと、口パク用に組んだ並びを
- * エディタ上で一度も確認できなくなります。
+ * **`random_interval` は「間」を再現します。** まばたきのように、休んで・一度動いて・
+ * また休む、という見え方が本体だからです。連続ループとして見せると、3〜8 秒に 1 回
+ * 瞬くはずのものが瞬きっぱなしになり、作ったものを確認できません。
+ * 休んでいる間は `undefined` を返し、呼び出し側が既定のコマ（開いた目など）へ
+ * 落とします。
+ *
+ * **`auto_loop` と `external` は連続で回します。** `external` は書き出したファイルを
+ * 再生する側が「いつ始めるか」を決めるものなので、ここで止めると口パク用に組んだ
+ * 並びをエディタ上で一度も確認できなくなります。
+ *
+ * 間の長さは時刻から一意に決めます（`hash`）。`Math.random` だと、スクラブで
+ * 戻したときに違う結果になります。
  */
 export function sequenceFrameAt(anim: PartAnimation | undefined, time: number): string | undefined {
     if (!anim || !anim.enabled || anim.frames.length === 0) return undefined;
@@ -45,12 +53,40 @@ export function sequenceFrameAt(anim: PartAnimation | undefined, time: number): 
     const total = sequenceDuration(anim);
     if (!(total > 0)) return anim.frames[0];
 
-    let t = time % total;
-    if (t < 0) t += total;
+    /** 何周目か（`random_hold` の抽選に使う）。 */
+    let cycle: number;
+    /** 1 周の中での位置（秒）。 */
+    let t: number;
+
+    if (anim.triggerType === 'random_interval') {
+        const min = Math.max(0, anim.intervalMin ?? 0);
+        const max = Math.max(min, anim.intervalMax ?? min);
+        const at = Math.max(0, time);
+
+        // 「休み → 1 周」を繰り返す。休みが先なので、0 秒から即動き出しません
+        // （即発火だと `auto_loop` と見分けがつかない）。
+        let cursor = 0;
+        let n = 0;
+        // 間隔が 0 に潰れている場合に無限に回らないよう、回数で頭打ちにする。
+        const LIMIT = 10000;
+        for (; n < LIMIT; n++) {
+            const gap = min + hash(n * 2 + 1) * (max - min);
+            if (at < cursor + gap) return undefined;   // 休み中。既定のコマに落ちる
+            cursor += gap;
+            if (at < cursor + total) break;
+            cursor += total;
+        }
+        if (n >= LIMIT) return undefined;
+        cycle = n;
+        t = at - cursor;
+    } else {
+        t = time % total;
+        if (t < 0) t += total;
+        cycle = Math.floor(time / total);
+    }
 
     if (anim.sequenceType === 'random_hold') {
         // 1 周ごとに 1 つ選んで、その周のあいだ保持する。
-        const cycle = Math.floor(time / total);
         return anim.frames[Math.floor(hash(cycle) * anim.frames.length) % anim.frames.length];
     }
 

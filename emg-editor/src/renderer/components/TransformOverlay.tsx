@@ -21,6 +21,21 @@ interface TransformOverlayProps {
     onChange: (patch: Partial<PartTransform>) => void;
     /** 掴んでいる間だけ出す読み値。 */
     onHint: (text: string | null) => void;
+    /**
+     * 大きさだけを変えるモード。回転ハンドルとアンカーを出しません。
+     *
+     * 9 スライスの仕上がり寸法を掴むときに使います。あちらは「何 px にするか」
+     * であって座標変換ではないので、回してもアンカーを動かしても意味がありません。
+     */
+    sizeOnly?: boolean;
+    /**
+     * いま掴んでいるハンドル（離したら null）。
+     *
+     * 変換としては「どの辺を掴んだか」は結果に現れません（軸と倍率だけで決まる）。
+     * ただし**大きさを px で持つ対象**（9 スライスの仕上がり寸法）では、左や上を
+     * 掴んだときに反対側を固定するために、掴んだ辺そのものが要ります。
+     */
+    onHandle?: (handle: string | null) => void;
 }
 
 type Handle =
@@ -55,7 +70,7 @@ const round = (v: number, n = 2) => Math.round(v * 10 ** n) / 10 ** n;
  * 逆にすると、回転済みの絵の上で拡縮ハンドルを引いたときに軸がずれます。
  */
 export const TransformOverlay: React.FC<TransformOverlayProps> = ({
-    bounds, transform, scale, anchorMode, time, playing, onChange, onHint,
+    bounds, transform, scale, anchorMode, time, playing, onChange, onHint, sizeOnly, onHandle,
 }) => {
     const [drag, setDrag] = useState<Handle | null>(null);
     const startRef = useRef<{
@@ -98,6 +113,8 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
     // 書いても画面は変わらないので、掴ませない（嘘のハンドルを出さない）。
     const locked = (path: TransformPath) => ownsPath(transform, path);
     const frozen = playing || anchorMode;
+    // 大きさだけのモードでは、回転とアンカーを出さない。拡縮ハンドルは残す。
+    const noRotate = frozen || !!sizeOnly;
 
     // キャンバスの画面上の原点。掴んだ瞬間に確定させる（ドラッグ中にスクロール
     // されても、掴んだときの座標系で計算し続ける方が挙動が素直）。
@@ -118,6 +135,7 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
             anchor: { ...anchor },
         };
         setDrag(handle);
+        onHandle?.(handle);
     };
 
     /** 画面座標 → 変形前のキャンバス座標。 */
@@ -201,7 +219,7 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
             onHint(`拡縮 ${base.scale_x} × ${base.scale_y}`);
         };
 
-        const up = () => { setDrag(null); startRef.current = null; onHint(null); };
+        const up = () => { setDrag(null); startRef.current = null; onHint(null); onHandle?.(null); };
 
         window.addEventListener('pointermove', move);
         window.addEventListener('pointerup', up);
@@ -237,7 +255,7 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
                 （PreviewPanel の当たり判定）、ここはハンドルとアンカーだけにする。 */}
 
             {/* 回転 */}
-            {!frozen && !locked('rotation') && (
+            {!noRotate && !locked('rotation') && (
                 <>
                     <line x1={topMid.x} y1={topMid.y} x2={rotatePt.x} y2={rotatePt.y} className="tf-box" />
                     <circle
@@ -263,15 +281,16 @@ export const TransformOverlay: React.FC<TransformOverlayProps> = ({
                 );
             })}
 
-            {/* アンカー。回転・拡縮の中心なので、常に見えている必要がある */}
-            <g
+            {/* アンカー。回転・拡縮の中心なので、常に見えている必要がある。
+                大きさだけのモードでは軸に意味が無いので出さない。 */}
+            {!sizeOnly && <g
                 style={{ cursor: anchorMode ? CURSORS.anchor : 'default', pointerEvents: anchorMode ? 'auto' : 'none' }}
                 onPointerDown={anchorMode ? begin('anchor') : undefined}
             >
                 <circle cx={anchorPt.x} cy={anchorPt.y} r={anchorMode ? 9 : 6} className="tf-anchor" />
                 <line x1={anchorPt.x - 9} y1={anchorPt.y} x2={anchorPt.x + 9} y2={anchorPt.y} className="tf-anchor-cross" />
                 <line x1={anchorPt.x} y1={anchorPt.y - 9} x2={anchorPt.x} y2={anchorPt.y + 9} className="tf-anchor-cross" />
-            </g>
+            </g>}
         </svg>
     );
 };

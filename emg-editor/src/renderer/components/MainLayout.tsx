@@ -1,10 +1,18 @@
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels';
-import { FolderTree, Settings, Image as ImageIcon, FileUp, Frame, Undo2, Redo2 } from 'lucide-react';
+import { FolderTree, Settings, Image as ImageIcon, FileUp, Frame, Undo2, Redo2, Clapperboard } from 'lucide-react';
 
 interface MainLayoutProps {
     leftPanel?: React.ReactNode;
     centerPanel?: React.ReactNode;
     rightPanel?: React.ReactNode;
+    /**
+     * 画面下の全幅。トランスフォームのタイムライン用。
+     *
+     * 右パネルの中に置いていたときはレーンが 90px ほどしかなく、尺 2 秒で
+     * 1px ≒ 0.02 秒。キーを掴んで時刻を合わせるには粗すぎたので、
+     * 横幅を稼げるここへ出しています。
+     */
+    bottomPanel?: React.ReactNode;
     onLoadPsd?: () => void;
     /** ファイル読み込み前だけ、読み込みが唯一のプライマリ操作になる。 */
     hasFile?: boolean;
@@ -24,9 +32,11 @@ function ResizeHandle({ className = "" }: { className?: string }) {
     );
 }
 
-export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, onLoadPsd, hasFile, onNewProject, onUndo, onRedo, canUndo, canRedo }) => {
+export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, rightPanel, bottomPanel, onLoadPsd, hasFile, onNewProject, onUndo, onRedo, canUndo, canRedo }) => {
     return (
         <div className="layout-container">
+          <PanelGroup orientation="vertical">
+            <Panel defaultSize="70" minSize="30">
             <PanelGroup orientation="horizontal">
                 {/* Left Panel: Layer Tree */}
                 <Panel defaultSize="20" minSize="10" maxSize="40">
@@ -108,6 +118,26 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ leftPanel, centerPanel, 
                     </div>
                 </Panel>
             </PanelGroup>
+            </Panel>
+
+            {/* 下段：タイムライン。全幅を使うので、キーを掴んで時刻を合わせられる。 */}
+            {bottomPanel && (
+                <>
+                    <ResizeHandle />
+                    <Panel defaultSize="30" minSize="8" maxSize="70">
+                        <div className="panel-content bottom-panel">
+                            <div className="panel-header">
+                                <Clapperboard size={16} />
+                                <span>タイムライン</span>
+                            </div>
+                            <div className="panel-body no-pad">
+                                {bottomPanel}
+                            </div>
+                        </div>
+                    </Panel>
+                </>
+            )}
+          </PanelGroup>
         </div>
     );
 };

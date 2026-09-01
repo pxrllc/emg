@@ -988,3 +988,291 @@ button.delta-chip:hover { border-color: #2563eb; }
   width: 16px;
   display: inline-block;
 }
+/* ---- 素材一覧（SourcesPanel） -------------------------------------------
+   レイヤーツリーの上に置く。ツリーは合流後の形しか見せないので、
+   「何を読み込んだか」と「まとめて動かす／捨てる」はここが入口になる。 */
+
+/* 一覧は内容ぶんだけ、ツリーが残りを取ってスクロールする。
+   両方を伸縮自在にすると、素材が増えたときにツリーが潰れる。 */
+.left-stack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.left-stack > .sources-panel { flex: 0 0 auto; }
+.left-stack > :not(.sources-panel) { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+.sources-panel {
+  border-bottom: 1px solid #2a2a2e;
+  background: #202024;
+  max-height: 45%;
+  overflow-y: auto;
+}
+
+.sources-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  color: #a5a5aa;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.sources-head:hover { color: #d5d5da; }
+.sources-count {
+  margin-left: auto;
+  color: #7d7d82;
+  font-variant-numeric: tabular-nums;
+}
+
+.source-row { border-top: 1px solid #26262a; }
+.source-row.is-open { background: #26262b; }
+
+.source-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 8px;
+}
+
+.source-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: #d5d5da;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.source-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.source-moved {
+  flex: 0 0 auto;
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #3a3320;
+  color: #d8b45c;
+}
+.source-meta {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #6f6f75;
+  font-variant-numeric: tabular-nums;
+}
+.source-confirm { display: flex; gap: 3px; flex: 0 0 auto; }
+
+/* 削除は取り消せるが、小さい行が並ぶので取り違えやすい。色で区別する。 */
+.btn-danger {
+  background: #6d2b2b;
+  border-color: #8a3838;
+  color: #f0dada;
+}
+.btn-danger:hover { background: #833333; }
+
+.source-unused {
+  padding: 0 8px 4px 24px;
+  font-size: 10px;
+  color: #8a7a4a;
+}
+
+.source-transform { padding: 2px 8px 8px 22px; }
+.source-tf-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.source-tf-row label {
+  width: 30px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #8a8a8e;
+}
+.source-unit {
+  font-size: 10px;
+  color: #6f6f75;
+  width: 14px;
+}
+.source-note {
+  font-size: 10px;
+  color: #6f6f75;
+  line-height: 1.6;
+}
+
+/* ---- ヌル（GroupsPanel）------------------------------------------------- */
+.groups-panel { border-bottom: 1px solid #2a2a2e; }
+.group-new { padding: 4px 8px 6px 22px; }
+.group-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  background: #1a1a1c;
+  border: 1px solid #3e3e42;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.group-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 4px 0 6px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #c5c5ca;
+  cursor: pointer;
+}
+/* 他のヌルに入っているパーツ。共有アンカーが競合するので入れられない。 */
+.group-member.is-taken { color: #5f5f64; cursor: not-allowed; }
+.group-member input { margin: 0; }
+
+/* ---- 自動アニメ（MappingPanel の自動まばたき）--------------------------- */
+.auto-blink { border-top: 1px solid #2a2a2e; margin-top: 10px; padding-top: 10px; }
+.auto-blink-state {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #a5a5aa;
+  background: #202024;
+  border-left: 2px solid #3e6ea8;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.auto-blink-state.is-sprite { border-left-color: #8a6d2f; }
+.auto-blink-row { display: flex; align-items: center; gap: 5px; margin-bottom: 6px; }
+.auto-blink-row label { font-size: 11px; color: #8a8a8e; }
+
+/* ---- 9 スライスのガイド線 ------------------------------------------------
+   Roblox の Slice Editor と同じ操作。画像の上の赤い線を掴んで、
+   各辺からの余白（＝伸ばさない幅）を決める。 */
+.slice-overlay { z-index: 2; }
+
+.slice-guide {
+  stroke: #e6484d;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+/* 線そのものは細いので、当たり判定だけ広げた透明な線を重ねる。 */
+.slice-grab {
+  stroke: transparent;
+  pointer-events: stroke;
+}
+/* 伸びない部分（四隅）。どこが固定なのかを見せる。 */
+.slice-fixed {
+  fill: #e6484d;
+  fill-opacity: 0.14;
+  pointer-events: none;
+}
+
+/* ---- 重なり順（ZOrderPanel）---------------------------------------------
+   レイヤーツリーとは別の並び。textureZIndex はファイル全体で 1 本の順序なので、
+   パーツをまたいで挟める（顔のベース → 首 → 後ろ髪）。 */
+.z-panel { display: flex; flex-direction: column; height: 100%; }
+
+.z-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px;
+  font-size: 11px; color: #a5a5aa;
+  border-bottom: 1px solid #2a2a2e;
+  flex: 0 0 auto;
+}
+.z-count { margin-left: auto; color: #6f6f75; font-variant-numeric: tabular-nums; }
+
+.z-note {
+  padding: 6px 10px;
+  font-size: 10px; line-height: 1.7; color: #7d7d82;
+  border-bottom: 1px solid #2a2a2e;
+  flex: 0 0 auto;
+}
+.z-note b { color: #a5a5aa; }
+
+.z-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
+
+.z-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px; color: #c5c5ca;
+  border-bottom: 1px solid #232327;
+  cursor: grab;
+}
+.z-row:hover { background: #26262b; }
+.z-row.is-selected { background: #1e3a5f; color: #fff; }
+/* 書き出し対象外。並びには残るが出力には出ない。 */
+.z-row.is-hidden { opacity: 0.45; }
+.z-row.is-over { border-top: 2px solid #3b82f6; }
+.z-grip { color: #5f5f64; flex: 0 0 auto; }
+.z-part {
+  flex: 0 0 auto; max-width: 96px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 10px; color: #8a8a8e;
+  background: #2a2a2e; border-radius: 3px; padding: 1px 5px;
+}
+.z-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.z-value { flex: 0 0 auto; color: #6f6f75; font-variant-numeric: tabular-nums; }
+
+/* ---- 選択中のキー（TransformTimeline）------------------------------------
+   イージングは EMG のトラックに無いので、選んだ区間へキーとして焼き込む
+   （services/easing.ts）。掛かる範囲が「このキーから次のキーまで」であることを
+   ここで示す。 */
+.tl-sel {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; margin-bottom: 4px;
+  background: #1e3a5f; border-radius: 4px;
+}
+.tl-sel-what { font-size: 11px; color: #cfe0f5; white-space: nowrap; }
+.tl-sel-hint { font-size: 10px; color: #8fa9c4; margin-left: auto; white-space: nowrap; }
+
+/* 選択中のキー。再生位置と重なっても見分けられるように枠で示す。 */
+.tl-key.sel {
+  outline: 1.5px solid #7db3ff;
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* キーは掴んで動かせる。掴んでいる間の見た目を変える。 */
+.tl-key { cursor: grab; }
+.tl-key:active { cursor: grabbing; }
+
+/* ---- 下段のタイムライン --------------------------------------------------
+   右パネルの中では 90px 程度しか幅が取れず、尺 2 秒で 1px ≒ 0.02 秒だった。
+   キーを掴んで時刻を合わせられるよう、全幅を使う場所へ出している。 */
+.bottom-panel .tl { padding: 8px 10px; }
+/* レーンは横幅いっぱいに伸ばす。ここが広いことがこのパネルの存在理由。 */
+.bottom-panel .tl-lane { min-width: 0; }
+.bottom-panel .empty-state { padding: 18px; }
+
+/* いま何を動かしているか。ヌルのときは対象の選択欄が出ないので、ここが唯一の手掛かり。 */
+.tl-target {
+  font-size: 11px; color: #8a8a8e;
+  padding: 2px 0 6px;
+}
+.tl-target b { color: #d5d5da; }
+
+/* .emg 書き出しのオプション。§7 を実装していない再生側へ渡すときに切る。 */
+.export-opt {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: #c5c5ca;
+  margin-bottom: 6px; cursor: pointer;
+}
+.export-opt input { margin: 0; }
+.export-opt-note { margin-left: auto; font-size: 10px; color: #6f6f75; }
