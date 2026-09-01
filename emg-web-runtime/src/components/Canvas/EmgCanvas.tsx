@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { resolveTransformAt } from '../../core/EmgTransform';
+import { compositeOp } from '../../core/EmgBlend';
 import type { EmgAvatar } from '../../types/schema';
 import { EmgStateMachine } from '../../core/EmgStateMachine';
 import { isPartInitiallyVisible, resolvePartType } from '../../core/EmgCompat';
@@ -206,10 +207,18 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
             (sp: any) => Array.isArray(sp.tracks) && sp.tracks.length > 0);
         const animStart = performance.now();
 
-        /** partID に効いている変換。対象が無ければ null（従来どおりの描画になる）。 */
-        const transformFor = (partID: string) => {
+        /**
+         * このレイヤーに効いている変換。対象が無ければ null（従来どおりの描画になる）。
+         *
+         * §7.4.1: targetLayer を持つ sprite はパーツ全体ではなく、そのフレーム識別子を
+         * 持つレイヤーだけを動かす。frameName でまとめた組は全員が一致するので、
+         * 一塊のまま動く（§7.4.1 規則 3）。targetLayer が無ければ従来どおりパーツ全体。
+         */
+        const transformFor = (partID: string, frameID: string | undefined) => {
             if (transformSprites.length === 0) return null;
-            const sp = transformSprites.find((x: any) => x.targetPartID === partID);
+            const sp = transformSprites.find((x: any) =>
+                x.targetPartID === partID
+                && (x.targetLayer == null || x.targetLayer === frameID));
             if (!sp) return null;
             return resolveTransformAt(sp, (performance.now() - animStart) / 1000);
         };
@@ -311,13 +320,12 @@ export const EmgCanvas: React.FC<EmgCanvasProps> = ({
                 // v0.5.0 §7: このパーツを対象とする tracks があれば変換を適用する。
                 // §7.4 の順序（アンカーへ移動 → scale → rotate → 戻す → translate）を
                 // Canvas の変換行列で表現する。tracks が無ければ従来どおり素の drawImage。
-                const tf = transformFor(layer.partID);
+                const tf = transformFor(layer.partID, (layer as any).frameID);
                 const hasTransform = tf !== null;
 
                 ctx.globalAlpha = (layer.opacity !== undefined ? layer.opacity : 1.0)
                     * (tf ? tf.opacity : 1);
-                if (layer.blendMode === 'multiply') ctx.globalCompositeOperation = 'multiply';
-                else ctx.globalCompositeOperation = 'source-over';
+                ctx.globalCompositeOperation = compositeOp(layer.blendMode);
 
                 if (hasTransform) {
                     const ax = (layer as any).anchor_x ?? dx;

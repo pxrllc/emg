@@ -161,6 +161,13 @@ public sealed class EmgLayer
     [JsonPropertyName("opacity")]
     public double? Opacity { get; set; }
 
+    /// <summary>
+    /// v0.4.0 §5 の合成モード（0.5.4 §10.11 で <c>plus-lighter</c>＝加算を追加）。
+    /// **Direct2D の合成には反映していません。** §5.3 が「<c>normal</c> 以外の実装は
+    /// 任意」と定めており、未対応の実装は normal として描いてよいためです（§5.2）。
+    /// 実装するなら加算は色だけを足し、アルファは通常合成にすること
+    /// （Porter-Duff の PLUS はアルファまで足す・§10.11.2）。
+    /// </summary>
     [JsonPropertyName("blendMode")]
     public string? BlendMode { get; set; }
 }
@@ -187,6 +194,18 @@ public sealed class EmgSprite
     /// <summary>v0.5.0 §7.2。座標変換のキーフレーム列。</summary>
     [JsonPropertyName("tracks")]
     public List<EmgTrack>? Tracks { get; set; }
+
+    /// <summary>
+    /// v0.5.3 §7.4.1。変換の対象をパーツ内の 1 フレーム識別子（frameName ?? textureID）に
+    /// 絞る。不在ならパーツの全レイヤーが対象。
+    ///
+    /// このプラグインは §7 のトランスフォームを描画に反映していないため、この値は現在
+    /// どこからも読まれない。**§7 を実装するときは、必ずこの値で対象レイヤーを絞ること。**
+    /// パーツ全体に適用すると、髪だけが揺れるはずの絵で体ごと揺れる（EmgCompat の
+    /// SupportedExtensions に EMG_layer_transform を載せている根拠が崩れる）。
+    /// </summary>
+    [JsonPropertyName("targetLayer")]
+    public string? TargetLayer { get; set; }
 
     /// <summary>v0.5.0 §7.2。尺（秒）。tracks を持つ場合は必須。</summary>
     [JsonPropertyName("duration")]

@@ -77,7 +77,22 @@ init python:
     #   EMG_frame_name  : v0.5.0 §2 の frameName に対応済み。
     #   EMG_switch_none : v0.5.0 §4.3。Ren'Py では呼び出し側が show するまで
     #                     何も表示されないため、初期非表示は自然に満たされる。
-    SUPPORTED_EXTENSIONS = frozenset(["EMG_frame_name", "EMG_switch_none"])
+    #   EMG_layer_transform :
+    #       0.5.3 §7.4.1。**このローダーは §7 のトランスフォームを一切適用していない**
+    #       （フレーム識別子ごとに 1 枚の合成イメージを作って登録するだけで、
+    #       sprites[].tracks を読んでいない）。適用しない実装にとって targetLayer の
+    #       無視は「アニメーションしない」に留まり、絵は正しいまま静止するため、
+    #       登録簿 §2.2 はこの劣化に対する宣言を禁じている。
+    #       **§7 を実装するときの条件:** 対象を sprite["targetLayer"]（フレーム識別子）
+    #       で絞ること。絞れないなら、同時にこの識別子をここから外すこと。
+    #       パーツ全体を動かすと、髪だけが揺れるはずの絵で体ごと揺れる。
+    SUPPORTED_EXTENSIONS = frozenset(
+        ["EMG_frame_name", "EMG_switch_none", "EMG_layer_transform"])
+
+    # blendMode（v0.4.0 §5 / 0.5.4 §10.11 で `plus-lighter` を追加）は**未実装**。
+    # §5.3 が「`normal` 以外の実装は任意」としており、未対応なら normal として描いてよい（§5.2）。
+    # Ren'Py はフレームごとに 1 枚の合成イメージを作るため、レイヤー単位の合成モードを
+    # 効かせるには合成の作り方から変える必要がある。
 
     def _frame_id(layer):
         """

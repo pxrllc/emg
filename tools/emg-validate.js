@@ -29,6 +29,9 @@ const KNOWN_BLEND_MODES = new Set([
     'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
     'color-dodge', 'color-burn', 'hard-light', 'soft-light',
     'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity',
+    // 0.5.4 10.11: 加算。CSS Compositing L2 の値で、色は min(1, Cb + Cs)、
+    // アルファは通常どおり source-over（Porter-Duff の PLUS ではない）。
+    'plus-lighter',
 ]);
 
 const MAX_ATLAS = 8192;

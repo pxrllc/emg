@@ -219,6 +219,37 @@ const CASES = [
             });
         },
     },
+    {
+        id: 'tracks_targetLayer',
+        spec: '7.4.1 章',
+        version: '0.5.3',
+        desc: 'Body 全体ではなく Back_hair だけを揺らす（0.5.3 の targetLayer）',
+        note: 'EMG_layer_transform の宣言が要る。無視するとパーツ全体が揺れて「別の絵」になる',
+        apply: d => {
+            // 房の根元を軸にする。アンカーはレイヤーごとに独立しているため（7.4）、
+            // 対象のレイヤーにだけ書けばよい。
+            const body = d.parts.find(p => p.partID === 'Body');
+            const hair = body.layers.find(l => l.textureID === 'Back_hair');
+            hair.anchor_x = hair.basePosition_x + hair.width / 2;
+            hair.anchor_y = hair.basePosition_y;
+            d.requiredExtensions = [...(d.requiredExtensions ?? []), 'EMG_layer_transform'];
+            d.sprites.push({
+                spriteID: 'hair_sway',
+                targetPartID: 'Body',
+                targetLayer: 'Back_hair',
+                duration: 3.0,
+                loop: 'pingpong',
+                phaseOffset: 0,
+                tracks: [
+                    {
+                        path: 'rotation',
+                        keys: [{ t: 0.0, v: -2.5 }, { t: 1.5, v: 2.5 }, { t: 3.0, v: -2.5 }],
+                        interpolation: 'linear',
+                    },
+                ],
+            });
+        },
+    },
 ];
 
 async function main() {
@@ -244,7 +275,7 @@ async function main() {
     for (const c of CASES) {
         const d = JSON.parse(baseJson);
         const mapping = baseMapping ? JSON.parse(baseMapping) : null;
-        d.version = '0.5.0';
+        d.version = c.version ?? '0.5.0';
         c.apply(d, mapping);
 
         const zip = new JSZip();

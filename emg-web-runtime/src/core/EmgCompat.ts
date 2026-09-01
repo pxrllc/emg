@@ -9,11 +9,12 @@
  */
 // EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
 // EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+// EMG_layer_transform: 0.5.3 §7.4.1 の targetLayer に対応済み。
+//   EmgCanvas がフレーム識別子（layer.frameID）で対象レイヤーを絞って描く。
 export const SUPPORTED_EXTENSIONS: ReadonlySet<string> = new Set<string>([
     'EMG_frame_name',
     'EMG_switch_none',
-    // EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
-    // パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
+    'EMG_layer_transform',
 ]);
 
 /**

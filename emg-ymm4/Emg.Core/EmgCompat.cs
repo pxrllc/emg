@@ -12,11 +12,18 @@ public static class EmgCompat
     /// この実装が理解する機能識別子（emg-extensions-registry.md）。
     /// EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
     /// EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
+    ///
+    /// EMG_layer_transform（0.5.3 §7.4.1）を載せているのは、**このプラグインが §7 の
+    /// トランスフォームを一切適用していない**ため。適用しない実装にとって targetLayer の
+    /// 無視は「アニメーションしない」に留まり、絵は正しいまま静止する。登録簿 §2.2 は
+    /// この劣化に対する宣言を禁じている（不必要に実装を締め出すため）。
+    ///
+    /// **§7 を実装する者への条件:** そのとき <see cref="EmgSprite.TargetLayer"/> で対象
+    /// レイヤーを絞らなければ、この行は嘘になる（パーツ全体が動き「別の絵」になる）。
+    /// 絞れないなら、同時にこの識別子をここから外すこと。
     /// </summary>
     public static readonly IReadOnlySet<string> SupportedExtensions =
-        // EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
-        // パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
-        new HashSet<string> { "EMG_frame_name", "EMG_switch_none" };
+        new HashSet<string> { "EMG_frame_name", "EMG_switch_none", "EMG_layer_transform" };
 
     /// <summary>
     /// v0.4.0 §2.2。未知の識別子が 1 つでもあれば例外を投げる。

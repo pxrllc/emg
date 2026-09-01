@@ -119,13 +119,21 @@ namespace Emg.Editor
         /// <summary>
         /// このインポーターが理解する機能識別子（emg-extensions-registry.md）。
         /// v0.4.0 の追加はいずれも無視しても表示が成立するため空。
+        ///
+        /// EMG_layer_transform（0.5.3 §7.4.1）を載せているのは、**このインポーターが §7 の
+        /// トランスフォームを一切適用していない**ため。tracks のみを持つ sprite は
+        /// BuildAssetData() が落としており、EmgTransformUtil もまだどこからも呼ばれていない。
+        /// 適用しない実装にとって targetLayer の無視は「アニメーションしない」に留まり、
+        /// 絵は正しいまま静止する。登録簿 §2.2 はこの劣化に対する宣言を禁じている。
+        ///
+        /// **§7 を実装する者への条件:** そのとき EmgSprite.targetLayer で対象レイヤーを
+        /// 絞らなければ、この行は嘘になる（パーツ全体が動き「別の絵」になる）。
+        /// 絞れないなら、同時にこの識別子をここから外すこと。
         /// </summary>
         // EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
         // EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
         private static readonly HashSet<string> SupportedExtensions =
-            // EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
-            // パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
-            new HashSet<string> { "EMG_frame_name", "EMG_switch_none" };
+            new HashSet<string> { "EMG_frame_name", "EMG_switch_none", "EMG_layer_transform" };
 
         /// <summary>
         /// Finds the main JSON entry. Mirrors emg-cdn/emg-player.0.3.0.js and Emg.Core:

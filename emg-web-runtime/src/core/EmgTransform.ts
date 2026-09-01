@@ -20,6 +20,11 @@ export interface EmgTrack {
 }
 export interface EmgTransformSprite {
     targetPartID: string;
+    /**
+     * §7.4.1: 変換の対象をパーツ内の 1 フレーム識別子に絞る（0.5.3）。
+     * 不在ならパーツの全レイヤーが対象。値は frameName ?? textureID。
+     */
+    targetLayer?: string;
     tracks?: EmgTrack[];
     duration?: number;
     loop?: 'once' | 'loop' | 'pingpong';

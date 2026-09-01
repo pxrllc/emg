@@ -82,6 +82,13 @@ namespace Emg.Runtime
         /// v0.5.0 §1.1 フレーム識別子。参照の突き合わせは textureID ではなくこちらで行う。
         /// </summary>
         public string FrameID => string.IsNullOrEmpty(frameName) ? textureID : frameName;
+        /// <summary>
+        /// v0.4.0 §5 の合成モード（0.5.4 §10.11 で `plus-lighter`＝加算を追加）。
+        /// **描画には反映していません。** §5.3 が「`normal` 以外の実装は任意」と
+        /// 定めており、未対応の実装は normal として描いてよいためです（§5.2）。
+        /// 実装するなら加算は色だけを足し、アルファは通常合成にすること
+        /// （Porter-Duff の PLUS はアルファまで足す・§10.11.2）。
+        /// </summary>
         public string blendMode = "normal";
         
         // "visible" is no longer primary for switch parts (controlled by default), but kept for static?
@@ -99,6 +106,14 @@ namespace Emg.Runtime
 
         // ---- v0.5.0 §7: トランスフォーム ----
         public EmgTrack[] tracks;
+
+        /// <summary>
+        /// v0.5.3 §7.4.1。変換の対象をパーツ内の 1 フレーム識別子（frameName ?? textureID）に
+        /// 絞る。空ならパーツの全レイヤーが対象。
+        /// §7 を適用するコードを書くときは、必ずこの値で対象を絞ること
+        /// （EmgImporter.SupportedExtensions のコメントを参照）。
+        /// </summary>
+        public string targetLayer;
         public float duration;
         public string loop;
         public float phaseOffset;

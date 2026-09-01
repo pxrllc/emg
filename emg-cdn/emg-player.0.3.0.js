@@ -245,9 +245,23 @@
     // v0.4.0 の範囲では 1 つも実装していないため空。
     // EMG_frame_name:   v0.5.0 §2 の frameName に対応済み。
     // EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
-    // EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
-    //   パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
-    const SUPPORTED_EXTENSIONS = new Set(['EMG_frame_name', 'EMG_switch_none']);
+    // EMG_layer_transform: 0.5.3 §7.4.1 の targetLayer に対応済み。
+    //   applyTransformToPart がフレーム識別子で対象レイヤーを絞る。
+    const SUPPORTED_EXTENSIONS = new Set(
+        ['EMG_frame_name', 'EMG_switch_none', 'EMG_layer_transform']);
+
+    // blendMode（v0.4.0 §5.1 の 16 語 + 0.5.4 §10.11 の `plus-lighter`）。
+    // このプレイヤーはレイヤーを div で描くので、値名がそのまま CSS の
+    // `mix-blend-mode` に通る。**canvas と違い CSS は `plus-lighter` を持つ**ので、
+    // 加算も色だけを足しつつアルファを保てる（§10.11.2 が要求する形）。
+    // 定義済みでない値は `normal` として描く（§5.2）。
+    const BLEND_MODES = new Set([
+        'multiply', 'screen', 'overlay', 'darken', 'lighten',
+        'color-dodge', 'color-burn', 'hard-light', 'soft-light',
+        'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity',
+        'plus-lighter',
+    ]);
+    const blendModeOf = m => (m && BLEND_MODES.has(m)) ? m : 'normal';
 
     // v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一なので、
     // 従来のファイルでは解決結果が変わらない。
@@ -361,9 +375,17 @@
      * §7.4: アンカーを原点へ移動 → scale → rotate → 戻す → translate、最後に opacity。
      * CSS の transform は右から左に適用されるため、記述順は逆にする。
      * transform-origin をアンカー（キャンバス座標）からレイヤー相対へ直して渡す。
+     *
+     * §7.4.1: targetLayer があれば、そのフレーム識別子を持つレイヤーだけが対象になる。
+     * 一致するものが複数ありうる（frameName でまとめた組はまとめて動く）。
+     * アンカーはレイヤーごとに独立しているため、絞り込んでも 1 枚ずつ読む点は変わらない。
      */
-    function applyTransformToPart(partID, tf) {
-        const layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
+    function applyTransformToPart(partID, tf, targetLayer) {
+        let layers = document.querySelectorAll(`div[data-part-id="${partID}"]`);
+        if (targetLayer != null) {
+            layers = Array.prototype.filter.call(
+                layers, el => el.dataset.frameId === targetLayer);
+        }
         layers.forEach(el => {
             const ax = parseFloat(el.dataset.anchorX ?? '0') - parseFloat(el.dataset.baseX ?? '0');
             const ay = parseFloat(el.dataset.anchorY ?? '0') - parseFloat(el.dataset.baseY ?? '0');
@@ -390,7 +412,8 @@
             transformStart = now;
             for (const sp of transformSprites) {
                 if (!pausedParts.has(sp.targetPartID)) sp._time = (sp._time ?? 0) + delta;
-                applyTransformToPart(sp.targetPartID, resolveTransformAt(sp, sp._time ?? 0));
+                applyTransformToPart(
+                    sp.targetPartID, resolveTransformAt(sp, sp._time ?? 0), sp.targetLayer);
             }
             transformRafId = requestAnimationFrame(tick);
         };
@@ -402,6 +425,7 @@
         element.style.backgroundRepeat = "no-repeat";
         element.style.backgroundSize = "cover"; // あるいはピクセル指定
         element.style.opacity = "1";
+        element.style.mixBlendMode = "normal";
     }
 
     // ------------------------------------------------------------------
@@ -494,6 +518,8 @@
                     div.dataset.baseY = String(layer.basePosition_y);
                     div.dataset.anchorX = String(layer.anchor_x ?? layer.basePosition_x);
                     div.dataset.anchorY = String(layer.anchor_y ?? layer.basePosition_y);
+                    // v0.4.0 §5 / 0.5.4 §10.11。未知の値は normal（§5.2）。
+                    div.style.mixBlendMode = blendModeOf(layer.blendMode);
 
                     applyLayerStyles(div);
 
@@ -814,6 +840,19 @@
         transformSprites = (window.jsonData.sprites ?? [])
             .filter(sp => Array.isArray(sp.tracks) && sp.tracks.length > 0)
             .filter(sp => !isPartHidden(sp.targetPartID));
+
+        // §7.4.1 規則 2: targetLayer は対象パーツに実在するフレーム識別子でなければならない。
+        // 一致しなければ動きが丸ごと消えるだけで絵は成立するので、拒否せず警告に留める。
+        for (const sp of transformSprites) {
+            if (sp.targetLayer == null) continue;
+            const found = document.querySelector(
+                `div[data-part-id="${sp.targetPartID}"][data-frame-id="${sp.targetLayer}"]`);
+            if (!found) {
+                console.warn(
+                    `Sprite '${sp.spriteID}': targetLayer '${sp.targetLayer}' が ` +
+                    `パーツ '${sp.targetPartID}' に存在しません。この変換は何にも適用されません。`);
+            }
+        }
         startTransformLoop();
 
         if (window.jsonData.sprites) {

@@ -278,6 +278,15 @@ func _start_animation() -> void:
 		if (sprite as Dictionary).has("tracks") and _part_visible.get(
 				String((sprite as Dictionary).get("targetPartID", "")), true):
 			_transform_sprites.append(sprite)
+			# §7.4.1 規則 2: targetLayer は対象パーツに実在するフレーム識別子であること。
+			# 外れても動きが消えるだけで絵は成立するので、拒否せず警告に留める。
+			var tl: String = _target_layer_of(sprite as Dictionary)
+			if tl != "":
+				var part_id := String((sprite as Dictionary).get("targetPartID", ""))
+				var lm: Dictionary = _part_layers.get(part_id, {})
+				if not lm.has(tl):
+					push_warning("EmgAvatar: sprite '%s' の targetLayer '%s' がパーツ '%s' に存在しません。この変換は何にも適用されません。" % [
+						String((sprite as Dictionary).get("spriteID", "")), tl, part_id])
 
 	for sprite in _data.get("sprites", []):
 		var target_part_id: String = sprite.get("targetPartID", "")
@@ -635,11 +644,24 @@ func set_expression(name: String) -> void:
 ## Empty for v0.4.0: none of its additions change what gets drawn.
 ## EMG_frame_name:  v0.5.0 §2 の frameName に対応済み。
 ## EMG_switch_none: v0.5.0 §4.3 の「switch を初期状態で非表示」に対応済み。
-## EMG_layer_transform: **未対応**。0.5.3 §7.4.1 の targetLayer を無視すると
-##   パーツ全体を動かしてしまい別の絵になるため、実装するまでここに足さない。
-const SUPPORTED_EXTENSIONS: Array[String] = ["EMG_frame_name", "EMG_switch_none"]
+## EMG_layer_transform: 0.5.3 §7.4.1 の targetLayer に対応済み。
+##   _apply_transform_to_part() がフレーム識別子で対象レイヤーを絞る。
+const SUPPORTED_EXTENSIONS: Array[String] = [
+	"EMG_frame_name", "EMG_switch_none", "EMG_layer_transform"]
 
 
+## §7.4.1: sprite の targetLayer。不在（および null）なら "" を返し、
+## パーツ全体が対象であることを表す。str(null) は "<null>" になるため直接使わない。
+func _target_layer_of(sprite: Dictionary) -> String:
+	var tl = sprite.get("targetLayer", null)
+	return str(tl) if tl != null else ""
+
+
+## blendMode（v0.4.0 §5 / 0.5.4 §10.11 で `plus-lighter` を追加）は**未実装**。
+## §5.3 が「`normal` 以外の実装は任意」としており、未対応なら normal として描いてよい（§5.2）。
+## 実装する場合、加算に CanvasItemMaterial の BLEND_MODE_ADD を使うとアルファまで足りるため、
+## 色だけを加算しアルファは通常合成にすること（§10.11.2）。
+##
 ## v0.5.0 §1.1: レイヤーのフレーム識別子。frameName が無ければ textureID と同一。
 ## 参照の突き合わせは textureID ではなく必ずこちらで行う。
 func _frame_id(layer: Dictionary) -> String:
@@ -775,9 +797,17 @@ func _resolve_transform_at(sprite: Dictionary, time: float) -> Dictionary:
 ## §7.4: anchor to origin -> scale -> rotate -> back -> translate, then opacity.
 ## Sprite2D applies its own transform about its position, so the anchor offset is
 ## folded in by hand.
-func _apply_transform_to_part(part_id: String, tf: Dictionary) -> void:
+##
+## §7.4.1: target_layer が空でなければ、そのフレーム識別子のレイヤーだけが対象。
+## _part_layers はフレーム識別子で引ける辞書なので、キーを 1 つに絞るだけで済む。
+## 同じ識別子を共有するレイヤー（frameName の組）は全員が動く（規則 3）。
+func _apply_transform_to_part(part_id: String, tf: Dictionary,
+		target_layer: String = "") -> void:
 	var layer_map: Dictionary = _part_layers.get(part_id, {})
-	for fid in layer_map.keys():
+	var fids: Array = layer_map.keys()
+	if target_layer != "":
+		fids = [target_layer] if layer_map.has(target_layer) else []
+	for fid in fids:
 		for sprite in layer_map[fid]:
 			var s: Sprite2D = sprite
 			var base: Vector2 = _sprite_base_pos.get(s, s.position)
@@ -798,4 +828,5 @@ func _process(_delta: float) -> void:
 	for sp in _transform_sprites:
 		var sprite: Dictionary = sp
 		_apply_transform_to_part(String(sprite.get("targetPartID", "")),
-			_resolve_transform_at(sprite, time))
+			_resolve_transform_at(sprite, time),
+			_target_layer_of(sprite))

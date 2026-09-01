@@ -221,6 +221,8 @@ difference, exclusion, hue, saturation, color, luminosity
 
 この集合は、CSS、OS コンポジタ、GPU、CPU 合成のいずれの展開経路でも実現できることを基準に選んでいます。
 
+> **0.5.4 で 1 語追加されています。** 上の 16 語は CSS Compositing and Blending Level 1 の集合で、加算に相当する値を含みません。`plus-lighter`（Level 2）が `emg-json-spec-0.5.0.md` 10.11 で追加されました。現行の許容値は 17 語です。
+
 ### 5.2 未知の値の扱い
 
 **定義済みでない値に遭遇した実装は、`"normal"` として扱わなければなりません。** エラーとしてはなりません（F1 の考え方と一貫させます）。
