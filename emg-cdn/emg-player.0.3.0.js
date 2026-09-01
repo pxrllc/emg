@@ -420,12 +420,22 @@
         transformRafId = requestAnimationFrame(tick);
     }
 
-    function applyLayerStyles(element) {
+    /**
+     * 新しく作ったレイヤー div の初期値。
+     *
+     * **合成モードもここで入れること。** 以前は呼び出し側が
+     * `mixBlendMode` を設定してからこれを呼んでいたため、既定値の `normal` で
+     * 上書きされて合成モードが一切効かず、加算やスクリーンで乗せるはずの
+     * エフェクトが素のまま重なって絵が暗くなっていた。引数で受け取れば
+     * 順序に依存しない。
+     */
+    function applyLayerStyles(element, layer) {
         element.style.position = "absolute";
         element.style.backgroundRepeat = "no-repeat";
         element.style.backgroundSize = "cover"; // あるいはピクセル指定
         element.style.opacity = "1";
-        element.style.mixBlendMode = "normal";
+        // v0.4.0 §5 / 0.5.4 §10.11。未知の値は normal（§5.2）。
+        element.style.mixBlendMode = blendModeOf(layer && layer.blendMode);
     }
 
     // ------------------------------------------------------------------
@@ -518,10 +528,7 @@
                     div.dataset.baseY = String(layer.basePosition_y);
                     div.dataset.anchorX = String(layer.anchor_x ?? layer.basePosition_x);
                     div.dataset.anchorY = String(layer.anchor_y ?? layer.basePosition_y);
-                    // v0.4.0 §5 / 0.5.4 §10.11。未知の値は normal（§5.2）。
-                    div.style.mixBlendMode = blendModeOf(layer.blendMode);
-
-                    applyLayerStyles(div);
+                    applyLayerStyles(div, layer);
 
                     div.style.width = `${layer.width}px`;
                     div.style.height = `${layer.height}px`;
