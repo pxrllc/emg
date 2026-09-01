@@ -44,8 +44,26 @@ npm install
 npm run dev          # electron-vite dev — Electron アプリとして起動
 npm run dev:web      # Vite のみ。ブラウザで renderer を開く（http://localhost:5273）
 npm run build        # electron-vite build
-npm run electron:build   # インストーラを作る（electron-builder）
+npm run electron:build   # 配布用のバイナリを作る（electron-builder）
 ```
+
+### 配布用バイナリ
+
+`npm run electron:build` の出力は `dist-build/`（gitignore 済み）に出ます。
+Windows は 2 種類を同時に作ります。
+
+| ファイル | 何か |
+|---|---|
+| `EMG Editor Setup <version>.exe` | インストーラ（NSIS）。ユーザー単位にインストールされ、管理者権限は要りません |
+| `EMG Editor <version>.exe` | ポータブル版。インストールせずそのまま起動します |
+
+どちらも **コード署名していません**。他の PC で初めて開くと
+SmartScreen の警告が出るので、「詳細情報 → 実行」を案内してください。
+署名するなら electron-builder の `win.certificateFile` / `certificatePassword` を
+足します。
+
+アイコンは指定していないため Electron の既定アイコンになります。
+差し替えるなら 256×256 以上の `.ico` を用意して `build.win.icon` に指定します。
 
 ### `dev:web` について
 

@@ -14,6 +14,8 @@ asset/
 .claude/
 out
 dist
+# electron-builder の出力（インストーラと portable exe。数百 MB になる）
+dist-build
 dist-web
 dist-ssr
 *.local
