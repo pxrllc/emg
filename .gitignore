@@ -12,3 +12,9 @@ test-fixtures/
 # 履歴は別の git ディレクトリ（../.emg-notes.git）で持っている。notes.sh を参照。
 CLAUDE.md
 .claude/
+
+# 手元の素材置き場。**公開リポジトリに入れない。**
+# 出所の分からない他人の絵（配布条件が確認できていないもの）が混ざっている。
+samples/material/
+# emg-cdn/assets/f6ddEj.emg と同一のコピー。二重に持たない。
+samples/f6ddEj.emg
