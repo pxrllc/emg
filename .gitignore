@@ -7,3 +7,8 @@ dist*/
 doc/
 # 互換性検証用の生成物（tools/make-compat-fixtures.js で再生成できる）
 test-fixtures/
+
+# 作業メモとローカル設定。リポジトリには入れない。
+# 履歴は別の git ディレクトリ（../.emg-notes.git）で持っている。notes.sh を参照。
+CLAUDE.md
+.claude/
