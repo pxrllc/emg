@@ -69,8 +69,14 @@
             </div>
         </section>
 
-        <section class="panel">
+        <!--
+            アトラスの欄は既定で畳んである。主役はキャンバスで、アトラスは
+            「どこから取っているか」を確かめたいときだけ開けばよいため。
+        -->
+        <section class="panel panel-atlas collapsed" id="atlasPanel">
             <div class="panel-head">
+                <button class="chip atlas-toggle" id="atlasToggle" aria-expanded="false"
+                        aria-controls="atlasViewport" title="アトラスの表示を切り替える"></button>
                 <h2>アトラス</h2>
                 <span class="dims" id="atlasDims">—</span>
                 <span class="flex"></span>
@@ -125,10 +131,11 @@
         (() => {
             'use strict';
 
+            // 先頭のものが起動時に自動で読まれる（最下部の DOMContentLoaded）。
             const DEMOS = [
+                { name: 'KV', url: './assets/jira_kv_crop.emg', note: '0.5.4 / 合成モード' },
                 { name: 'senti', url: './assets/senti-demo.emg', note: '0.3.0 / 7 パーツ' },
                 { name: 'エフェクト', url: './assets/f6ddEj.emg', note: '0.5.3 / 動きます' },
-                { name: 'KV', url: './assets/jira_kv_crop.emg', note: '0.5.4 / 合成モード' },
             ];
 
             // アルファ判定用にアトラスを canvas へ写す上限。これを超えるアトラスは
@@ -154,6 +161,7 @@
                 hoverPart: null,    // 一覧でマウスが乗っているだけのパーツ
                 hidden: new Set(),
                 paused: new Set(),
+                atlasCollapsed: true,   // 既定は畳んだ状態（HTML 側の class と揃えること）
             };
 
             // アイコン。ボタンに文字を並べると横幅を食い、スマホで折り返す。
@@ -587,13 +595,18 @@
 
                 layoutStage();
 
-                // アトラス側
+                // アトラス側。
+                //
+                // **畳んでいる間は触らない。** 隠れている要素の clientWidth /
+                // clientHeight は 0 なので、scaleToFit が padding を引いて負の倍率を
+                // 返し、矩形の位置が全部おかしくなる。開いたときに layout() を
+                // 呼び直して計算する（setAtlasCollapsed）。
                 const tex = state.texes[state.activeTex];
-                const ka = !tex ? 1
+                const ka = (!tex || state.atlasCollapsed) ? (state.atlasScale ?? 1)
                     : state.zoom === 'fit' ? scaleToFit(atlasViewport, tex.width, tex.height)
                         : Number(state.zoom);
                 state.atlasScale = ka;
-                if (tex) {
+                if (tex && !state.atlasCollapsed) {
                     atlasImage.style.width = `${tex.width * ka}px`;
                     atlasImage.style.height = `${tex.height * ka}px`;
                     atlasSheet.style.width = `${tex.width * ka}px`;
@@ -770,6 +783,28 @@
                 b.onclick = () => loadDemo(demo);
                 $('demoChips').appendChild(b);
             }
+
+            /**
+             * アトラスの欄の開閉。
+             *
+             * 開いた直後に layout() を呼ぶことが要る。倍率は viewport の実寸から
+             * 求めるので、畳んでいる間（実寸 0）に計算した値をそのまま使うと、
+             * 絵とオーバーレイの矩形がまるごとずれる。
+             */
+            function setAtlasCollapsed(collapsed) {
+                state.atlasCollapsed = collapsed;
+                $('atlasPanel').classList.toggle('collapsed', collapsed);
+                document.querySelector('.workspace').classList.toggle('atlas-collapsed', collapsed);
+
+                const b = $('atlasToggle');
+                b.textContent = collapsed ? 'アトラスを開く' : '畳む';
+                b.setAttribute('aria-expanded', String(!collapsed));
+
+                layout();
+            }
+
+            $('atlasToggle').onclick = () => setAtlasCollapsed(!state.atlasCollapsed);
+            setAtlasCollapsed(true);
 
             $('playToggle').onclick = () => {
                 window.EMGPlayer.toggleAnimation();

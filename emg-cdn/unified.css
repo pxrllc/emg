@@ -286,6 +286,34 @@ body {
     min-height: 0;
 }
 
+/*
+ * アトラスの欄を畳んだ状態。
+ *
+ * 見出しの帯だけを下に残し、キャンバスが横幅を全部取る。列を 1 本に減らして
+ * 行を 2 段にするので、畳んだときだけ縦並びになる（幅の狭い画面では
+ * もともと縦並びなので、下の media query と同じ形に落ちる）。
+ */
+.workspace.atlas-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.panel-atlas.collapsed > .viewport,
+.panel-atlas.collapsed > .panel-foot,
+.panel-atlas.collapsed .zoom,
+.panel-atlas.collapsed #texChips {
+    display: none;
+}
+
+/* 畳んでいる間は見出しの下線が浮くので消す。 */
+.panel-atlas.collapsed .panel-head {
+    border-bottom: none;
+}
+
+.atlas-toggle {
+    flex: none;
+}
+
 .panel-head {
     flex: none;
     display: flex;
