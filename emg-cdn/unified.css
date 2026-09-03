@@ -431,6 +431,92 @@ body {
     pointer-events: none;
 }
 
+/* ---- 読み込み中 -------------------------------------------------------- */
+
+/*
+ * 14.7MB のアトラスは表示までに十数秒かかる。その間ページは静止していて、
+ * 固まったのか待てばいいのかが分からない。
+ *
+ * **動きは transform と opacity だけで作ること。** 読み込みの本体
+ * （JSZip の展開、8192px の PNG のデコード、レイヤーの構築）はメインスレッドを
+ * 長く掴むので、JS で動かすものや width / color を変えるアニメーションは
+ * そこで一緒に止まる。「止まっていないことを示す」ものが止まっては意味がない。
+ * transform / opacity だけなら compositor 側で回り続ける。
+ *
+ * 進捗バーの伸縮に width ではなく scaleX を使っているのも同じ理由。
+ */
+.loading {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+}
+
+/* 重なったレイヤーが順に乗っていく形。このページの主題そのもの。 */
+.loading-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.loading-stack span {
+    display: block;
+    width: 54px;
+    height: 8px;
+    border-radius: 2px;
+    /* --atlas / --canvas は座標系の色分けに予約されているので使わない。
+       ここで使うと「アトラス座標の琥珀・キャンバス座標の水色」の対応が濁る。 */
+    background: var(--text);
+    opacity: 0.25;
+    transform-origin: left center;
+    animation: loading-stack 1.2s ease-in-out infinite;
+}
+
+.loading-stack span:nth-child(2) { animation-delay: 0.15s; }
+.loading-stack span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes loading-stack {
+    0%, 100% { opacity: 0.2;  transform: scaleX(0.55); }
+    45%      { opacity: 0.95; transform: scaleX(1); }
+}
+
+.loading-label {
+    margin: 0;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;   /* %の桁数で横幅が揺れないように */
+}
+
+.loading-bar {
+    width: 132px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.09);
+    overflow: hidden;
+}
+
+.loading-bar-fill {
+    height: 100%;
+    background: var(--text);
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 0.18s linear;
+}
+
+/*
+ * OS が「動きを減らす」設定なら、明滅だけにして動きを止める。
+ * 進捗の数字は残るので、止まっていないことは分かる。
+ */
+@media (prefers-reduced-motion: reduce) {
+    .loading-stack span {
+        animation-duration: 2.4s;
+        animation-timing-function: steps(2, end);
+    }
+    .loading-bar-fill { transition: none; }
+}
+
 .panel-foot {
     flex: none;
     padding: 8px 14px;

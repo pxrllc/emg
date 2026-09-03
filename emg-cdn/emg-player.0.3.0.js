@@ -111,13 +111,55 @@
      */
     let loadTicket = 0;
 
+    /**
+     * 読み込みの進み具合を伝える（`emg:progress`）。
+     *
+     * `detail` は `{ source, phase, ratio }`。`phase` は `download`（取得）か
+     * `extract`（ZIP からアトラスを取り出す）。`ratio` は 0〜1 で、
+     * 長さが分からないときは `null`。
+     *
+     * 大きいファイルは表示までに十数秒かかり、その間ページは止まって見えます。
+     * **古い読み込みの進捗は出しません**（`ticket` を照合する）。続けて
+     * デモを押したときに、捨てるほうの数字で表示が巻き戻るため。
+     */
+    function emitProgress(ticket, source, phase, ratio) {
+        if (ticket !== loadTicket) return;
+        emit('emg:progress', { source, phase, ratio });
+    }
+
+    /**
+     * 本文を読みながら進捗を出す。`Content-Length` が無ければ `ratio` は null。
+     *
+     * `response.blob()` を一息に待つのと結果は同じで、途中経過が取れる点だけが違う。
+     */
+    async function readBodyWithProgress(response, ticket, source) {
+        const total = Number(response.headers.get('content-length')) || 0;
+        if (!response.body || !total) {
+            emitProgress(ticket, source, 'download', null);
+            return await response.blob();
+        }
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            emitProgress(ticket, source, 'download', Math.min(1, received / total));
+        }
+        return new Blob(chunks, { type: response.headers.get('content-type') || '' });
+    }
+
     async function loadEmgFromCDN(url, containerId = "layerContainer") {
         const ticket = ++loadTicket;
         try {
             console.log(`Loading EMG from: ${url}`);
+            emitProgress(ticket, url, 'download', 0);
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            return await loadEmgFromBlob(await response.blob(), containerId, url, ticket);
+            const body = await readBodyWithProgress(response, ticket, url);
+            return await loadEmgFromBlob(body, containerId, url, ticket);
         } catch (error) {
             // 例外を投げ直さないのは、この関数を await せずに呼ぶ既存の埋め込みが
             // unhandled rejection を出すようになってしまうため。失敗は emg:error で伝える。
@@ -169,32 +211,36 @@
                 }
             }
 
-            // ---- ここから差し替え ----
-            // 待っている間に次の読み込みが始まっていたら、こちらは捨てる。
+            // 追い越されていたら、重いアトラスの展開に入る前にやめる。
+            // （差し替え直前にもう一度照合する。下の「ここから差し替え」）
             if (ticket !== loadTicket) {
                 console.log(`Load of '${label}' superseded by a newer load`);
                 return false;
             }
-            stopTimers();
-            resetMappingState();
-            // 前のファイルで消した／止めたパーツの指定は持ち越さない。
-            hiddenParts.clear();
-            pausedParts.clear();
-            window.isAnimationRunning = true;
-            window.jsonData = data;
-            window.emgVersion = version;
-            window.emgMapping = mapping;
 
-            // 前のアトラスは、新しいものを作り終えてから捨てる。
-            const previous = textureUrls;
-            const textureBlobs = textureUrls = {};
+            /*
+             * アトラスの展開。**ここでもまだ画面にも window にも触らない。**
+             *
+             * 8192px 級のアトラスだと十数秒〜かかり、その間に利用者が別のファイルを
+             * 選ぶ余地が十分にある。以前はこの手前で 1 度だけ照合して、そのあと
+             * 展開・描画・emit を無条件に続けていたため、先に始まって後に終わった
+             * ほうが、あとから来たファイルの表示を上書きしていた。
+             * 症状は「パーツ一覧は新しいファイル、名前と絵は古いファイル、
+             * アトラスは食い違って何も映らない」。
+             */
+            const textureBlobs = {};
 
             if (data.textures && Array.isArray(data.textures)) {
-                for (const texMeta of data.textures) {
+                // ここが一番長い。8192px 級のアトラスだと数秒〜十数秒かかるので、
+                // JSZip の onUpdate をそのまま進捗として出す。複数枚あるときは
+                // 「何枚目の何%」を全体の比に直す。
+                const texCount = data.textures.length;
+                for (const [i, texMeta] of data.textures.entries()) {
                     const fileName = texMeta.textureFile;
                     const fileInZip = Object.keys(zipContent.files).find(name => name.endsWith(fileName));
                     if (fileInZip) {
-                        const blob = await zipContent.files[fileInZip].async("blob");
+                        const blob = await zipContent.files[fileInZip].async("blob",
+                            m => emitProgress(ticket, label, 'extract', (i + m.percent / 100) / texCount));
                         textureBlobs[fileName] = URL.createObjectURL(blob);
                     }
                 }
@@ -211,6 +257,28 @@
                 }
             }
 
+            // ---- ここから差し替え ----
+            // 展開の途中で追い越されていたら、ここで捨てる。作った Object URL は
+            // 誰にも渡っていないので、放っておくとそのままリークする。
+            if (ticket !== loadTicket) {
+                console.log(`Load of '${label}' superseded by a newer load`);
+                for (const url of new Set(Object.values(textureBlobs))) URL.revokeObjectURL(url);
+                return false;
+            }
+
+            stopTimers();
+            resetMappingState();
+            // 前のファイルで消した／止めたパーツの指定は持ち越さない。
+            hiddenParts.clear();
+            pausedParts.clear();
+            window.isAnimationRunning = true;
+            window.jsonData = data;
+            window.emgVersion = version;
+            window.emgMapping = mapping;
+
+            // 前のアトラスは、新しいものを作り終えてから捨てる。
+            const previous = textureUrls;
+            textureUrls = textureBlobs;
             for (const url of new Set(Object.values(previous))) URL.revokeObjectURL(url);
 
             renderLayers(data, textureBlobs, containerId);

@@ -53,6 +53,21 @@
                     <div class="overlay" id="stageOverlay"></div>
                 </div>
                 <p class="empty" id="stageEmpty">デモを選ぶか、.emg をここにドロップしてください。</p>
+
+                <!--
+                    読み込み中の表示。大きいファイルは表示までに十数秒かかるので、
+                    止まっていないことが分かるものを出す。
+                    アニメーションは CSS 側（compositor で回る）。理由は unified.css を参照。
+                -->
+                <div class="loading" id="loading" hidden>
+                    <div class="loading-stack" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <p class="loading-label" id="loadingLabel">読み込み中…</p>
+                    <div class="loading-bar" id="loadingBar" hidden>
+                        <div class="loading-bar-fill" id="loadingFill"></div>
+                    </div>
+                </div>
             </div>
             <div class="panel-foot">
                 <div class="chips parts" id="partChips"></div>
@@ -197,15 +212,54 @@
                 }
             }
 
+            // ---- 読み込み中の表示 ----------------------------------------------
+
+            const PHASE_LABEL = { download: '取得中', extract: '展開中' };
+
+            /**
+             * 読み込み中の表示を出す／消す。
+             *
+             * 動きは CSS が持つ（unified.css の「読み込み中」）。ここで
+             * `requestAnimationFrame` などを回さないのは、展開もデコードも
+             * メインスレッドを長く掴むので、JS で動かすものは一緒に止まるため。
+             */
+            function setLoading(on) {
+                $('loading').hidden = !on;
+                if (on) {
+                    // 前回の進捗が残っていると、押した瞬間に 90% から始まって見える。
+                    $('loadingLabel').textContent = '読み込み中…';
+                    $('loadingBar').hidden = true;
+                    $('loadingFill').style.transform = 'scaleX(0)';
+                    $('stageEmpty').hidden = true;
+                }
+            }
+
+            window.addEventListener('emg:progress', e => {
+                const { phase, ratio } = e.detail;
+                const name = PHASE_LABEL[phase] ?? '読み込み中';
+                if (ratio == null) {
+                    $('loadingLabel').textContent = `${name}…`;
+                    $('loadingBar').hidden = true;
+                    return;
+                }
+                $('loadingLabel').textContent = `${name} ${Math.round(ratio * 100)}%`;
+                $('loadingBar').hidden = false;
+                // width ではなく scaleX。width は毎回レイアウトが要り、
+                // 展開でメインスレッドが詰まっている間は反映されない。
+                $('loadingFill').style.transform = `scaleX(${ratio})`;
+            });
+
             // 見出しの更新は emg:loaded まで待つ。失敗したときに、実際に映っている
             // ものと名前が食い違わないようにするため。
             function loadDemo(demo) {
                 clearError();
+                setLoading(true);
                 window.EMGPlayer.loadEmgFromCDN(demo.url);
             }
 
             function loadFile(file) {
                 clearError();
+                setLoading(true);
                 window.EMGPlayer.loadEmgFromFile(file, 'layerContainer', file.name);
             }
 
@@ -271,6 +325,7 @@
 
             async function onLoaded(detail) {
                 const seq = ++loadSeq;
+                setLoading(false);
                 state.data = detail.data;
                 state.layers = collectLayers(detail.data);
                 state.texes = collectTextures(detail.data, detail.textures);
@@ -854,6 +909,7 @@
 
             window.addEventListener('emg:loaded', e => { onLoaded(e.detail); });
             window.addEventListener('emg:error', e => {
+                setLoading(false);
                 showError(e.detail.error);
                 // 失敗しても前の内容はそのまま残る（プレイヤーが読めるまで差し替えない）。
                 // 何も出ていないときだけ案内を出す。
