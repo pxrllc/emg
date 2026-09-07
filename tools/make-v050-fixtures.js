@@ -140,10 +140,16 @@ const CASES = [
         },
     },
     {
+        // 対象の Eyes は素材の mapping.json が blinkPartKey で名指ししている。
+        // 明示指定されたパーツを対象とする sprite は**自律発火してはならない**
+        // （v0.3.0 仕様 7.3）ので、trigger は external。まばたきの自律発火は
+        // そもそも mapping.json 側の担当であり、ここで見せたいのは 6.2 の
+        // 解決規則そのものなので、外から spriteID で叩けば足りる。
         id: 'sequence_keys',
         spec: '6 章',
-        desc: '不等間隔のまばたき（fps では表現できない緩急）',
-        note: '解決規則は key.t <= t を満たす最後のキー（6.2）。fps は不要',
+        desc: '不等間隔のまばたき（fps では表現できない緩急）。外部発火',
+        note: '解決規則は key.t <= t を満たす最後のキー（6.2）。fps は不要。'
+            + 'Eyes は mapping.json の管轄なので自律発火はさせない（7.3）',
         apply: d => {
             d.sprites.push({
                 spriteID: 'blink',
@@ -158,7 +164,7 @@ const CASES = [
                         { t: 0.24, frame: '01' },
                     ],
                 },
-                trigger: { type: 'random_interval', intervalMin: 3.0, intervalMax: 8.0 },
+                trigger: { type: 'external' },
             });
         },
     },
