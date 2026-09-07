@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EMG 0.5.4 リファレンス</title>
-<meta name="description" content="EMG 0.5.4 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
+<title>EMG 0.5.5 リファレンス</title>
+<meta name="description" content="EMG 0.5.5 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -294,7 +294,7 @@ li { margin-bottom: 5px; }
 <div class="shell">
   <nav class="nav">
     <div class="nav-head">
-      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.4</span></div>
+      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.5</span></div>
       <div class="nav-sub">組み合わせ可能な2Dスプライトの配布形式</div>
       <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
     </div>
@@ -317,6 +317,7 @@ li { margin-bottom: 5px; }
       <a href="#trigger"><code>trigger</code></a>
       <a href="#tracks"><code>tracks[]</code></a>
       <a href="#presets"><code>presets[]</code></a>
+      <a href="#actions"><code>actions[]</code></a>
       <a href="#states">状態の使い分け</a>
     </div>
 
@@ -358,6 +359,7 @@ li { margin-bottom: 5px; }
         <div><span class="ver v5">0.5.2</span> 実装間で結果を一致させる規定</div>
         <div><span class="ver v5">0.5.3</span> レイヤー単位のトランスフォーム</div>
         <div><span class="ver v5">0.5.4</span> 合成モードに加算を追加</div>
+        <div><span class="ver v5">0.5.5</span> 複数パーツにまたがるアクション</div>
       </div>
 
       <div class="note">
@@ -500,6 +502,7 @@ li { margin-bottom: 5px; }
           <tr><td><code>sprites</code></td><td class="t-type">Sprite[]</td><td><span class="req">必須</span></td><td>—</td><td><span class="ver">0.3.0</span></td></tr>
           <tr><td><code>requiredExtensions</code></td><td class="t-type">string[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v4">0.4.0</span></td></tr>
           <tr><td><code>presets</code></td><td class="t-type">Preset[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.0</span></td></tr>
+          <tr><td><code>actions</code></td><td class="t-type">Action[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.5</span></td></tr>
         </table>
         </div>
 
@@ -1023,6 +1026,75 @@ li { margin-bottom: 5px; }
       </section>
 
       <!-- ─────────────────────────────────────────────── -->
+      <section id="actions">
+        <h2><code>actions[]</code> <span class="ver v5">0.5.5</span></h2>
+        <p class="sec-note">複数パーツにまたがる動きを、1 つの名前でまとめて呼ぶ。</p>
+
+        <p>
+          <code class="inl">sprites[]</code> の <code class="inl">targetPartID</code> は
+          <strong>1 つのパーツしか指せません</strong>。「手を振りながら口を開き、目を細める」は
+          sprite が 3 本になり、それが 1 つのアクションであることも、
+          <strong>時刻を揃えること</strong>も書けませんでした。
+        </p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+          <tr><td><code>actionID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>ファイル内で一意。外部から呼び出すキー</td></tr>
+          <tr><td><code>label</code></td><td class="t-type">string</td><td><span class="opt">任意</span></td><td>UI に出す名前</td></tr>
+          <tr><td><code>members</code></td><td class="t-type">string[]</td><td><span class="req">必須</span></td><td><code>spriteID</code> の配列。1 つ以上</td></tr>
+        </table>
+        </div>
+
+<pre>{ <span class="k">"actionID"</span>: <span class="s">"hello"</span>,
+  <span class="k">"label"</span>:    <span class="s">"こんにちは"</span>,
+  <span class="k">"members"</span>:  [<span class="s">"hello_arm"</span>, <span class="s">"hello_mouth"</span>, <span class="s">"hello_eyes"</span>] }</pre>
+
+        <div class="note">
+          <p><strong>アクションを開始したとき、メンバーはすべて共通の t = 0 から始まります。</strong>
+          規範として足したのはこの 1 点だけで、評価規則は 7 章のまま変わりません。</p>
+        </div>
+
+        <h3>尺とループを持たない</h3>
+        <p>
+          <code class="inl">duration</code> / <code class="inl">loop</code> /
+          <code class="inl">phaseOffset</code> は<strong>アクション側に置きません</strong>。
+          メンバーの sprite が既に持っており、両方に置くと同じことを 2 通りで書けるためです。
+          長さが要る場合は<strong>メンバーの <code class="inl">duration</code> の最大値</strong>として
+          導出します。
+        </p>
+
+        <h3>メンバーは <code>trigger</code> を持てない</h3>
+        <p>
+          自律再生とアクションからの再生が二重に走るためです
+          （<code class="inl">mapping.json</code> の共存規則と同じ考え方）。
+          <strong>この性質が、未対応の実装での劣化を「静止するだけ」に抑えます。</strong>
+          パーツは <code class="inl">default</code> のまま正しく描かれるので、
+          <code class="inl">requiredExtensions</code> の宣言は要りません。
+        </p>
+
+        <div class="warn">
+          <p><strong>移行の注意。</strong>これまで <code class="inl">trigger</code> を持たせていた
+          sprite をアクションのメンバーへ移すと、<strong>0.5.4 以前の実装ではその sprite が
+          動かなくなります</strong>。絵は壊れませんが、見え方は変わります。</p>
+        </div>
+
+        <h3>衝突</h3>
+        <p>
+          <strong>新しい規則はありません。</strong>複数のアクションが同じ対象を取り合った場合は、
+          <a href="#exact">10.5.2</a> がそのまま適用され、<code class="inl">sprites[]</code> の
+          宣言順で後にあるものが優先します。加算はしません。
+          同じ <code class="inl">actionID</code> の再生要求が再生中に来たら、先頭から再生し直します。
+        </p>
+
+        <h3>入れ子は起こらない</h3>
+        <p>
+          <code class="inl">members</code> は <code class="inl">spriteID</code> のみを並べるため、
+          アクションがアクションを含むことは構造上ありません。循環参照の検査も不要です。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
       <section id="states">
         <h2>状態の使い分け</h2>
         <p class="sec-note">差し替え・on/off・まとめ指定を、どの機構で表現するか。</p>
@@ -1367,7 +1439,7 @@ li { margin-bottom: 5px; }
       <!-- ─────────────────────────────────────────────── -->
       <section id="support">
         <h2>実装対応表</h2>
-        <p class="sec-note">2026-08-25 時点。</p>
+        <p class="sec-note">2026-09-07 時点。<code class="inl">actions</code> は 0.5.5 で追加されたばかりで、まだどの実装も持っていません。「—」は sprite の再生そのものを実装していないもの。</p>
 
         <div class="tbl-scroll">
         <table class="matrix">
@@ -1378,13 +1450,14 @@ li { margin-bottom: 5px; }
             <th>switch none</th>
             <th><code>keys</code></th>
             <th><code>tracks</code></th>
+            <th><code>actions</code></th>
           </tr>
-          <tr><td>emg-ymm4（Emg.Core）</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>emg-cdn プレイヤー</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>emg-godot</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
-          <tr><td>emg-unity-importer</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td></tr>
-          <tr><td>emg-web-runtime</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td></tr>
-          <tr><td>emg-renpy</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="no">方針として非対応</td></tr>
+          <tr><td>emg-ymm4（Emg.Core）</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
+          <tr><td>emg-cdn プレイヤー</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
+          <tr><td>emg-godot</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
+          <tr><td>emg-unity-importer</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td></tr>
+          <tr><td>emg-web-runtime</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td></tr>
+          <tr><td>emg-renpy</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="no">方針として非対応</td><td class="no">—</td></tr>
         </table>
         </div>
 

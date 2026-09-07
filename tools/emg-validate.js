@@ -341,6 +341,44 @@ function validate(data, entryNames, mapping) {
         }
     }
 
+
+    // --- actions（0.5.5 11 章）---
+    // **参照の束でしかないので、検査も参照が通ることだけ。**
+    // 尺もループも持たないため、整合を取るべき値が無い（11.4）。
+    {
+        const spriteIds = new Set((data.sprites ?? []).map(s => s.spriteID));
+        const byId = new Map((data.sprites ?? []).map(s => [s.spriteID, s]));
+        const seen = new Set();
+
+        for (const a of data.actions ?? []) {
+            if (!a.actionID) { E('actionID の無い action があります（11.2）'); continue; }
+            if (seen.has(a.actionID)) {
+                E(`actionID '${a.actionID}' が重複しています。ファイル内で一意でなければなりません（11.2）`);
+            }
+            seen.add(a.actionID);
+
+            const members = a.members ?? [];
+            if (!Array.isArray(members) || members.length === 0) {
+                E(`action '${a.actionID}' の members が空です。1 つ以上必要です（11.2）`);
+                continue;
+            }
+
+            for (const sid of members) {
+                if (!spriteIds.has(sid)) {
+                    // 読み込み側はこの要素だけ無視する（11.3-5）。書き出し側の誤りとして警告に留める。
+                    W(`action '${a.actionID}' が存在しない spriteID '${sid}' を参照しています。`
+                      + `読み込み側はこの要素を無視します（11.3-5）`);
+                    continue;
+                }
+                const t = byId.get(sid).trigger?.type;
+                if (t) {
+                    E(`sprite '${sid}' は action '${a.actionID}' のメンバーですが trigger を持っています。`
+                      + `自律再生とアクションからの再生が二重に走ります（11.3-3）`);
+                }
+            }
+        }
+    }
+
     return { errors, warnings };
 }
 

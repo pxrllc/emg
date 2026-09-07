@@ -250,6 +250,40 @@ const CASES = [
             });
         },
     },
+    {
+        id: 'actions',
+        spec: '11 章',
+        version: '0.5.5',
+        desc: '口の動きと体の回転を 1 つのアクション（こんにちは）として束ねる',
+        note: '識別子は要らない。未対応の実装ではメンバーが静止するだけで、絵は default のまま正しい',
+        apply: d => {
+            // **メンバーは trigger を持たない**（11.3-3）。持たせると自律再生と
+            // アクションからの再生が二重に走る。
+            d.sprites.push({
+                spriteID: 'hello_mouth',
+                targetPartID: 'Mouth',
+                fps: 10,
+                sequence: { type: 'ordered', frames: ['01', '02', '01'] },
+            });
+            // 変形だけのメンバー。sequence を持たないので targetPartID は static でよい（7.1）。
+            d.sprites.push({
+                spriteID: 'hello_body',
+                targetPartID: 'Body',
+                duration: 0.9,
+                loop: 'once',
+                tracks: [
+                    {
+                        path: 'rotation',
+                        keys: [{ t: 0.0, v: 0 }, { t: 0.45, v: 3.0 }, { t: 0.9, v: 0 }],
+                        interpolation: 'linear',
+                    },
+                ],
+            });
+            d.actions = [
+                { actionID: 'hello', label: 'こんにちは', members: ['hello_mouth', 'hello_body'] },
+            ];
+        },
+    },
 ];
 
 async function main() {
