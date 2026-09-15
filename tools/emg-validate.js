@@ -379,6 +379,52 @@ function validate(data, entryNames, mapping) {
         }
     }
 
+    // --- slices（0.5.6 12 章）---
+    // 参照とマージンの整合、および tracks の scale_x/scale_y との同時適用（12.4・禁止）だけを見る。
+    // 出力サイズ自体はファイルに無い（12.6）ので検査のしようがない。
+    {
+        const sliceIds = new Set();
+        const scaledLayers = new Set();
+        for (const s of data.sprites ?? []) {
+            if (!(s.tracks ?? []).some(tr => tr.path === 'scale_x' || tr.path === 'scale_y')) continue;
+            if (s.targetLayer !== undefined) {
+                scaledLayers.add(`${s.targetPartID} ${s.targetLayer}`);
+            } else {
+                // targetLayer が無ければパーツ全体が対象（7.4.1）。パーツ内の全フレームを潰しておく。
+                const part = (data.parts ?? []).find(p => p.partID === s.targetPartID);
+                for (const l of part?.layers ?? []) scaledLayers.add(`${s.targetPartID} ${frameId(l)}`);
+            }
+        }
+
+        for (const sl of data.slices ?? []) {
+            if (!sl.sliceID) { E('sliceID の無い slice があります（12.2）'); continue; }
+            if (sliceIds.has(sl.sliceID)) {
+                E(`sliceID '${sl.sliceID}' が重複しています。ファイル内で一意でなければなりません（12.2）`);
+            }
+            sliceIds.add(sl.sliceID);
+
+            const part = (data.parts ?? []).find(p => p.partID === sl.targetPartID);
+            if (!part) { E(`slice '${sl.sliceID}' の targetPartID '${sl.targetPartID}' が存在しません`); continue; }
+
+            const frames = new Set((part.layers ?? []).map(frameId));
+            if (!frames.has(sl.targetLayer)) {
+                E(`slice '${sl.sliceID}' の targetLayer '${sl.targetLayer}' が '${sl.targetPartID}' にありません（12.2）`);
+            }
+
+            const m = sl.margins ?? {};
+            for (const k of ['left', 'top', 'right', 'bottom']) {
+                if (typeof m[k] !== 'number' || m[k] < 0) {
+                    E(`slice '${sl.sliceID}' の margins.${k} は 0 以上の数値でなければなりません（12.2）`);
+                }
+            }
+
+            if (scaledLayers.has(`${sl.targetPartID} ${sl.targetLayer}`)) {
+                E(`slice '${sl.sliceID}' の対象 '${sl.targetPartID}/${sl.targetLayer}' は `
+                  + `tracks の scale_x / scale_y でも同時に対象にされています。両立できません（12.4）`);
+            }
+        }
+    }
+
     return { errors, warnings };
 }
 

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EMG 0.5.5 リファレンス</title>
-<meta name="description" content="EMG 0.5.5 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
+<title>EMG 0.5.6 リファレンス</title>
+<meta name="description" content="EMG 0.5.6 系列の全フィールドを、導入バージョンと規範文書への対応付きで一覧できるリファレンス。">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -294,7 +294,7 @@ li { margin-bottom: 5px; }
 <div class="shell">
   <nav class="nav">
     <div class="nav-head">
-      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.5</span></div>
+      <div class="nav-title">EMG リファレンス <span class="ver-inline">0.5.6</span></div>
       <div class="nav-sub">組み合わせ可能な2Dスプライトの配布形式</div>
       <input class="filter" id="filter" type="search" placeholder="フィールド名で絞り込み" aria-label="絞り込み">
     </div>
@@ -318,6 +318,7 @@ li { margin-bottom: 5px; }
       <a href="#tracks"><code>tracks[]</code></a>
       <a href="#presets"><code>presets[]</code></a>
       <a href="#actions"><code>actions[]</code></a>
+      <a href="#slices"><code>slices[]</code></a>
       <a href="#states">状態の使い分け</a>
     </div>
 
@@ -360,6 +361,7 @@ li { margin-bottom: 5px; }
         <div><span class="ver v5">0.5.3</span> レイヤー単位のトランスフォーム</div>
         <div><span class="ver v5">0.5.4</span> 合成モードに加算を追加</div>
         <div><span class="ver v5">0.5.5</span> 複数パーツにまたがるアクション</div>
+        <div><span class="ver v5">0.5.6</span> 9 スライスの伸縮しない縁</div>
       </div>
 
       <div class="note">
@@ -503,6 +505,7 @@ li { margin-bottom: 5px; }
           <tr><td><code>requiredExtensions</code></td><td class="t-type">string[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v4">0.4.0</span></td></tr>
           <tr><td><code>presets</code></td><td class="t-type">Preset[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.0</span></td></tr>
           <tr><td><code>actions</code></td><td class="t-type">Action[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.5</span></td></tr>
+          <tr><td><code>slices</code></td><td class="t-type">Slice[]</td><td><span class="opt">任意</span></td><td class="dfl">[]</td><td><span class="ver v5">0.5.6</span></td></tr>
         </table>
         </div>
 
@@ -1095,6 +1098,80 @@ li { margin-bottom: 5px; }
       </section>
 
       <!-- ─────────────────────────────────────────────── -->
+      <section id="slices">
+        <h2><code>slices[]</code> <span class="ver v5">0.5.6</span></h2>
+        <p class="sec-note">9 スライス — 四隅を保ったまま伸縮するレイヤーの、伸縮しない縁。</p>
+
+        <p>
+          <code class="inl">emg-editor</code> の 9 スライス UI は、書き出し時にマージン込みで
+          画素へ焼き込み、1 枚の静的レイヤーにします。結果として<strong>再生時に大きさは
+          変わりません</strong>。ボタン・枠・吹き出しのように、出力サイズが実行時に決まる
+          用途にはこれでは足りません。
+        </p>
+
+        <p>
+          <code class="inl">slices[]</code> が記録するのは「どのレイヤーが 9 スライス対象で、
+          どこが伸縮しない縁か」だけです。<strong>出力サイズをいくつにするかは、
+          引き続き本書の範囲外</strong>です（後述）。
+        </p>
+
+        <div class="tbl-scroll">
+        <table>
+          <tr><th>フィールド</th><th>型</th><th>必須</th><th>説明</th></tr>
+          <tr><td><code>sliceID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>ファイル内で一意</td></tr>
+          <tr><td><code>targetPartID</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>対象の <code class="inl">partID</code></td></tr>
+          <tr><td><code>targetLayer</code></td><td class="t-type">string</td><td><span class="req">必須</span></td><td>対象レイヤーの<a href="#frameid">フレーム識別子</a></td></tr>
+          <tr><td><code>margins</code></td><td class="t-type">object</td><td><span class="req">必須</span></td><td><code>left</code> / <code>top</code> / <code>right</code> / <code>bottom</code>（アトラス px）</td></tr>
+        </table>
+        </div>
+
+<pre>{ <span class="k">"sliceID"</span>:      <span class="s">"button_frame"</span>,
+  <span class="k">"targetPartID"</span>: <span class="s">"ButtonBg"</span>,
+  <span class="k">"targetLayer"</span>:  <span class="s">"bg_01"</span>,
+  <span class="k">"margins"</span>:      { <span class="k">"left"</span>: 8, <span class="k">"top"</span>: 8, <span class="k">"right"</span>: 8, <span class="k">"bottom"</span>: 8 } }</pre>
+
+        <h3>再標本化の規則</h3>
+        <p>
+          対応する実装は、<code class="inl">margins</code> で切った 3×3 に従って描きます。
+          <strong>四隅は等倍のまま</strong>出力の四隅へ、<strong>上下の辺は幅だけ</strong>、
+          <strong>左右の辺は高さだけ</strong>伸縮し、<strong>中央は両方向</strong>に伸縮します。
+          出力が <code class="inl">margins</code> の合計より小さい場合は、縁を比例で縮めてから
+          同じ規則を適用します（四隅が反転しないように）。
+        </p>
+
+        <div class="note">
+          <p><strong><code class="inl">slices[]</code> から参照されていないとき、
+          または実行時にサイズが与えられないとき</strong>は、対象レイヤーを普通のレイヤーと
+          同じ規則でそのまま描きます。これが既定の見た目です。
+          <code class="inl">slices[]</code> を理解しない実装は配列自体を読まず、
+          常にこの既定の絵になります — <strong>静止した正しい絵</strong>なので、
+          <code class="inl">requiredExtensions</code> の宣言は要りません。</p>
+        </div>
+
+        <h3>出力サイズは本書の範囲外</h3>
+        <p>
+          <code class="inl">parts[].control: "user"</code> が「これは外から触るものである」という
+          意図だけを宣言し、値を渡す API を各実装に委ねているのと同じ考え方です。
+          <code class="inl">slices[]</code> が定義するのは (a) どのレイヤーが対象かという宣言と、
+          (b) 何らかの手段でサイズが与えられたときに全実装が同じ画素を出すための
+          再標本化アルゴリズム、の 2 点のみです。サイズをどう渡すかはホスト側の実装課題です。
+        </p>
+
+        <h3><code>tracks</code> との関係</h3>
+        <p>
+          <strong><code class="inl">slices[]</code> が対象とするレイヤーへ、
+          <code class="inl">tracks</code> の <code class="inl">scale_x</code> /
+          <code class="inl">scale_y</code> を同時に適用してはなりません。</strong>
+          9 スライスの伸縮と一様スケールは異なる操作で、両方を適用した結果は定義されません。
+          <code class="inl">translate_x</code> / <code class="inl">translate_y</code> /
+          <code class="inl">rotation</code> / <code class="inl">opacity</code> は対象外です —
+          9 スライスで解決した矩形を移動・回転・不透明化するのは、CSS の
+          <code class="inl">transform</code> が <code class="inl">border-image</code> の結果へ
+          後段で作用するのと同じ意味で定まります。
+        </p>
+      </section>
+
+      <!-- ─────────────────────────────────────────────── -->
       <section id="states">
         <h2>状態の使い分け</h2>
         <p class="sec-note">差し替え・on/off・まとめ指定を、どの機構で表現するか。</p>
@@ -1432,14 +1509,15 @@ li { margin-bottom: 5px; }
           <code class="inl">control</code>、<code class="inl">presets[]</code>、
           <code class="inl">sequence.keys[]</code>、<code class="inl">tracks[]</code>、
           <code class="inl">anchor_*</code>、<code class="inl">static</code> での
-          <code class="inl">defaultVisible</code> — いずれも無視されても絵は成立します。
+          <code class="inl">defaultVisible</code>、<code class="inl">actions[]</code>、
+          <code class="inl">slices[]</code> — いずれも無視されても絵は成立します。
         </p>
       </section>
 
       <!-- ─────────────────────────────────────────────── -->
       <section id="support">
         <h2>実装対応表</h2>
-        <p class="sec-note">2026-09-07 時点。<code class="inl">actions</code> は 0.5.5 で追加されたばかりで、まだどの実装も持っていません。「—」は sprite の再生そのものを実装していないもの。</p>
+        <p class="sec-note">2026-09-15 時点。<code class="inl">actions</code>（0.5.5）と <code class="inl">slices</code>（0.5.6）はまだどの実装も持っていません。「—」は sprite の再生そのものを実装していないもの。</p>
 
         <div class="tbl-scroll">
         <table class="matrix">
@@ -1451,13 +1529,14 @@ li { margin-bottom: 5px; }
             <th><code>keys</code></th>
             <th><code>tracks</code></th>
             <th><code>actions</code></th>
+            <th><code>slices</code></th>
           </tr>
-          <tr><td>emg-ymm4（Emg.Core）</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
-          <tr><td>emg-cdn プレイヤー</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
-          <tr><td>emg-godot</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td></tr>
-          <tr><td>emg-unity-importer</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td></tr>
-          <tr><td>emg-web-runtime</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td></tr>
-          <tr><td>emg-renpy</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="no">方針として非対応</td><td class="no">—</td></tr>
+          <tr><td>emg-ymm4（Emg.Core）</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td><td class="no">未</td></tr>
+          <tr><td>emg-cdn プレイヤー</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td><td class="no">未</td></tr>
+          <tr><td>emg-godot</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">未</td><td class="no">未</td></tr>
+          <tr><td>emg-unity-importer</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td><td class="no">未</td></tr>
+          <tr><td>emg-web-runtime</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="yes">評価器</td><td class="no">—</td><td class="no">未</td></tr>
+          <tr><td>emg-renpy</td><td class="yes">✓</td><td class="no">一部</td><td class="yes">✓</td><td class="no">—</td><td class="no">方針として非対応</td><td class="no">—</td><td class="no">未</td></tr>
         </table>
         </div>
 
